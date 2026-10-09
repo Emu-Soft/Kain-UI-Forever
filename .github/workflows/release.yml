@@ -58,11 +58,13 @@ jobs:
       - name: Write the release notes
         run: python3 .github/scripts/release_notes.py "${{ steps.version.outputs.version }}" "${{ steps.previous.outputs.tag }}" > release-notes.md
 
+      # The version is in the zip name because WowUp shows the zip's file
+      # name in its Version column (it never reads the tag).
       - name: Build the zip
         run: |
           mkdir -p build
           cp -r Kain-UI-Forever build/
-          (cd build && zip -qr ../Kain-UI-Forever.zip Kain-UI-Forever)
+          (cd build && zip -qr "../Kain-UI-Forever-${{ steps.version.outputs.version }}.zip" Kain-UI-Forever)
 
       # WowUp reads release.json to know which game clients the zip is for;
       # without it, it warns "unable to verify ... compatible". Forever is
@@ -83,7 +85,7 @@ jobs:
           data = {"releases": [{
               "name": "Kain-UI-Forever",
               "version": version,
-              "filename": "Kain-UI-Forever.zip",
+              "filename": f"Kain-UI-Forever-{version}.zip",
               "nolib": False,
               "metadata": [{"flavor": f, "interface": iface} for f in flavors],
           }]}
@@ -96,7 +98,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.version.outputs.version }}"
-          gh release create "v$v" Kain-UI-Forever.zip release.json \
+          gh release create "v$v" "Kain-UI-Forever-$v.zip" release.json \
             --title "K-UI: Forever $v" \
             --notes-file release-notes.md \
             --target "${{ github.sha }}" \

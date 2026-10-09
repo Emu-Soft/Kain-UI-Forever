@@ -78,7 +78,7 @@ def main():
     if not previous:
         out.append("The first release of K-UI: Forever on GitHub.\n")
     out.append("## Installing")
-    out.append("1. Download **Kain-UI-Forever.zip** below.")
+    out.append("1. Download the **Kain-UI-Forever** zip below.")
     out.append("2. Unzip it and put the `Kain-UI-Forever` folder in your WoW: Forever `Interface\\AddOns` folder.")
     out.append("3. Restart the game, then type `/kui` to open the settings.")
     out.append("")

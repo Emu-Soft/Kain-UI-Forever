@@ -31,7 +31,7 @@ From then on, WowUp shows an update whenever a new version is released.
 
 ### Manually
 
-1. Download **Kain-UI-Forever.zip** from the [latest release](../../releases/latest).
+1. Download the **Kain-UI-Forever** zip from the [latest release](../../releases/latest).
 2. Unzip it. You'll get a folder called `Kain-UI-Forever`.
 3. Put that folder in your WoW: Forever `Interface\AddOns` folder. The folder name must stay exactly `Kain-UI-Forever`.
 4. Restart the game (a `/reload` isn't enough the first time), then type `/kui` to open the settings.
