@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.298",
+		sections = {
+			{ title = "Changed", items = {
+				"The download now has the version number in its name, so WowUp shows which version you have.",
+			} },
+		},
+	},
+	{
 
 		version = "1.0.297",
 		sections = {
