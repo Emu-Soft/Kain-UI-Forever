@@ -1,0 +1,6 @@
+Emoji graphics in this folder are from Twemoji v17.0.3
+(https://github.com/jdecked/twemoji).
+Copyright (c) 2022-present Jason Sofonia & Justine De Caires
+Copyright (c) 2014-2021 Twitter
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Converted from the 72x72 PNGs to 32x32 32-bit TGA for use in World of Warcraft.

@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="KAINUIFOREVER_WOWHEAD" header="KAINUIFOREVER" category="ADDONS" default="CTRL-SHIFT-W">
+		KainUIForever_WowheadSearch()
+	</Binding>
+</Bindings>
