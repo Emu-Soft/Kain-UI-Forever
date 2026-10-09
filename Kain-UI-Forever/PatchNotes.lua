@@ -3,6 +3,14 @@ local addonName, KUI = ...
 local PATCH_NOTES = {
 	{
 
+		version = "1.0.297",
+		sections = {
+			{ title = "Fixed", items = {
+				"Cast By: your own buffs keep showing your name after a /reload.",
+			} },
+		},
+	},
+	{
 		version = "1.0.291",
 		sections = {
 			{ title = "Fixed", items = {

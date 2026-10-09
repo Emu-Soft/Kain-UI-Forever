@@ -228,12 +228,13 @@ end
 local function CaptureCaster(data)
 	if type(data) ~= "table" then return end
 	captureStats.seen = captureStats.seen + 1
-	local source = SourceFromData(data)
+	local source, why = SourceFromData(data)
 	if not source then
 		captureStats.noCaster = captureStats.noCaster + 1
+		captureStats.lastWhy = why
 		return
 	end
-	if UnitIsUnit and UnitIsUnit(source, "player") then return end
+
 	local ok, name = pcall(GetUnitName or UnitName, source, true)
 	if not (ok and Plain(name) and name ~= "") then return end
 	local okClass, _, classFile = pcall(UnitClass, source)
@@ -287,6 +288,8 @@ pruneFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 pcall(pruneFrame.RegisterUnitEvent, pruneFrame, "UNIT_AURA", "player")
 pcall(pruneFrame.RegisterEvent, pruneFrame, "LOADING_SCREEN_ENABLED")
 pcall(pruneFrame.RegisterEvent, pruneFrame, "LOADING_SCREEN_DISABLED")
+
+pruneFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 local prunePending = false
 
 local function StartSettle()
@@ -310,6 +313,17 @@ pruneFrame:SetScript("OnEvent", function(_, event, unit, info)
 
 	if event == "UNIT_AURA" and unit == "player" then
 		pcall(CaptureFromUpdate, info)
+	elseif event == "PLAYER_REGEN_ENABLED" then
+
+		for _, delay in ipairs({ 0, 1, 3 }) do
+			C_Timer.After(delay, function()
+				local before = captureStats.stored
+				pcall(CaptureAllPlayerAuras)
+				captureStats.afterCombat = (captureStats.afterCombat or 0) + 1
+				captureStats.afterCombatStored = (captureStats.afterCombatStored or 0) + (captureStats.stored - before)
+			end)
+		end
+		return
 	elseif event == "PLAYER_ENTERING_WORLD" then
 
 		loadRekeyPending = true
@@ -644,6 +658,36 @@ function KUI:CastByScanReport()
 		hookCalls.UnitAura or 0, hookCalls.Spell or 0,
 		lastHookError and "" or " (no errors)"))
 	if lastHookError then print("  |cffff5555last hook error:|r " .. lastHookError) end
+
+	print(string.format("  after combat: %d re-read(s), %d caster(s) remembered that way; last 'no caster' reason: %s",
+		captureStats.afterCombat or 0, captureStats.afterCombatStored or 0, tostring(captureStats.lastWhy or "-")))
+	print("  your buffs right now:")
+	if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+		for i = 1, 40 do
+			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HELPFUL")
+			if not ok or type(data) ~= "table" then break end
+			local name = Plain(data.name) and tostring(data.name) or "(secret name)"
+			local raw = data.sourceUnit
+			local caster
+			if issecretvalue and issecretvalue(raw) then
+				caster = "caster SECRET"
+			elseif type(raw) == "nil" then
+				local alt = data.source
+				caster = (type(alt) ~= "nil" and not (issecretvalue and issecretvalue(alt))) and ("source=" .. tostring(alt)) or "no caster given (sourceUnit nil)"
+			else
+				local okE, exists = pcall(UnitExists, raw)
+				local okN, who = pcall(GetUnitName or UnitName, raw, true)
+				caster = "caster " .. tostring(raw) .. (okE and exists and (" = " .. ((okN and Plain(who)) and tostring(who) or "?")) or " (no such unit now)")
+			end
+			local okC, cachedName = pcall(CacheLookup, "player", data)
+			local fromPlayer = data.isFromPlayerOrPlayerPet
+			print(string.format("    %d. %s (spell %s): %s; from a player: %s; remembered: %s", i, name,
+				Plain(data.spellId) and tostring(data.spellId) or "?", caster,
+				Plain(fromPlayer) and tostring(fromPlayer) or "?", (okC and cachedName) and tostring(cachedName) or "no"))
+		end
+	else
+		print("    (C_UnitAuras.GetAuraDataByIndex isn't on this client)")
+	end
 	print("  icon route checks this session: " .. tostring(iconRouteRuns)
 		.. " (watching: " .. (KUI.CastByIconRouteTooltips and KUI:CastByIconRouteTooltips() or "?") .. ")")
 	if iconRouteLast then

@@ -22,6 +22,17 @@ local function DeepCopy(v)
 	return out
 end
 
+local LEARNED = { castByCache = true, chatHistory = true, xpSession = true, lootRollScreenBase = true,
+	lootRollRawBase = true, rxpCharKey = true }
+
+local function PutBack(backup)
+	local keep = {}
+	for key in pairs(LEARNED) do keep[key] = KUI.db[key] end
+	wipe(KUI.db)
+	for k, v in pairs(DeepCopy(backup)) do KUI.db[k] = v end
+	for key, value in pairs(keep) do KUI.db[key] = value end
+end
+
 local function AccountDB()
 	if type(_G.KainUIForeverAccountDB) ~= "table" then _G.KainUIForeverAccountDB = {} end
 	return _G.KainUIForeverAccountDB
@@ -701,8 +712,7 @@ local function RestoreSettings(backup, cvars)
 		if IsOn(t) ~= want then Try("restore " .. t.key, SetToggle, t, want) end
 	end
 
-	wipe(KUI.db)
-	for k, v in pairs(DeepCopy(backup)) do KUI.db[k] = v end
+	PutBack(backup)
 	if cvars then
 		for name, value in pairs(cvars) do pcall(SetCVar, name, value) end
 	end
@@ -877,8 +887,7 @@ local function ReloadRound()
 			string.format("K-UI stress test: round %d of %d.\n\nSettings have been randomised. Reload to load the addon with them.", round, state.total))
 		return
 	end
-	wipe(KUI.db)
-	for k, v in pairs(DeepCopy(state.backup)) do KUI.db[k] = v end
+	PutBack(state.backup)
 	AccountDB().stressReload = nil
 	Say(string.format("reload test finished after %d rounds. Your settings are back once you reload.", state.total))
 	Report(NewErrors(state.before or {}, ErrorTotals()))
@@ -889,8 +898,7 @@ local function RecoverLive()
 	local live = AccountDB().stressLive
 	if not (live and live.who == Who() and KUI.db) then return end
 	AccountDB().stressLive = nil
-	wipe(KUI.db)
-	for k, v in pairs(DeepCopy(live.backup)) do KUI.db[k] = v end
+	PutBack(live.backup)
 	if live.cvars then for name, value in pairs(live.cvars) do pcall(SetCVar, name, value) end end
 	Say("the last stress test was interrupted by a reload; your settings are back once you reload.")
 	StaticPopup_Show("KAINUIFOREVER_STRESS_RELOAD", "The last K-UI stress test was cut short. Reload now to put your settings back?")
