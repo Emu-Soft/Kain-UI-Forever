@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.299",
+		sections = {
+			{ title = "Changed", items = {
+				"Improved tooltips: now showing who a unit is targeting, their item level, and whether they're <AFK> or <DND>.",
+			} },
+		},
+	},
+	{
 		version = "1.0.298",
 		sections = {
 			{ title = "Changed", items = {

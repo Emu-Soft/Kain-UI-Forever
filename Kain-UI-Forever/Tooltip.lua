@@ -389,41 +389,109 @@ local function ColorNameLine(tip, unit)
 	end
 end
 
+local TAG_GM = " |cffff8000<GM>|r"
+local TAG_AFK = " |cffffffff<AFK>|r"
+local TAG_DND = " |cffffffff<DND>|r"
+
+local gmNames = {}
+do
+	local f = CreateFrame("Frame")
+	for _, ev in ipairs({ "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_WHISPER", "CHAT_MSG_EMOTE",
+		"CHAT_MSG_CHANNEL", "CHAT_MSG_GUILD", "CHAT_MSG_PARTY", "CHAT_MSG_RAID" }) do
+		KUI:SafeRegisterEvent(f, ev)
+	end
+	f:SetScript("OnEvent", function(_, _, _, sender, _, _, _, flags)
+		if (issecretvalue and (issecretvalue(sender) or issecretvalue(flags))) then return end
+		if flags ~= "GM" or type(sender) ~= "string" then return end
+		gmNames[sender] = true
+		gmNames[(sender:match("^([^%-]+)")) or sender] = true
+	end)
+end
+
+local function IsKnownGM(unit)
+	local name, realm = UnitName(unit)
+	if type(name) ~= "string" or (issecretvalue and (issecretvalue(name) or issecretvalue(realm))) then return false end
+	if gmNames[name] then return true end
+	return type(realm) == "string" and realm ~= "" and gmNames[name .. "-" .. realm] or false
+end
+
+local nameTags = {}
+
+local function ApplyNameTags(tip, unit)
+	if not Plain(UnitIsPlayer(unit)) then return end
+	local tipName = tip.GetName and tip:GetName()
+	local fs = tipName and _G[tipName .. "TextLeft1"]
+	if not fs then return end
+	local tags = ""
+	if IsKnownGM(unit) then tags = tags .. TAG_GM end
+	if Plain(UnitIsAFK(unit)) then
+		tags = tags .. TAG_AFK
+	elseif Plain(UnitIsDND(unit)) then
+		tags = tags .. TAG_DND
+	end
+
+	local current = fs:GetText()
+	local function isSecret(v) return issecretvalue and issecretvalue(v) or false end
+	local secret = isSecret(current)
+	local state = nameTags[tip]
+	local base
+	if state and (secret or isSecret(state.text) or current == state.text) then
+		base = state.base
+	else
+		base = current
+	end
+	if type(base) ~= "string" then return end
+	if tags == "" and not state then return end
+	local text = base .. tags
+	if not secret and not isSecret(text) and text == current then return end
+	fs:SetText(text)
+	nameTags[tip] = { base = base, text = text }
+	tip:Show()
+end
+
 local GUILD_LINE_COLOR = { 1, 1, 1 }
+
+local GUILD_NAME_HEX = "66cc66"
 
 local function GetGuildLineText(unit)
 	if not unit or not Plain(UnitExists(unit)) then return nil end
 	local guildName, guildRankName, guildRankIndex = GetGuildInfo(unit)
 	if not guildName then return nil end
-	return string.format("<%s> %s (%d)", guildName, guildRankName or "", guildRankIndex or 0)
+	return string.format("|cff%s<%s>|r %s (%d)", GUILD_NAME_HEX, guildName, guildRankName or "", guildRankIndex or 0)
 end
 
-local function InsertLine2(tip, text, r, g, b)
+local function InsertLineAt(tip, pos, text, r, g, b)
 	if not tip.GetName or not tip:GetName() then return end
 	local tipName = tip:GetName()
 	local numLines = tip:NumLines()
-	if numLines < 2 then return end
+	if numLines < pos then return end
 
-	tip:AddLine("")
-	for i = numLines + 1, 3, -1 do
-		local srcLeft, srcRight = _G[tipName .. "TextLeft" .. (i - 1)], _G[tipName .. "TextRight" .. (i - 1)]
-		local dstLeft, dstRight = _G[tipName .. "TextLeft" .. i], _G[tipName .. "TextRight" .. i]
-		if srcLeft and dstLeft then
-			dstLeft:SetText(srcLeft:GetText())
-			dstLeft:SetTextColor(srcLeft:GetTextColor())
-		end
-		if srcRight and dstRight then
-			dstRight:SetText(srcRight:GetText())
-			dstRight:SetTextColor(srcRight:GetTextColor())
-		end
+	tip:AddLine(text, r, g, b)
+	local function copy(src, dst)
+		if not (src and dst) then return end
+		dst:SetText(src:GetText())
+		dst:SetTextColor(src:GetTextColor())
+		if src:IsShown() then dst:Show() else dst:Hide() end
+	end
+	for i = numLines + 1, pos + 1, -1 do
+		copy(_G[tipName .. "TextLeft" .. (i - 1)], _G[tipName .. "TextLeft" .. i])
+		copy(_G[tipName .. "TextRight" .. (i - 1)], _G[tipName .. "TextRight" .. i])
 	end
 
-	local left2 = _G[tipName .. "TextLeft2"]
-	if left2 then
-		left2:SetText(text)
-		left2:SetTextColor(r, g, b)
+	local left = _G[tipName .. "TextLeft" .. pos]
+	if left then
+		left:SetText(text)
+		left:SetTextColor(r, g, b)
+		left:Show()
 	end
+	local right = _G[tipName .. "TextRight" .. pos]
+	if right then right:SetText(nil) right:Hide() end
 	tip:Show()
+	return true
+end
+
+local function InsertLine2(tip, text, r, g, b)
+	return InsertLineAt(tip, 2, text, r, g, b)
 end
 
 local CLASS_HEX = {
@@ -523,6 +591,73 @@ local function ApplyClassOnLevelLine(tip, unit)
 	tip:Show()
 end
 
+local FACTION_LINE_COLOR = { 1, 1, 1 }
+
+local function PlainText(fs)
+	local text = fs and fs:GetText()
+	if issecretvalue and issecretvalue(text) then return nil, true end
+	return text, false
+end
+
+local function ApplyFactionLine(tip, unit)
+	local _, factionName = UnitFactionGroup(unit)
+	factionName = Plain(factionName)
+	if type(factionName) ~= "string" or factionName == "" then return end
+	local tipName = tip.GetName and tip:GetName()
+	if not tipName then return end
+	local levelWord = LEVEL or "Level"
+
+	local levelIdx
+	for i = 2, tip:NumLines() do
+		local fs = _G[tipName .. "TextLeft" .. i]
+		local text = PlainText(fs)
+		if type(text) == "string" and fs:IsShown() then
+			if text == factionName then return end
+			if not levelIdx and text:find(levelWord, 1, true) then levelIdx = i end
+		end
+	end
+	if not levelIdx then return end
+
+	local nextFs = _G[tipName .. "TextLeft" .. (levelIdx + 1)]
+	local nextText, nextSecret = PlainText(nextFs)
+	if nextFs and levelIdx + 1 <= tip:NumLines() and not nextSecret and (nextText == nil or nextText == "" or not nextFs:IsShown()) then
+		nextFs:SetText(factionName)
+		nextFs:SetTextColor(FACTION_LINE_COLOR[1], FACTION_LINE_COLOR[2], FACTION_LINE_COLOR[3])
+		nextFs:Show()
+		tip:Show()
+	elseif levelIdx + 1 <= tip:NumLines() then
+		InsertLineAt(tip, levelIdx + 1, factionName, FACTION_LINE_COLOR[1], FACTION_LINE_COLOR[2], FACTION_LINE_COLOR[3])
+	else
+		tip:AddLine(factionName, FACTION_LINE_COLOR[1], FACTION_LINE_COLOR[2], FACTION_LINE_COLOR[3])
+	end
+end
+
+local RIGHT_CLICK_TEXT = UNIT_POPUP_RIGHT_CLICK or "<Right click for Frame Settings>"
+
+local function StripRightClickLine(tip)
+	if not IsTouchable(tip) or not tip.GetName then return false end
+	local tipName = tip:GetName()
+	if not tipName then return false end
+	local changed = false
+	for i = 2, tip:NumLines() do
+		local fs = _G[tipName .. "TextLeft" .. i]
+		local text = PlainText(fs)
+		if text == RIGHT_CLICK_TEXT then
+			fs:SetText(nil)
+			fs:Hide()
+			local above = _G[tipName .. "TextLeft" .. (i - 1)]
+			local aboveText, aboveSecret = PlainText(above)
+			if above and i - 1 >= 2 and not aboveSecret and (aboveText == nil or aboveText == "" or aboveText == " ") then
+				above:SetText(nil)
+				above:Hide()
+			end
+			changed = true
+		end
+	end
+	if changed then tip:Show() end
+	return changed
+end
+
 local function UsableWidth(value)
 	if value == nil then return 0 end
 	if issecretvalue and issecretvalue(value) then return 0 end
@@ -562,7 +697,8 @@ local function EnsureTooltipWidth(tip)
 	tip:Show()
 end
 
-local SPEC_PREFIX = "|cffe6cc80Specialization:|r"
+local LABEL_HEX = "daa520"
+local SPEC_PREFIX = "|cff" .. LABEL_HEX .. "Specialization:|r"
 local SPEC_ICON_SIZE = 14
 
 local INSPECT_GAP = 1.5
@@ -762,47 +898,277 @@ local function InspectFrameOpen()
 	return InspectFrame and InspectFrame.IsShown and InspectFrame:IsShown()
 end
 
-local function SetSpecLine(tip, text)
-	local tipName = tip.GetName and tip:GetName()
-	if not tipName then return false end
-	for i = 2, tip:NumLines() do
-		local fs = _G[tipName .. "TextLeft" .. i]
-		local current = fs and fs:GetText()
-
-		if type(current) == "string" and not (issecretvalue and issecretvalue(current))
-			and current:find(SPEC_PREFIX, 1, true) == 1 then
-			if current == text then return false end
-			fs:SetText(text)
-			return true
-		end
-	end
-	tip:AddLine(text)
-	return true
+local function GetKnownEntry(unit)
+	local guid = SafeGUID(unit)
+	local entry = guid and specCache[guid]
+	local ttl = entry and (entry.partial and PARTIAL_CACHE_TTL or SPEC_CACHE_TTL)
+	if entry and GetTime() - entry.time < ttl then return entry end
+	return nil
 end
 
 local function GetKnownSpec(unit)
 	if Plain(UnitIsUnit(unit, "player")) then
 		return (ReadSpec("player", false))
 	end
-	local guid = SafeGUID(unit)
-	local entry = guid and specCache[guid]
-	local ttl = entry and (entry.partial and PARTIAL_CACHE_TTL or SPEC_CACHE_TTL)
-	if entry and GetTime() - entry.time < ttl then
-		return entry.spec
-	end
+	local entry = GetKnownEntry(unit)
+	if entry then return entry.spec end
 	return nil
 end
 
 local RequestInspect
 
-local function ApplySpecLine(tip, unit)
-	if not Plain(UnitIsPlayer(unit)) then return end
-	local spec = GetKnownSpec(unit)
-	if spec then
-		SetSpecLine(tip, FormatSpecLine(spec))
-	elseif spec == nil and Plain(UnitIsUnit(unit, "player")) == false then
-		RequestInspect()
+local ILVL_MIN_LEVEL = 10
+local SKIP_ILVL_SLOTS = { [4] = true, [18] = true, [19] = true }
+local TWO_HAND_LOCS = { INVTYPE_2HWEAPON = true, INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true }
+
+local function ItemLevelOfLink(link)
+	if type(link) ~= "string" then return nil end
+	local get = (C_Item and C_Item.GetDetailedItemLevelInfo) or GetDetailedItemLevelInfo
+	local ok, ilvl = false, nil
+	if get then ok, ilvl = pcall(get, link) end
+	if ok and type(ilvl) == "number" then return ilvl end
+	return nil
+end
+
+local function EquipLocOfLink(link)
+	local getInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+	if not getInstant then return nil end
+	local ok, _, _, _, equipLoc = pcall(getInstant, link)
+	return ok and equipLoc or nil
+end
+
+local function ItemLevelFromGear(unit)
+	if not GetInventoryItemLink then return nil end
+	local total, any = 0, false
+	local mainLink = GetInventoryItemLink(unit, 16)
+	local offLink = GetInventoryItemLink(unit, 17)
+	for slot = 1, 17 do
+		if not SKIP_ILVL_SLOTS[slot] then
+			local link = GetInventoryItemLink(unit, slot)
+			if issecretvalue and issecretvalue(link) then return nil end
+			if link then
+				local ilvl = ItemLevelOfLink(link)
+				if not ilvl then return nil end
+				any = true
+				if slot == 16 and not offLink and TWO_HAND_LOCS[EquipLocOfLink(link) or ""] then
+					ilvl = ilvl * 2
+				end
+				total = total + ilvl
+			end
+		end
 	end
+	if not any then return nil end
+	if issecretvalue and issecretvalue(mainLink) then return nil end
+	return math.floor(total / 16)
+end
+
+local QUALITY_AS_RARE = { [7] = true, [8] = true }
+
+local function QualityOfLink(link)
+	local q
+	if C_Item and C_Item.GetItemQualityByID then
+		local ok, v = pcall(C_Item.GetItemQualityByID, link)
+		if ok then q = v end
+	end
+	if q == nil and GetItemInfo then
+		local ok, _, _, v = pcall(GetItemInfo, link)
+		if ok then q = v end
+	end
+	if type(q) ~= "number" or (issecretvalue and issecretvalue(q)) then return nil end
+	return q
+end
+
+local function AverageGearQuality(unit)
+	if not GetInventoryItemLink then return nil end
+	local total, count = 0, 0
+	for slot = 1, 17 do
+		if not SKIP_ILVL_SLOTS[slot] then
+			local link = GetInventoryItemLink(unit, slot)
+			if issecretvalue and issecretvalue(link) then return nil end
+			if link then
+				local q = QualityOfLink(link)
+				if q == nil then return nil, true end
+				if QUALITY_AS_RARE[q] then q = 3 end
+				total, count = total + q, count + 1
+			end
+		end
+	end
+	if count == 0 then return nil end
+	return math.floor(total / count + 0.5)
+end
+
+local function RGBToHex(r, g, b)
+	if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" then return nil end
+	if issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b)) then return nil end
+	return format("%02x%02x%02x", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+end
+
+local function QualityHex(q)
+	if q == nil then return nil end
+	local getColor = (C_Item and C_Item.GetItemQualityColor) or GetItemQualityColor
+	if getColor then
+		local ok, r, g, b = pcall(getColor, q)
+		local hex = ok and RGBToHex(r, g, b)
+		if hex then return hex end
+	end
+	local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[q]
+	return c and RGBToHex(c.r, c.g, c.b) or nil
+end
+
+local function ReadItemLevel(unit, isInspect)
+	local level = Plain(UnitLevel(unit))
+	if type(level) == "number" and level ~= -1 and level < ILVL_MIN_LEVEL then return nil end
+	local ilvl
+	if not isInspect then
+		if GetAverageItemLevel then
+			local ok, _, equipped = pcall(GetAverageItemLevel)
+			if ok and type(equipped) == "number" and equipped > 0 then ilvl = math.floor(equipped) end
+		end
+	elseif C_PaperDollInfo and C_PaperDollInfo.GetInspectItemLevel then
+		local ok, v = pcall(C_PaperDollInfo.GetInspectItemLevel, unit)
+		if ok and type(v) == "number" and not (issecretvalue and issecretvalue(v)) and v > 0 then
+			ilvl = math.floor(v)
+		end
+	end
+	ilvl = ilvl or ItemLevelFromGear(unit)
+	if not ilvl then return nil end
+
+	local quality, pending = AverageGearQuality(unit)
+	return ilvl, QualityHex(quality), pending
+end
+
+local function GetKnownItemLevel(unit)
+	if Plain(UnitIsUnit(unit, "player")) then return ReadItemLevel("player", false) end
+	local entry = GetKnownEntry(unit)
+	if entry and entry.ilvl then return entry.ilvl, entry.ilvlHex end
+	return nil
+end
+
+local TARGET_PREFIX = "|cff" .. LABEL_HEX .. "Targeting:|r "
+local ILVL_PREFIX = "|cff" .. LABEL_HEX .. "Item Level:|r "
+local TARGET_ME_TEXT = "|cffff4040>ME<|r"
+
+local blocks = {}
+
+local function TargetNameHex(tunit)
+	if Plain(UnitIsPlayer(tunit)) then
+		local _, classFile = UnitClass(tunit)
+		classFile = Plain(classFile)
+		return classFile and CLASS_HEX[classFile]
+	end
+	local reaction = Plain(UnitReaction and UnitReaction(tunit, "player"))
+	local c = reaction and FACTION_BAR_COLORS and FACTION_BAR_COLORS[reaction]
+	if c and c.r and c.g and c.b then
+		return format("%02x%02x%02x", c.r * 255, c.g * 255, c.b * 255)
+	end
+	return nil
+end
+
+local function GetTargetLineText(unit)
+	local tunit = unit .. "target"
+	if not Plain(UnitExists(tunit)) then return nil end
+	if Plain(UnitIsUnit(tunit, "player")) then return TARGET_PREFIX .. TARGET_ME_TEXT end
+
+	local okN, name = pcall(GetUnitName, tunit, true)
+	if not okN or type(name) ~= "string" then name = UnitName(tunit) end
+	if type(name) ~= "string" then return nil end
+	local hex = TargetNameHex(tunit)
+	if hex then name = "|cff" .. hex .. name .. "|r" end
+	return TARGET_PREFIX .. name
+end
+
+local function BuildBlockTexts(unit)
+	local texts = {}
+	local target = GetTargetLineText(unit)
+	if target then texts[#texts + 1] = target end
+	if Plain(UnitIsPlayer(unit)) then
+		local spec = GetKnownSpec(unit)
+		if spec then
+			texts[#texts + 1] = FormatSpecLine(spec)
+		elseif spec == nil and Plain(UnitIsUnit(unit, "player")) == false then
+			RequestInspect()
+		end
+		local ilvl, ilvlHex = GetKnownItemLevel(unit)
+		if ilvl then
+			texts[#texts + 1] = ILVL_PREFIX .. (ilvlHex and ("|cff" .. ilvlHex .. ilvl .. "|r") or ilvl)
+		end
+	end
+	return texts
+end
+
+local function IsSecretText(v) return issecretvalue and issecretvalue(v) or false end
+
+local function SameText(a, b)
+	if IsSecretText(a) or IsSecretText(b) then return false end
+	return a == b
+end
+
+local function IsFreeLine(tip, tipName, i)
+	if i > tip:NumLines() then return true end
+	local fs = _G[tipName .. "TextLeft" .. i]
+	if not fs then return true end
+	local text = fs:GetText()
+	if IsSecretText(text) then return false end
+	return text == nil or text == "" or not fs:IsShown()
+end
+
+local function EndOfContent(tip, tipName)
+	local i = tip:NumLines()
+	while i >= 2 and IsFreeLine(tip, tipName, i) do i = i - 1 end
+	return i + 1
+end
+
+local function WriteBlock(tip, texts)
+	local tipName = tip.GetName and tip:GetName()
+	if not tipName then return false end
+	local block = blocks[tip]
+
+	if block and #block.texts > 0 then
+		local fs = _G[tipName .. "TextLeft" .. block.start]
+		local cur = fs and fs:GetText()
+		if not fs or block.start > tip:NumLines()
+			or (not IsSecretText(cur) and not IsSecretText(block.texts[1]) and cur ~= block.texts[1]) then
+			block = nil
+		end
+	end
+	local old = block and #block.texts or 0
+	local start = (block and old > 0) and block.start or EndOfContent(tip, tipName)
+
+	local changed = false
+	for i, text in ipairs(texts) do
+		local idx = start + i - 1
+		if i <= old or IsFreeLine(tip, tipName, idx) then
+			if idx > tip:NumLines() then
+				tip:AddLine(text, 1, 1, 1)
+				changed = true
+			else
+				local fs = _G[tipName .. "TextLeft" .. idx]
+				if not (i <= old and SameText(block.texts[i], text) and fs:IsShown()) then
+					fs:SetText(text)
+					fs:SetTextColor(1, 1, 1)
+					fs:Show()
+					local right = _G[tipName .. "TextRight" .. idx]
+					if right then right:SetText(nil) right:Hide() end
+					changed = true
+				end
+			end
+		else
+			InsertLineAt(tip, idx, text, 1, 1, 1)
+			changed = true
+		end
+	end
+	for i = #texts + 1, old do
+		local fs = _G[tipName .. "TextLeft" .. (start + i - 1)]
+		if fs then fs:SetText(nil) fs:Hide() end
+		changed = true
+	end
+	blocks[tip] = { start = start, texts = texts }
+	if changed then tip:Show() end
+	return changed
+end
+
+local function ApplyBottomBlock(tip, unit)
+	return WriteBlock(tip, BuildBlockTexts(unit))
 end
 
 local function CurrentTooltipPlayer()
@@ -879,6 +1245,10 @@ local function PollInspect(guid, attempt)
 	end
 
 	local spec, complete = ReadSpec(unit, true)
+	local ilvl, ilvlHex, colorPending = ReadItemLevel(unit, true)
+
+	if complete and not ilvl and Plain(UnitLevel(unit)) and Plain(UnitLevel(unit)) >= ILVL_MIN_LEVEL then complete = false end
+	if complete and ilvl and colorPending then complete = false end
 	local canWait = C_Timer and C_Timer.After and attempt < POLL_TRIES
 	if not complete and canWait then
 
@@ -889,14 +1259,14 @@ local function PollInspect(guid, attempt)
 
 	polling[guid] = nil
 	if spec ~= nil then
-		specCache[guid] = { spec = spec, time = GetTime(), partial = not complete }
+		specCache[guid] = { spec = spec, ilvl = ilvl, ilvlHex = ilvlHex, time = GetTime(), partial = not complete }
 		failedAt[guid] = nil
 	else
 		failedAt[guid] = GetTime()
 	end
 	FinishOurInspect(guid)
 
-	if spec and IsTouchable(tip) and SetSpecLine(tip, FormatSpecLine(spec)) then
+	if spec ~= nil and IsTouchable(tip) and ApplyBottomBlock(tip, unit) then
 		EnsureTooltipWidth(tip)
 		if IsGrowRightActive() and IsAllowedContent(tip) then ForcePosition(tip) end
 	end
@@ -1134,9 +1504,12 @@ local function OnUnitContentAllowed(tip)
 	end
 
 	ColorNameLine(tip, unit)
+	ApplyNameTags(tip, unit)
 	ApplyGuildLine(tip, unit)
 	ApplyClassOnLevelLine(tip, unit)
-	ApplySpecLine(tip, unit)
+	ApplyFactionLine(tip, unit)
+	StripRightClickLine(tip)
+	ApplyBottomBlock(tip, unit)
 	ApplyHealthBar(tip, unit)
 	EnsureTooltipWidth(tip)
 
@@ -1294,6 +1667,7 @@ local function DropExtraAnchors(tip)
 end
 
 local hookedDefaultAnchor = false
+local hookedRightClick = false
 
 local function HookTooltip(name)
 	if hooked[name] then return true end
@@ -1327,9 +1701,23 @@ local function HookTooltip(name)
 		end)
 	end
 
+	if not hookedRightClick then
+		hookedRightClick = true
+		local function AfterUnitFrameTooltip()
+			local t = _G.GameTooltip
+			if t and tracked[t] and StripRightClickLine(t) then
+				RefreshTooltipSize(t)
+				if IsGrowRightActive() and IsAllowedContent(t) then ForcePosition(t) end
+			end
+		end
+		for _, fn in ipairs({ "UnitFrame_UpdateTooltip", "UnitFrame_OnEnter" }) do
+			if type(_G[fn]) == "function" then hooksecurefunc(fn, AfterUnitFrameTooltip) end
+		end
+	end
 	tip:HookScript("OnShow", function(self)
 
 		UpdateTrainerIconGate(self)
+		StripRightClickLine(self)
 		if IsGrowRightActive() and IsAllowedContent(self) then
 			ForcePosition(self)
 		else
@@ -1378,6 +1766,8 @@ local function HookTooltip(name)
 			UpdateTrainerIconGate(self)
 
 			if self.SetMinimumWidth then pcall(self.SetMinimumWidth, self, 0) end
+			blocks[self] = nil
+			nameTags[self] = nil
 			HideHealthBar(self)
 		end)
 	end
