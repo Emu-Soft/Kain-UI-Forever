@@ -126,6 +126,36 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 |---|---|
 | **Ctrl+Shift+W** | Wowhead search for the item, spell or quest under your mouse. |
 
+## Why some things work differently on WoW: Forever
+
+WoW: Forever runs on Blizzard's newest game client, and that client hides some information from addons. Blizzard calls these **secret values**. The game still shows them to you, but an addon can't read them, and an addon that even checks one gets an error. This mostly happens **in combat** and **inside dungeons and raids**. Blizzard also has older rules that stop addons from changing parts of the screen during combat.
+
+Every feature below has been changed to work around this. Where something can't be done, the addon leaves it alone rather than guess or cause errors.
+
+| Feature | What you might notice | Why, and what we did about it |
+|---|---|---|
+| **Cast By** | A buff someone puts on you **while you're in combat** has no "Cast By" line, even after the fight. | The game hides who cast a buff during combat and never tells addons afterwards. Buffs cast outside combat are remembered as they land, so the name stays after the caster leaves, after a /reload and across loading screens. |
+| **Cast By** (dungeons and raids) | Some buffs and debuffs show no caster inside instances. | Caster names are often hidden there. The addon shows a name only when it's sure, and never guesses. |
+| **Combat log** | No feature reads the combat log. | WoW: Forever doesn't give addons the combat log at all (we tested it in game). Anything that would have needed it, like K-Targeter counting your kills, uses the quest log or loot window instead. |
+| **Tooltip health bar** | Inside instances the health text can show just numbers or a "?", with no percentage. | Health can be a secret number, and addons can't do maths on secret numbers. The addon hands the values straight to the game to draw, which it's allowed to do. |
+| **Tooltip extra lines** (guild, level, talent spec) | Sometimes missing, mostly in combat or inside instances. | The tooltip's own lines can be hidden from addons, so the addon can't tell what's already there. It skips the extra line rather than risk adding it twice or causing an error. |
+| **Enhance Chat** (timestamps, short channel names, web links) | These pause inside dungeons and raids, so chat looks like Blizzard's normal chat there. | Changing chat while names and messages are secret broke chat completely in early tests: messages stopped appearing mid-fight. Lines that were changed before you went in stay changed. |
+| **Emoji** | Emoji codes like `:smile:` show as plain text inside dungeons and raids. | Same reason as Enhance Chat. They work again as soon as you leave. |
+| **Emoji picker** | During boss fights in new content, picking an emoji won't open the chat box for you. | The game blocks sending any message an addon has touched during those fights. Open chat with your own key instead. |
+| **Group Finder zone names** | Sometimes blank inside dungeons and raids. | The zone name can be secret there, so the addon leaves it out. |
+| **K-Targeter** | Can pause in some restricted areas, and never names a target the game hides. | Zone and unit names can be secret. The macro only gets names the addon can read for sure. |
+| **K-Key** | Doesn't work in a few protected boxes, like the money boxes in the Trade window. | Those boxes are completely off-limits to addons, so K-Key steps back and lets you type normally. |
+| **Global Dragging** | Some windows can't be moved during combat, and a window you open may settle into its spot a split second late. | Blizzard locks protected windows in combat. Moving a window at the exact moment the game opens it caused errors in the Character window, so the move happens just after. |
+| **Import Kain-UI Profile** (extra action bars) | Extra action bars may need a `/reload` before they appear. | Showing action bars directly from an addon can break them, so the addon switches them on and lets the game show them cleanly after a reload. |
+| **XP bar and micro menu** (hiding Blizzard's) | If you change these in combat, the change happens when combat ends. | Those bars are locked during combat. The addon waits and does it straight after. |
+| **Weapon Swap Macro Helper** | Changing your weapon slots in combat updates the macro when combat ends. | Addons can't edit macros in combat. The swap itself still works in combat, because it's a normal macro. |
+| **Presets and nameplate settings** | Can't be applied during combat. | Blizzard locks these settings in combat. Try again once you're out. |
+| **RestedXP Guides tweaks** | Blizzard's quest tracker turns invisible while the guide shows, instead of folding up. | Folding the tracker up from an addon caused errors in combat. Making it invisible doesn't. |
+| **Draggable loot roll windows** | The preview of where rolls will appear only shows after you've seen one real loot roll. | A fake roll would run the game's loot code on made-up data and cause errors, so the preview waits for a real one. |
+| **`/kui snapshot`** | Some values in a report show as `<secret>`. | The addon can't read those values, so it never tries to copy them into a report. |
+
+If something here stops you doing what you need, or you spot a limitation that isn't listed, see the section below.
+
 ## Reporting a problem
 
 1. Type `/kui snapshot` in game. A window opens with everything needed to look into it: your settings, any errors the addon has run into (with where you were at the time), your game version and your other addons.
