@@ -2,6 +2,18 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+
+		version = "1.0.291",
+		sections = {
+			{ title = "Fixed", items = {
+				"Names with accented letters, like Bóbsson, now show properly in /kui snapshot instead of as question marks.",
+				"Long Recent Allies notes, error reports and links no longer cut an accented letter in half.",
+				"Wowhead search and K-Targeter's suggestions treat accented capitals and small letters the same (É and é).",
+				"Copy chat: a message whose colour never ends no longer turns every line after it the same colour.",
+			} },
+		},
+	},
+	{
 		version = "1.0.286",
 		sections = {
 			{ title = "Changed", items = {

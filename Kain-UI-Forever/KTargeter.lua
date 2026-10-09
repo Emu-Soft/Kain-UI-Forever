@@ -1,4 +1,7 @@
-local ADDON_NAME = ...
+local ADDON_NAME, KUI = ...
+
+local CutText = (KUI and KUI.CutText) or function(s, n) return s:sub(1, n) end
+local LowerText = (KUI and KUI.LowerText) or string.lower
 
 local PREFIX = "|cff33ff99K-Targeter:|r "
 
@@ -148,7 +151,11 @@ local lastBody = nil
 local writeFailureShown = false
 
 local function WriteMacroBody(body)
-    if #body > MACRO_MAX_CHARS then body = body:sub(1, MACRO_MAX_CHARS) end
+
+    if #body > MACRO_MAX_CHARS then
+        body = CutText(body, MACRO_MAX_CHARS)
+        body = body:match("^(.*)\n") or body
+    end
     if body == lastBody then return end
     if InCombatLockdown() then return end
     if not MacrosReady() then return end
@@ -1029,11 +1036,11 @@ local function RefreshSuggestions()
     local typed = objField:GetText() or ""
     HideSuggestions()
     if typed == "" then return end
-    local typedLower = typed:lower()
+    local typedLower = LowerText(typed)
     local shown = 0
     for _, name in ipairs(GetAllTeachableObjectiveNames()) do
         if shown >= MAX_SUGGESTIONS then break end
-        if name:lower():find(typedLower, 1, true) then
+        if LowerText(name):find(typedLower, 1, true) then
             shown = shown + 1
             local btn = suggestButtons[shown]
             btn:SetText(name)

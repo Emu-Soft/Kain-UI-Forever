@@ -467,6 +467,14 @@ function KUI:DumpFrameChildren(frameName)
 		return
 	end
 
+	local function Forbidden(obj)
+		return type(obj) ~= "table" or (obj.IsForbidden and obj:IsForbidden())
+	end
+	if Forbidden(frame) then
+		print("|cffff6060Kain-UI Forever:|r '" .. frameName .. "' is one of the game's protected frames -- addons can't look inside it.")
+		return
+	end
+
 	local keyByChild = {}
 	pcall(function()
 		for k, v in pairs(frame) do
@@ -482,16 +490,20 @@ function KUI:DumpFrameChildren(frameName)
 		print("  (no child frames)")
 	end
 	for i, child in ipairs(children) do
-		local name = child.GetName and child:GetName()
-		local objType = (child.GetObjectType and child:GetObjectType()) or "?"
-		local shown = child.IsShown and child:IsShown()
-		local key = keyByChild[child]
-		local label = name or "<unnamed>"
-		local keyNote = key and (" (childKey: " .. tostring(key) .. ")") or ""
-		local hiddenNote = (shown == false) and " -- hidden" or ""
-		local ownText = FindOwnText(child)
-		local textNote = ownText and (" text: \"" .. ownText .. "\"") or ""
-		print(string.format("  [%d] %s%s (%s)%s%s", i, label, keyNote, objType, hiddenNote, textNote))
+		if Forbidden(child) then
+			print(string.format("  [%d] <protected frame -- addons can't read it>", i))
+		else
+			local name = child.GetName and child:GetName()
+			local objType = (child.GetObjectType and child:GetObjectType()) or "?"
+			local shown = child.IsShown and child:IsShown()
+			local key = keyByChild[child]
+			local label = name or "<unnamed>"
+			local keyNote = key and (" (childKey: " .. tostring(key) .. ")") or ""
+			local hiddenNote = (shown == false) and " -- hidden" or ""
+			local ownText = FindOwnText(child)
+			local textNote = ownText and (" text: \"" .. ownText .. "\"") or ""
+			print(string.format("  [%d] %s%s (%s)%s%s", i, label, keyNote, objType, hiddenNote, textNote))
+		end
 	end
 
 	if frame.GetRegions then
@@ -499,11 +511,15 @@ function KUI:DumpFrameChildren(frameName)
 		if #regions > 0 then
 			print("|cff33ff99Kain-UI Forever|r regions (text/textures, not frames) of " .. frameName .. ":")
 			for i, region in ipairs(regions) do
-				local name = region.GetName and region:GetName()
-				local objType = (region.GetObjectType and region:GetObjectType()) or "?"
-				local key = keyByChild[region]
-				local keyNote = key and (" (childKey: " .. tostring(key) .. ")") or ""
-				print(string.format("  [%d] %s%s (%s)", i, name or "<unnamed>", keyNote, objType))
+				if Forbidden(region) then
+					print(string.format("  [%d] <protected -- addons can't read it>", i))
+				else
+					local name = region.GetName and region:GetName()
+					local objType = (region.GetObjectType and region:GetObjectType()) or "?"
+					local key = keyByChild[region]
+					local keyNote = key and (" (childKey: " .. tostring(key) .. ")") or ""
+					print(string.format("  [%d] %s%s (%s)", i, name or "<unnamed>", keyNote, objType))
+				end
 			end
 		end
 	end
@@ -802,6 +818,8 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:ResetZoneBarPosition()
 	elseif command == "nameplatecapture" and KUI.NameplateCaptureReport then
 		KUI:NameplateCaptureReport()
+	elseif command == "stresstest" and KUI.StressTest then
+		KUI:StressTest(rest)
 	elseif command == "dumpframe" then
 		KUI:DumpFrameChildren(rest)
 	elseif command == "factoryreset" then

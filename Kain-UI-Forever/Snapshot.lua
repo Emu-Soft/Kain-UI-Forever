@@ -267,6 +267,35 @@ local function SplitPages(text)
 	return pages
 end
 
+local function CleanText(text)
+	if not text:find("[^\n\032-\126]") then return text end
+	local out, i, n = {}, 1, #text
+	while i <= n do
+		local b = text:byte(i)
+		local piece, len
+		if b == 10 or (b >= 32 and b <= 126) then
+			piece, len = string.char(b), 1
+		else
+			len = (b >= 194 and b < 224 and 2) or (b >= 224 and b < 240 and 3) or (b >= 240 and b < 245 and 4)
+			if len and i + len - 1 <= n then
+				piece = text:sub(i, i + len - 1)
+				for j = 2, len do
+					local c = piece:byte(j)
+					if c < 128 or c >= 192 then piece = nil break end
+				end
+			end
+		end
+		if piece then
+			out[#out + 1] = piece
+			i = i + len
+		else
+			out[#out + 1] = "?"
+			i = i + 1
+		end
+	end
+	return table.concat(out)
+end
+
 function KUI:ShowSnapshot(arg)
 	local ok, text = pcall(BuildSnapshot)
 	if not ok then
@@ -276,7 +305,7 @@ function KUI:ShowSnapshot(arg)
 	text = text:gsub("\t", "  ")
 
 	text = text:gsub("|", "/")
-	text = text:gsub("[^\n\032-\126]", "?")
+	text = CleanText(text)
 	local pages = SplitPages(text)
 	local page = math.max(1, math.min(#pages, tonumber(arg) or 1))
 	local body = pages[page]

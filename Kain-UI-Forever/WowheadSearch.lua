@@ -22,7 +22,7 @@ end
 function KUI:WowheadQuery(name)
 	name = Text(name)
 	if not name then return nil end
-	local s = name:lower()
+	local s = KUI.LowerText(name)
 
 	s = s:gsub("\226\128\153", ""):gsub("\226\128\152", ""):gsub("['`]", "")
 	local out, pendingGap = {}, false

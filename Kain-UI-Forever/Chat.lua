@@ -181,6 +181,13 @@ local function GetChatHistoryText(frame)
 			text = text:gsub("[%z\1-\8\11-\31\127]", "?")
 
 			text = text:gsub("|K.-|k", "[hidden text]")
+
+			local probe = text:gsub("||", "")
+			local _, opened = probe:gsub("|c%x%x%x%x%x%x%x%x", "")
+			local _, openedNamed = probe:gsub("|cn[^:|]*:", "")
+			local _, closed = probe:gsub("|r", "")
+			local missing = opened + openedNamed - closed
+			if missing > 0 then text = text .. string.rep("|r", missing) end
 			table.insert(lines, text)
 		end
 	end
@@ -395,7 +402,7 @@ end
 local function ShortenURLLabel(url)
 	local label = url:gsub("^https?://", ""):gsub("^www%.", "")
 	if #label > 45 then
-		label = label:sub(1, 42) .. "..."
+		label = KUI.CutText(label, 42) .. "..."
 	end
 	return label
 end
@@ -1283,7 +1290,7 @@ function KUI:SetRecentAllyNote(guid, name, note)
 	if note == "" then
 		AllyNotes()[guid] = nil
 	else
-		AllyNotes()[guid] = { note = note:sub(1, ALLY_NOTE_MAX), name = name }
+		AllyNotes()[guid] = { note = KUI.CutText(note, ALLY_NOTE_MAX), name = name }
 	end
 end
 

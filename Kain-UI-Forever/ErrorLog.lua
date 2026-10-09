@@ -1,6 +1,47 @@
 local addonName, KUI = ...
 addonName = addonName or "Kain-UI-Forever"
 
+function KUI.CutText(s, maxBytes)
+	if type(s) ~= "string" or #s <= maxBytes then return s end
+	local cut = maxBytes
+	while cut > 0 do
+		local b = s:byte(cut + 1)
+		if not b or b < 128 or b >= 192 then break end
+		cut = cut - 1
+	end
+	return s:sub(1, cut)
+end
+
+local function ExtendedCapital(cp)
+	if cp >= 0x100 and cp <= 0x137 then return cp % 2 == 0 and cp ~= 0x130 end
+	if cp >= 0x139 and cp <= 0x148 then return cp % 2 == 1 end
+	if cp >= 0x14A and cp <= 0x177 then return cp % 2 == 0 end
+	if cp >= 0x179 and cp <= 0x17E then return cp % 2 == 1 end
+	return false
+end
+
+function KUI.LowerText(s)
+	if type(s) ~= "string" then return s end
+
+	local times = s:find("\195\151", 1, true)
+	if times then s = s:gsub("\195\151", "\1") end
+	s = s:lower()
+	if times then s = s:gsub("\1", "\195\151") end
+	if not s:find("[\195-\197]") then return s end
+	s = s:gsub("\195([\128-\158])", function(c)
+		if c == "\151" then return "\195\151" end
+		return "\195" .. string.char(c:byte() + 32)
+	end)
+	s = s:gsub("([\196\197])([\128-\191])", function(a, b)
+		local cp = (a:byte() - 192) * 64 + (b:byte() - 128)
+		if cp == 0x178 then return "\195\191" end
+		if not ExtendedCapital(cp) then return nil end
+		cp = cp + 1
+		return string.char(192 + math.floor(cp / 64), 128 + cp % 64)
+	end)
+	return s
+end
+
 local MAX_ENTRIES = 15
 local MAX_AGE_DAYS = 14
 local MAX_MESSAGE = 400
@@ -69,7 +110,7 @@ local function OurLines(stack)
 		if line:find(FOLDER_PATTERN) and not line:find("ErrorLog%.lua") then
 
 			line = ShortPath(line)
-			lines[#lines + 1] = line:sub(1, 200)
+			lines[#lines + 1] = KUI.CutText(line, 200)
 			if #lines >= MAX_STACK_LINES then break end
 		end
 	end
@@ -78,7 +119,7 @@ end
 
 local function ShortMessage(msg)
 	msg = ShortPath(msg)
-	if #msg > MAX_MESSAGE then msg = msg:sub(1, MAX_MESSAGE) .. "..." end
+	if #msg > MAX_MESSAGE then msg = KUI.CutText(msg, MAX_MESSAGE) .. "..." end
 	return msg
 end
 
