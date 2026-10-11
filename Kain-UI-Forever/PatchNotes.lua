@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.300",
+		sections = {
+			{ title = "Changed", items = {
+				"XP bar tooltip: the per-hour rates and the rested line now read in XP, e.g. \"34,560 XP\".",
+			} },
+		},
+	},
+	{
 		version = "1.0.299",
 		sections = {
 			{ title = "Changed", items = {

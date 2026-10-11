@@ -373,7 +373,7 @@ local function ShowTooltip(self)
 	GameTooltip:AddLine(string.format("%s / %s (%d%%)", FormatNumber(xp), FormatNumber(xpMax), math.floor(xp / xpMax * 100)), 1, 1, 1)
 	local rested = PlainNumber(GetXPExhaustion and GetXPExhaustion())
 	if rested and rested > 0 then
-		GameTooltip:AddLine(string.format("Rested: +%s (%d%%)", FormatNumber(rested), math.floor(rested / xpMax * 100)), RESTED_TEXT_COLOR[1], RESTED_TEXT_COLOR[2], RESTED_TEXT_COLOR[3])
+		GameTooltip:AddLine(string.format("Rested: +%s XP (%d%%)", FormatNumber(rested), math.floor(rested / xpMax * 100)), RESTED_TEXT_COLOR[1], RESTED_TEXT_COLOR[2], RESTED_TEXT_COLOR[3])
 	end
 
 	if not IsShiftKeyDown() then
@@ -383,10 +383,10 @@ local function ShowTooltip(self)
 	GameTooltip:AddLine(" ")
 	local rate, elapsed, gained, grind, killRate, questRate = XPRate()
 	if rate then
-		AddRateLine("Kill XP/hr (grinding)", grind and FormatNumber(math.floor(grind + 0.5)) or "...")
-		AddRateLine("Kill XP/hr (with travel)", FormatNumber(math.floor(killRate + 0.5)))
-		AddRateLine("Quest XP/hr (smoothed)", FormatNumber(math.floor(questRate + 0.5)))
-		AddRateLine("Estimated XP/hr", FormatNumber(math.floor(rate + 0.5)))
+		AddRateLine("Kill XP/hr (grinding)", grind and (FormatNumber(math.floor(grind + 0.5)) .. " XP") or "...")
+		AddRateLine("Kill XP/hr (with travel)", FormatNumber(math.floor(killRate + 0.5)) .. " XP")
+		AddRateLine("Quest XP/hr (smoothed)", FormatNumber(math.floor(questRate + 0.5)) .. " XP")
+		AddRateLine("Estimated XP/hr", FormatNumber(math.floor(rate + 0.5)) .. " XP")
 		AddRateLine("Time to level", FormatHoursMinutes((xpMax - xp) / rate * 3600, true))
 	else
 		AddRateLine("Estimated XP/hr", "gathering data...")
@@ -396,7 +396,7 @@ local function ShowTooltip(self)
 	local questXP = type(session) == "table" and session.questXP or 0
 	AddRateLine("This session", string.format("%s XP in %s", FormatNumber(gained), FormatHoursMinutes(elapsed, false)))
 	if type(questXP) == "number" and questXP > 0 then
-		AddRateLine("  from quests", FormatNumber(questXP))
+		AddRateLine("  from quests", FormatNumber(questXP) .. " XP")
 	end
 	GameTooltip:Show()
 end
