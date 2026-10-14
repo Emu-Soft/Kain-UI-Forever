@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.301",
+		sections = {
+			{ title = "Fixed", items = {
+				"Typing in chat no longer throws \"secret string\" errors from Emoji.lua when chat is restricted.",
+			} },
+		},
+	},
+	{
 		version = "1.0.300",
 		sections = {
 			{ title = "Changed", items = {

@@ -3402,6 +3402,8 @@ local SHORTCODE_HIGHLIGHT_COLOR = "|cff33ff99"
 local SHORTCODE_HIGHLIGHT_PATTERN = SHORTCODE_HIGHLIGHT_COLOR .. ":([%a][%w_]*):|r"
 
 local function ExpandHighlightedShortcodes(text)
+
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return text end
 	return (text:gsub(SHORTCODE_HIGHLIGHT_PATTERN, function(code)
 		return EMOJI_SHORTCODES[code:lower()] or (":" .. code .. ":")
 	end))
@@ -3409,6 +3411,7 @@ end
 
 local function TryExpandShortcode(editBox)
 	local text = editBox:GetText()
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return end
 	local before, code = text:match("^(.-)%:([%a][%w_]*)%:$")
 	if not code then return end
 	local emoji = EMOJI_SHORTCODES[code:lower()]
@@ -3445,6 +3448,7 @@ local function InstallShortcodeExpansion(frame)
 		if KUI.db and KUI.db.emojiChat == false then return end
 		if KUI.IsChatLockedDown and KUI:IsChatLockedDown() then return end
 		local text = self:GetText()
+		if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return end
 		local converted = ExpandHighlightedShortcodes(text)
 		if converted ~= text then self:SetText(converted) end
 	end)
