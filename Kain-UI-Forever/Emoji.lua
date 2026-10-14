@@ -3402,6 +3402,7 @@ local SHORTCODE_HIGHLIGHT_COLOR = "|cff33ff99"
 local SHORTCODE_HIGHLIGHT_PATTERN = SHORTCODE_HIGHLIGHT_COLOR .. ":([%a][%w_]*):|r"
 
 local function ExpandHighlightedShortcodes(text)
+
 	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return text end
 	return (text:gsub(SHORTCODE_HIGHLIGHT_PATTERN, function(code)
 		return EMOJI_SHORTCODES[code:lower()] or (":" .. code .. ":")
