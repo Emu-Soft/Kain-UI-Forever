@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.302",
+		sections = {
+			{ title = "New", items = {
+				"Mercify listening-lobby codes pasted in chat (like [Mercify:BA78-1XDC]) show as a green link. Click it to copy just the code, ready to paste into Mercify.",
+			} },
+		},
+	},
+	{
 		version = "1.0.301",
 		sections = {
 			{ title = "Fixed", items = {

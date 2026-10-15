@@ -389,6 +389,13 @@ local function TryMatchBareDomain(text, pos)
 	return matchEnd, run
 end
 
+local MERCIFY_LINK_COLOR = "|cff1ed760"
+local function TryMatchMercifyCode(text, pos)
+	local s, e, code = text:find("^%[[Mm]ercify:%s*([%w%-]+)%]", pos)
+	if not s or #code > 24 or not code:find("%w") then return nil end
+	return e, code:upper()
+end
+
 local function TryMatchURL(text, pos)
 	local s, e, m = text:find("^(https?://" .. URL_TAIL_CHARS .. "+)", pos)
 	if s then return e, m end
@@ -436,8 +443,14 @@ local function LinkifyURLs(text)
 				i = len + 1
 			end
 		else
-			local matchEnd, url = TryMatchURL(text, i)
-			if matchEnd then
+			local codeEnd, code = TryMatchMercifyCode(text, i)
+			local matchEnd, url
+			if not codeEnd then matchEnd, url = TryMatchURL(text, i) end
+			if codeEnd then
+				out[#out + 1] = MERCIFY_LINK_COLOR .. "|Hkainuimercify:" .. code .. "|h[Mercify: " .. code .. "]|h|r"
+				changed = true
+				i = codeEnd + 1
+			elseif matchEnd then
 				out[#out + 1] = "|cffffffff|Hkainuiurl:" .. url .. "|h[" .. ShortenURLLabel(url) .. "]|h|r"
 				changed = true
 				i = matchEnd + 1
@@ -498,6 +511,7 @@ local function EnsureLinkPopup()
 	local title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	title:SetPoint("TOP", 0, -10)
 	title:SetText("Copy Link")
+	popup.title = title
 
 	local closeButton = CreateFrame("Button", nil, popup, "UIPanelCloseButton")
 	closeButton:SetPoint("TOPRIGHT", -2, -2)
@@ -535,8 +549,9 @@ local function EnsureLinkPopup()
 	return popup
 end
 
-function KUI:ShowLinkPopup(url)
+function KUI:ShowLinkPopup(url, titleText)
 	local popup = EnsureLinkPopup()
+	popup.title:SetText(titleText or "Copy Link")
 	popup.editBox:SetText(url or "")
 	popup:Show()
 	popup.editBox:SetFocus()
@@ -549,6 +564,10 @@ hooksecurefunc("SetItemRef", function(link)
 		if url then
 			KUI:ShowLinkPopup(url)
 		end
+		local code = link:match("^kainuimercify:(.+)$")
+		if code then
+			KUI:ShowLinkPopup(code, "Copy Mercify Lobby Code")
+		end
 	end
 end)
 
@@ -560,6 +579,11 @@ local function InstallLinkTooltip(frame)
 		if type(link) == "string" and link:match("^kainuiurl:") then
 			GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
 			GameTooltip:AddLine("Click to copy this link")
+			GameTooltip:Show()
+		elseif type(link) == "string" and link:match("^kainuimercify:") then
+			GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+			GameTooltip:AddLine("Mercify listening lobby")
+			GameTooltip:AddLine("Click to copy the code, then paste it into Mercify's lobby box.", 1, 1, 1, true)
 			GameTooltip:Show()
 		end
 	end)
