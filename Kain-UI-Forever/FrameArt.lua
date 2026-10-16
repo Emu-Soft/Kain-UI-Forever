@@ -1,21 +1,28 @@
 local addonName, KUI = ...
 
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
-local OLD_PLAYER = MEDIA .. "PlayerFrameOld"
+local OLD_ART = MEDIA .. "PlayerFrameOld"
 local TEX_W, TEX_H = 256, 128
-local PIECE_W, PIECE_H = 198, 77
-local RING_X, RING_Y = 37.24, 37.98
+
+local ART = {
+	piece    = { x = 0,   y = 0,  w = 198, h = 74, cx = 36.40, cy = 37.31, scale = 1 },
+	level    = { x = 200, y = 0,  w = 37,  h = 37, cx = 18.49, cy = 18.45, scale = 1 },
+	ring     = { x = 200, y = 40, w = 32,  h = 34, cx = 15.43, cy = 15.48, scale = 0.955 },
+	Alliance = { x = 200, y = 76, w = 20,  h = 25, cx = 10,    cy = 12.5,  scale = 0.8 },
+	Horde    = { x = 222, y = 76, w = 23,  h = 25, cx = 11.5,  cy = 12.5,  scale = 0.8 },
+}
+
+local LEVEL_AT = { -20.93, -23.88 }
+local FACTION_AT = { -37.06, -6.08 }
+local BARS_LEFT = 31.6
+local HEALTH_H = 26
+local HEALTH_MID = -0.86
+local MANA_MID = -16.4
+local NAME_AT = { 35, 15.5 }
 local PORTRAIT_SIZE = 60
-
-local PIECE_SX = 1.0177
-
-local HEALTH_TOP = RING_Y - 29
-local MANA_TOP = RING_Y - 50
-local NAME_MID = RING_Y - 20.5
-local XP_SLOT = { left = (66 - RING_X) * PIECE_SX, right = (192 - RING_X) * PIECE_SX, top = RING_Y - 61, bottom = RING_Y - 71 }
 local MAX_SHIFT = 15
 
-local overlay
+local tex = {}
 local applied = false
 local pending = false
 local note = "not applied yet"
@@ -23,10 +30,12 @@ local hidden = {}
 local hookedAlpha = {}
 local moved = {}
 local ours = {}
+local sized = {}
 local unmasked = {}
 local nameJustify
 local busy = false
 local hooked = false
+local factionHooked = false
 local errorShown = false
 
 local function Enabled()
@@ -42,7 +51,7 @@ local function Ask(obj, method, ...)
 	local fn = obj[method]
 	if type(fn) ~= "function" then return nil end
 	local ok, v, v2 = pcall(fn, obj, ...)
-	if not ok or IsSecret(v) then return nil end
+	if not ok or IsSecret(v) or IsSecret(v2) then return nil end
 	return v, v2
 end
 
@@ -90,15 +99,17 @@ local function Parts()
 	local mana = KUI.FindPlayerManaBar and KUI.FindPlayerManaBar()
 	if type(mana) ~= "table" then mana = Dig(main, "ManaBarArea", "ManaBar") end
 	local healthContainer = Dig(main, "HealthBarsContainer") or (health and health.GetParent and health:GetParent())
+	local pvpIcon = Dig(main, "PvpBackgroundIcon")
 	return {
 		container = container,
 		portrait = Dig(container, "PlayerPortrait"),
 		frameTexture = Dig(container, "FrameTexture"),
-		vehicleTexture = Dig(container, "VehicleFrameTexture"),
 		hide = {
 			Dig(container, "FrameTexture"), Dig(container, "AlternatePowerFrameTexture"), Dig(container, "FrameFlash"),
 			Dig(main, "StatusTexture"), Dig(contextual, "PlayerPortraitCornerIcon"),
+			Dig(main, "LevelBackgroundCircle"), pvpIcon,
 		},
+		pvpIcon = pvpIcon,
 		health = health,
 		healthContainer = healthContainer,
 		healthMask = Dig(healthContainer, "HealthBarMask"),
@@ -130,24 +141,10 @@ local function HookAlpha(region)
 end
 
 local function HideRegion(region)
+	if not region then return end
 	if hidden[region] == nil then hidden[region] = Ask(region, "GetAlpha") or 1 end
 	HookAlpha(region)
 	SetAlphaQuiet(region, 0)
-end
-
-local function SavePoints(obj)
-	if moved[obj] then return end
-	local list = {}
-	for i = 1, (Ask(obj, "GetNumPoints") or 0) do
-		local ok, point, rel, relPoint, x, y = pcall(obj.GetPoint, obj, i)
-		if ok and not IsSecret(x) and not IsSecret(y) then list[#list + 1] = { point, rel, relPoint, x, y } end
-	end
-	moved[obj] = list
-end
-
-local function SetPoints(obj, list, dy)
-	obj:ClearAllPoints()
-	for _, p in ipairs(list) do obj:SetPoint(p[1], p[2], p[3], p[4], p[5] + (dy or 0)) end
 end
 
 local function CurrentPoints(obj)
@@ -170,20 +167,43 @@ local function SamePoints(a, b)
 	return true
 end
 
-local function ForgetReanchored()
-	for obj in pairs(moved) do
-		if not SamePoints(CurrentPoints(obj), ours[obj]) then moved[obj], ours[obj] = nil, nil end
+local function SavePoints(obj)
+	if moved[obj] then return true end
+	local list = CurrentPoints(obj)
+	for _, p in ipairs(list) do
+		if IsSecret(p[4]) or IsSecret(p[5]) then return false end
 	end
+	if #list == 0 then return false end
+	moved[obj] = list
+	return true
 end
 
-local function Shift(obj, dy)
-	if not obj or not dy or dy == 0 then return true end
-	if math.abs(dy) > MAX_SHIFT then return false end
-	SavePoints(obj)
-	if #moved[obj] == 0 then moved[obj] = nil return false end
-	SetPoints(obj, moved[obj], dy)
+local function SetPoints(obj, list, dx, dy)
+	obj:ClearAllPoints()
+	for _, p in ipairs(list) do obj:SetPoint(p[1], p[2], p[3], p[4] + (dx or 0), p[5] + (dy or 0)) end
+end
+
+local function Shift(obj, dx, dy)
+	if not obj then return true end
+	if math.abs(dx) > MAX_SHIFT or math.abs(dy) > MAX_SHIFT then return false end
+	if not SavePoints(obj) then return false end
+	SetPoints(obj, moved[obj], dx, dy)
 	ours[obj] = CurrentPoints(obj)
 	return true
+end
+
+local function Reanchor(obj, point, rel, relPoint, x, y)
+	if not SavePoints(obj) then return false end
+	obj:ClearAllPoints()
+	obj:SetPoint(point, rel, relPoint, x, y)
+	ours[obj] = CurrentPoints(obj)
+	return true
+end
+
+local function Resize(obj, w, h)
+	if not sized[obj] then sized[obj] = { Ask(obj, "GetWidth"), Ask(obj, "GetHeight") } end
+	if w then obj:SetWidth(w) end
+	if h then obj:SetHeight(h) end
 end
 
 local function RemoveMask(texture, mask)
@@ -191,16 +211,64 @@ local function RemoveMask(texture, mask)
 	if pcall(texture.RemoveMaskTexture, texture, mask) then unmasked[#unmasked + 1] = { texture, mask } end
 end
 
+local function ForgetReanchored()
+	for obj in pairs(moved) do
+		if not SamePoints(CurrentPoints(obj), ours[obj]) then moved[obj], ours[obj] = nil, nil end
+	end
+end
+
+local function MakeTexture(key, container, layer, sublevel)
+	if tex[key] then return tex[key] end
+	local t = container:CreateTexture(key == "piece" and "KainUIForeverOldPlayerArt" or nil, layer, nil, sublevel)
+	t:SetTexture(OLD_ART)
+	tex[key] = t
+	return t
+end
+
+local function Place(t, artKey, portrait, x, y, k)
+	local a = ART[artKey]
+	local s = a.scale * k
+	t:SetTexCoord(a.x / TEX_W, (a.x + a.w) / TEX_W, a.y / TEX_H, (a.y + a.h) / TEX_H)
+	t:ClearAllPoints()
+	t:SetPoint("TOPLEFT", portrait, "CENTER", x * k - a.cx * s, y * k + a.cy * s)
+	t:SetSize(a.w * s, a.h * s)
+end
+
+local function FactionKey()
+	local faction = UnitFactionGroup and UnitFactionGroup("player")
+	return (faction == "Alliance" or faction == "Horde") and faction or nil
+end
+
+local function UpdateFaction()
+	local p = Parts()
+	local show = applied and p.pvpIcon and p.pvpIcon:IsShown() and FactionKey() ~= nil
+	if tex.ring then tex.ring:SetShown(show and true or false) end
+	if tex.crest then tex.crest:SetShown(show and true or false) end
+end
+
+local function HookFaction(icon)
+	if factionHooked or not icon then return end
+	factionHooked = true
+	for _, method in ipairs({ "Show", "Hide", "SetShown" }) do
+		if type(icon[method]) == "function" then hooksecurefunc(icon, method, UpdateFaction) end
+	end
+end
+
 local function GiveBack()
 	for region, alpha in pairs(hidden) do
 		SetAlphaQuiet(region, alpha)
 		hidden[region] = nil
 	end
-	if overlay then overlay:Hide() end
+	for _, t in pairs(tex) do t:Hide() end
 	ForgetReanchored()
 	for obj, list in pairs(moved) do
-		if #list > 0 then pcall(SetPoints, obj, list, 0) end
+		if #list > 0 then pcall(SetPoints, obj, list, 0, 0) end
 		moved[obj], ours[obj] = nil, nil
+	end
+	for obj, size in pairs(sized) do
+		if size[1] then pcall(obj.SetWidth, obj, size[1]) end
+		if size[2] then pcall(obj.SetHeight, obj, size[2]) end
+		sized[obj] = nil
 	end
 	for _, pair in ipairs(unmasked) do pcall(pair[1].AddMaskTexture, pair[1], pair[2]) end
 	unmasked = {}
@@ -218,7 +286,7 @@ end
 
 local function ApplyNow()
 	if not Enabled() then
-		if InCombatLockdown() and next(moved) then pending = true return end
+		if InCombatLockdown() and (next(moved) or next(sized)) then pending = true return end
 		GiveBack()
 		note = "off"
 		return
@@ -232,45 +300,56 @@ local function ApplyNow()
 	GiveBack()
 	if InVehicle() then note = "in a vehicle: Blizzard's frame shown" return end
 	local p = Parts()
-	if not (p.container and p.portrait and p.health and p.mana and p.frameTexture) then
+	if not (p.container and p.portrait and p.health and p.healthContainer and p.mana and p.frameTexture) then
 		return Fail("player frame pieces not found (portrait, bars or frame art) -- old art not shown")
 	end
 	local pw = Ask(p.portrait, "GetWidth")
-	local _, pcY = p.portrait:GetCenter()
-	if type(pw) ~= "number" or pw <= 0 or type(pcY) ~= "number" or IsSecret(pcY) then
+	local pcX, pcY = Ask(p.portrait, "GetCenter")
+	if type(pw) ~= "number" or pw <= 0 or type(pcX) ~= "number" or type(pcY) ~= "number" then
 		return Fail("portrait has no size or position yet")
 	end
 	local k = pw / PORTRAIT_SIZE
 
-	if not overlay then
-		local layer, sublevel = Ask(p.frameTexture, "GetDrawLayer")
-		overlay = p.container:CreateTexture("KainUIForeverOldPlayerArt", layer or "BACKGROUND", nil, sublevel or 2)
-		overlay:SetTexture(OLD_PLAYER)
-		overlay:SetTexCoord(0, PIECE_W / TEX_W, 0, PIECE_H / TEX_H)
-	end
-	overlay:ClearAllPoints()
-	overlay:SetPoint("TOPLEFT", p.portrait, "CENTER", -RING_X * PIECE_SX * k, RING_Y * k)
-	overlay:SetSize(PIECE_W * PIECE_SX * k, PIECE_H * k)
+	local layer, sublevel = Ask(p.frameTexture, "GetDrawLayer")
+	layer, sublevel = layer or "BACKGROUND", sublevel or 2
+	Place(MakeTexture("piece", p.container, layer, sublevel), "piece", p.portrait, 0, 0, k)
+	Place(MakeTexture("ring", p.container, layer, math.min(sublevel + 1, 7)), "ring", p.portrait, FACTION_AT[1], FACTION_AT[2], k)
+	local crest = MakeTexture("crest", p.container, layer, math.min(sublevel + 2, 7))
+	local faction = FactionKey()
+	if faction then Place(crest, faction, p.portrait, FACTION_AT[1], FACTION_AT[2], k) end
+	Place(MakeTexture("level", p.container, layer, math.min(sublevel + 3, 7)), "level", p.portrait, LEVEL_AT[1], LEVEL_AT[2], k)
 
-	local healthTop, manaTop = Ask(p.health, "GetTop"), Ask(p.mana, "GetTop")
-	if type(healthTop) ~= "number" or type(manaTop) ~= "number" then return Fail("bars have no position yet") end
-	if not Shift(p.healthContainer, pcY + HEALTH_TOP * k - healthTop) then return Fail("health bar is not where the measurements expect -- old art not shown") end
-	if not Shift(p.mana, pcY + MANA_TOP * k - manaTop) then return Fail("power bar is not where the measurements expect -- old art not shown") end
+	local healthTop0, containerTop = Ask(p.health, "GetTop"), Ask(p.healthContainer, "GetTop")
+	local healthLeft, manaLeft, manaTop = Ask(p.health, "GetLeft"), Ask(p.mana, "GetLeft"), Ask(p.mana, "GetTop")
+	local manaH = Ask(p.mana, "GetHeight")
+	if not (healthTop0 and containerTop and healthLeft and manaLeft and manaTop and manaH) then return Fail("bars have no position yet") end
+	local healthH = HEALTH_H * k
+	local above = healthTop0 - containerTop
+	local hdx = pcX + BARS_LEFT * k - healthLeft
+	local hdy = (pcY + HEALTH_MID * k + healthH / 2) - healthTop0
+	if not Shift(p.healthContainer, hdx, hdy) then return Fail("health bar is not where the measurements expect -- old art not shown") end
+	Resize(p.health, nil, healthH)
+	Resize(p.healthContainer, nil, healthH - 2 * above)
+	if not Shift(p.mana, pcX + BARS_LEFT * k - manaLeft, (pcY + MANA_MID * k + manaH / 2) - manaTop) then
+		return Fail("power bar is not where the measurements expect -- old art not shown")
+	end
 	RemoveMask(p.health.GetStatusBarTexture and p.health:GetStatusBarTexture(), p.healthMask)
 	RemoveMask(p.mana.GetStatusBarTexture and p.mana:GetStatusBarTexture(), p.manaMask)
 
 	if p.name then
-		local _, nameY = p.name:GetCenter()
-		if type(nameY) == "number" and not IsSecret(nameY) then Shift(p.name, pcY + NAME_MID * k - nameY) end
 		nameJustify = Ask(p.name, "GetJustifyH") or "CENTER"
+		Reanchor(p.name, "LEFT", p.portrait, "CENTER", NAME_AT[1] * k, NAME_AT[2] * k)
+		Resize(p.name, 0, nil)
 		pcall(p.name.SetJustifyH, p.name, "LEFT")
 	end
 
 	for _, region in ipairs(p.hide) do HideRegion(region) end
-	overlay:Show()
+	tex.piece:Show()
+	tex.level:Show()
 	applied = true
-	note = string.format("showing: piece %.1f x %.1f on the portrait's centre; health moved %s, power %s",
-		PIECE_W * PIECE_SX * k, PIECE_H * k, moved[p.healthContainer] and "up" or "no", moved[p.mana] and "nudged" or "not moved")
+	HookFaction(p.pvpIcon)
+	UpdateFaction()
+	note = string.format("showing: old art 1:1 on the portrait's centre (k %.2f); health %.0f tall, bars at %.1f", k, healthH, BARS_LEFT * k)
 end
 
 local function InstallHooks()
@@ -302,7 +381,7 @@ function KUI:ApplyClassicFrameArt()
 		print("|cffff6060Kain-UI Forever:|r restoring the old portrait art hit an error and will stay quiet about it: " .. tostring(err))
 	end
 
-	if (applied or wasApplied) and KUI.ApplyXPBar then KUI:ApplyXPBar() end
+	if applied ~= wasApplied and KUI.ApplyXPBar then KUI:ApplyXPBar() end
 end
 
 function KUI:SetClassicFrameArt(enabled)
@@ -311,17 +390,8 @@ function KUI:SetClassicFrameArt(enabled)
 	KUI:ApplyClassicFrameArt()
 end
 
-function KUI:GetClassicXPSlot()
-	if not applied then return nil end
-	local p = Parts()
-	local pw = p.portrait and Ask(p.portrait, "GetWidth")
-	if type(pw) ~= "number" or pw <= 0 then return nil end
-	local k = pw / PORTRAIT_SIZE
-	return {
-		anchor = p.portrait,
-		left = XP_SLOT.left * k, right = XP_SLOT.right * k, top = XP_SLOT.top * k, bottom = XP_SLOT.bottom * k,
-		level = (Ask(p.container, "GetFrameLevel") or 1) + 2,
-	}
+function KUI:IsClassicArtShowing()
+	return applied
 end
 
 function KUI:FrameArtScanReport()
@@ -329,15 +399,14 @@ function KUI:FrameArtScanReport()
 	print("  restore old portrait art: " .. (Enabled() and "ON" or "OFF") .. " | " .. note .. (pending and " (waiting for combat to end)" or ""))
 	local p = Parts()
 	local function have(v) return v and "found" or "MISSING" end
-	print(string.format("  portrait %s, frame art %s, health bar %s (container %s, mask %s), power bar %s (mask %s), name %s",
-		have(p.portrait), have(p.frameTexture), have(p.health), have(p.healthContainer), have(p.healthMask), have(p.mana), have(p.manaMask), have(p.name)))
-	local n = 0
+	print(string.format("  portrait %s, frame art %s, health bar %s (container %s, mask %s), power bar %s (mask %s), name %s, faction icon %s (%s)",
+		have(p.portrait), have(p.frameTexture), have(p.health), have(p.healthContainer), have(p.healthMask), have(p.mana), have(p.manaMask),
+		have(p.name), have(p.pvpIcon), tostring(FactionKey())))
+	local n, m, s = 0, 0, 0
 	for _ in pairs(hidden) do n = n + 1 end
-	local m = 0
 	for _ in pairs(moved) do m = m + 1 end
-	print(string.format("  Blizzard art hidden: %d | moved: %d | masks removed: %d | in a vehicle: %s", n, m, #unmasked, tostring(InVehicle())))
-	local slot = KUI:GetClassicXPSlot()
-	print("  XP bar slot: " .. (slot and string.format("%.1f to %.1f across, %.1f to %.1f down from the portrait's centre", slot.left, slot.right, -slot.top, -slot.bottom) or "not in use"))
+	for _ in pairs(sized) do s = s + 1 end
+	print(string.format("  Blizzard art hidden: %d | moved: %d | resized: %d | masks removed: %d | in a vehicle: %s", n, m, s, #unmasked, tostring(InVehicle())))
 end
 
 function KUI:PlayerFrameDump()

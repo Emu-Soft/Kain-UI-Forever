@@ -133,9 +133,6 @@ local function FillEnd(fraction)
 	return math.floor(start + (bar.widthPx - start) * fraction + 0.5)
 end
 
-local NO_INSETS = setmetatable({}, { __index = function() return 0 end })
-local function RowH() return bar.rowH or bar.pixel end
-
 local function DrawFill(rows, insets, widthPx, pixel, fraction)
 	local filled = FillEnd(fraction)
 	for i, row in ipairs(rows) do
@@ -144,8 +141,8 @@ local function DrawFill(rows, insets, widthPx, pixel, fraction)
 		local width = math.min(right, filled) - left
 		if width > 0 then
 			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", bar, "TOPLEFT", left * pixel, -(i - 1) * RowH())
-			row:SetSize(width * pixel, RowH())
+			row:SetPoint("TOPLEFT", bar, "TOPLEFT", left * pixel, -(i - 1) * pixel)
+			row:SetSize(width * pixel, pixel)
 			row:Show()
 		else
 			row:Hide()
@@ -155,7 +152,7 @@ end
 
 local function DrawDivider()
 	local rows = bar.dividerRows
-	local insets = bar.slotMode and NO_INSETS or bar.layers[#bar.layers].insets
+	local insets = bar.layers[#bar.layers].insets
 	local widthPx, pixel = bar.widthPx, bar.pixel
 	local filled = FillEnd(bar.fillFraction or 0)
 	local restedEnd = FillEnd(bar.restedFraction)
@@ -168,8 +165,8 @@ local function DrawDivider()
 		local x1 = math.min(right, filled + DIVIDER_WIDTH_PX)
 		if show and x1 > x0 then
 			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", bar, "TOPLEFT", x0 * pixel, -(i - 1) * RowH())
-			row:SetSize((x1 - x0) * pixel, RowH())
+			row:SetPoint("TOPLEFT", bar, "TOPLEFT", x0 * pixel, -(i - 1) * pixel)
+			row:SetSize((x1 - x0) * pixel, pixel)
 			row:Show()
 		else
 			row:Hide()
@@ -179,7 +176,7 @@ end
 
 local function RenderFill()
 	if not (bar and bar.widthPx) then return end
-	local insets = bar.slotMode and NO_INSETS or bar.layers[#bar.layers].insets
+	local insets = bar.layers[#bar.layers].insets
 	DrawFill(bar.restedRows, insets, bar.widthPx, bar.pixel, bar.restedFraction)
 	DrawFill(bar.fillRows, insets, bar.widthPx, bar.pixel, bar.fillFraction)
 	DrawDivider()
@@ -206,32 +203,9 @@ local function Render()
 
 	bar:SetHitRectInsets(-HOVER_PAD_X + bar.fillStart * pixel, -HOVER_PAD_X, -HOVER_PAD_Y, -HOVER_PAD_Y)
 
-	if bar.slotMode then
-
-		local height = bar:GetHeight()
-		if not height or height <= 0 then return end
-		bar.rowH = height / BAR_HEIGHT_PX
-		for _, layer in ipairs(bar.layers) do
-			for i, row in ipairs(layer.rows) do
-				if layer.grow > 0 then
-					row:Hide()
-				else
-					row:ClearAllPoints()
-					row:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -(i - 1) * bar.rowH)
-					row:SetSize(widthPx * pixel, bar.rowH)
-					row:Show()
-				end
-			end
-		end
-		RenderFill()
-		return
-	end
-	bar.rowH = nil
-
 	bar:SetHeight(BAR_HEIGHT_PX * pixel)
 	for _, layer in ipairs(bar.layers) do
 		for i, row in ipairs(layer.rows) do
-			row:Show()
 
 			local left = bar.ringCut and RingLeft(i - 0.5 - layer.grow)
 				or (-layer.grow + (SQUARE_LEFT and 0 or layer.insets[i]))
@@ -248,21 +222,10 @@ local function Layout()
 	bar:ClearAllPoints()
 	local pixel = UnitsPerPixel(bar)
 	local drop = (BAR_GAP_PX + FRAME_PX) * pixel
-
-	local slot = KUI.GetClassicXPSlot and KUI:GetClassicXPSlot()
-	if slot then
-		bar.slotMode, bar.ringCut = true, false
-		bar:SetPoint("TOPLEFT", slot.anchor, "CENTER", slot.left, slot.top)
-		bar:SetPoint("BOTTOMRIGHT", slot.anchor, "CENTER", slot.right, slot.bottom)
-		bar:SetFrameLevel(slot.level)
-		anchorNote = "in the old portrait art's third slot"
-		Render()
-		return
-	end
-	bar.slotMode = false
-	bar:SetFrameLevel(_G.PlayerFrame:GetFrameLevel() + 1)
 	local target, source = FindManaBar()
-	bar.ringCut = RING_CUT and target ~= nil
+
+	local oldArt = KUI.IsClassicArtShowing and KUI:IsClassicArtShowing()
+	bar.ringCut = RING_CUT and target ~= nil and not oldArt
 	if target then
 		bar:SetPoint("TOPLEFT", target, "BOTTOMLEFT", 0, -drop)
 		bar:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", 0, -drop)
@@ -650,11 +613,11 @@ function KUI:XPBarScanReport()
 	if bar and bar.widthPx then
 		print(string.format("  shape: pill, %d x %d screen pixels inside a %d px frame (1 pixel = %.3f UI units)",
 			bar.widthPx, BAR_HEIGHT_PX, FRAME_PX, bar.pixel))
-		if bar.slotMode then
-			print(string.format("  left end: square, filling the old portrait art's third slot (%d rows of %.2f UI units)", BAR_HEIGHT_PX, bar.rowH or 0))
-		elseif bar.ringLeft then
+		if bar.ringLeft then
 			print(string.format("  left end: cut to the portrait ring, rows start %s px from the power bar's left edge (fill starts at %d)",
 				table.concat(bar.ringLeft, ", "), bar.fillStart))
+		elseif KUI.IsClassicArtShowing and KUI:IsClassicArtShowing() then
+			print("  left end: square at the bars' edge (old portrait art showing)")
 		else
 			print("  left end: square (not cut to the ring -- the power bar wasn't found)")
 		end

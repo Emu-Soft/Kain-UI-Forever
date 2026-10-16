@@ -964,7 +964,7 @@ local function BuildPanel()
 				function() return KUI.db.classicFrameArt end,
 				function(checked) KUI:SetClassicFrameArt(checked) end)
 			AddInfoButton(content, artCheck.label, "Restore old portrait art",
-				"Brings back the previous look of your portrait: a thin bronze ring with the name above three bars, your XP bar in the third. Waits until you're out of combat. Untick to go back to the current look.")
+				"Brings back the previous look of your portrait: a thin bronze ring, the name above taller health and power bars, the black level disc and your faction crest in a small ring. Waits until you're out of combat. Untick to go back to the current look.")
 			y4 = y4 - 26
 		end
 	end
