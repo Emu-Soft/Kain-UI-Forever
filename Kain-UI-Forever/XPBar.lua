@@ -14,6 +14,8 @@ local RING_CUT = true
 local RING_CX, RING_UP, RING_R = -0.2682, 0.1840, 0.2623
 local RING_TUCK_PX = 2
 
+KUI.PORTRAIT_RING = { cx = RING_CX, up = RING_UP, r = RING_R, dropPx = BAR_GAP_PX + FRAME_PX }
+
 local XP_COLOR = { 0.58, 0.0, 0.55 }
 local XP_COLOR_RESTED = { 0.0, 0.39, 0.88 }
 local RESTED_EXTENSION_COLOR = { 0.36, 0.62, 1.0, 0.6 }
@@ -78,6 +80,7 @@ local function FindManaBar()
 	if IsFrame(f) then return f, "PlayerFrameManaBar" end
 	return nil
 end
+KUI.FindPlayerManaBar = FindManaBar
 
 local function UnitsPerPixel(frame)
 	local physicalHeight
@@ -89,6 +92,7 @@ local function UnitsPerPixel(frame)
 	if not physicalHeight or physicalHeight <= 0 or not scale or scale <= 0 then return 1 end
 	return 768 / physicalHeight / scale
 end
+KUI.UnitsPerPixel = UnitsPerPixel
 
 local insetCache = {}
 local function PillInsets(height)

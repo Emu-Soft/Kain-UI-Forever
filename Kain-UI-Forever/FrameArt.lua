@@ -1,23 +1,24 @@
 local addonName, KUI = ...
 
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
-local OLD_ART = {
-	["1x"] = MEDIA .. "uiunitframec60",
-	["2x"] = MEDIA .. "uiunitframe2xc60",
-}
+local OLD_PLAYER = MEDIA .. "PlayerFrameOld"
+local TEX_W, TEX_H = 512, 256
+local PIECE_W, PIECE_H = 392, 140
+local RING_X, RING_Y, RING_R = 69.96, 70.06, 66.63
+local MIN_HIDE_WIDTH = 50
 
 local NAME_2X, NAME_1X = "uiunitframe2xc60", "uiunitframec60"
 
 local KNOWN_FILE_IDS = {}
 
-local ROOTS = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame",
-	"TargetFrameToT", "FocusFrameToT", "PartyFrame" }
-local MAX_DEPTH = 8
-
-local tracked = {}
-local hooked = {}
+local hidden = {}
+local hookedAlpha = {}
 local learned = {}
-local matchMode = "not scanned yet"
+local learnedFromPlayerFrame = false
+local matchMode = "not applied yet"
+local layoutNote = "not laid out yet"
+local overlay
+local manaHooked = false
 local busy = false
 local errorShown = false
 
@@ -29,12 +30,12 @@ local function IsSecret(v)
 	return issecretvalue and issecretvalue(v)
 end
 
-local function Ask(region, method)
-	local fn = region[method]
+local function Ask(obj, method, ...)
+	local fn = obj[method]
 	if type(fn) ~= "function" then return nil end
-	local ok, v = pcall(fn, region)
+	local ok, v, v2 = pcall(fn, obj, ...)
 	if not ok or IsSecret(v) then return nil end
-	return v
+	return v, v2
 end
 
 local function FileClues(region)
@@ -62,200 +63,177 @@ local function FileClues(region)
 	return names, ids
 end
 
-local function VariantFromNames(names)
+local function NameMatches(names)
 	for _, n in ipairs(names) do
-		if n:find(NAME_2X, 1, true) then return "2x" end
-		if n:find(NAME_1X, 1, true) then return "1x" end
+		if n:find(NAME_2X, 1, true) or n:find(NAME_1X, 1, true) then return true end
 	end
-	return nil
+	return false
 end
 
-local function VariantFromIDs(ids)
-	for _, id in ipairs(ids) do
-		local v = KNOWN_FILE_IDS[id] or learned[id]
-		if v then return v end
-	end
-	return nil
-end
-
-local OUR_PREFIX = MEDIA:lower()
-local function ShowingOurs(region)
-	local tex = Ask(region, "GetTexture")
-	return type(tex) == "string" and tex:lower():sub(1, #OUR_PREFIX) == OUR_PREFIX
-end
-
-local function Identify(region)
-	if ShowingOurs(region) then return nil end
+local function FromUnitFrameFile(region)
 	local names, ids = FileClues(region)
-	local variant = VariantFromNames(names)
-	if variant then
-		for _, id in ipairs(ids) do learned[id] = learned[id] or variant end
-		return variant, "name"
+	if NameMatches(names) then
+		for _, id in ipairs(ids) do learned[id] = true end
+		return true, true
 	end
-	variant = VariantFromIDs(ids)
-	if variant then return variant, "file ID" end
-	return nil
-end
-
-local function IsTexture(region)
-	local kind = Ask(region, "GetObjectType")
-	return kind == "Texture"
-end
-
-local function Walk(frame, depth, rootName, out)
-	if depth > MAX_DEPTH or type(frame) ~= "table" then return end
-	if frame.IsForbidden and frame:IsForbidden() then return end
-	if frame.GetRegions then
-		for _, region in ipairs({ frame:GetRegions() }) do
-			if IsTexture(region) then out[#out + 1] = { region, rootName } end
-		end
+	for _, id in ipairs(ids) do
+		if KNOWN_FILE_IDS[id] or learned[id] then return true, false end
 	end
-	if Ask(frame, "GetObjectType") == "StatusBar" and frame.GetStatusBarTexture then
-		local ok, tex = pcall(frame.GetStatusBarTexture, frame)
-		if ok and type(tex) == "table" then out[#out + 1] = { tex, rootName, frame } end
-	end
-	if frame.GetChildren then
-		for _, child in ipairs({ frame:GetChildren() }) do
-			Walk(child, depth + 1, rootName, out)
-		end
-	end
+	return false, false
 end
 
-local function AllTextures()
-	local out = {}
-	for _, name in ipairs(ROOTS) do
-		local root = _G[name]
-		if type(root) == "table" then Walk(root, 0, name, out) end
-	end
-	return out
-end
-
-local function IsWholeFile(c)
-	return #c == 8 and c[1] == 0 and c[2] == 0 and c[3] == 0 and c[4] == 1
-		and c[5] == 1 and c[6] == 0 and c[7] == 1 and c[8] == 1
-end
-
-local function CurrentCoords(region, atlas)
-	local c = { region:GetTexCoord() }
-	if #c == 8 and not IsWholeFile(c) then return c end
-	if atlas and C_Texture and C_Texture.GetAtlasInfo then
-		local ok, info = pcall(C_Texture.GetAtlasInfo, atlas)
-		if ok and type(info) == "table" then
-			local l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
-			if type(l) == "number" and type(r) == "number" and type(t) == "number" and type(b) == "number" then
-				return { l, t, l, b, r, t, r, b }
-			end
-		end
-	end
-	return c
-end
-
-local Recheck
-
-local function Swap(region, variant, how, rootName)
-	local st = tracked[region] or {}
-	tracked[region] = st
-	st.root = rootName or st.root
-	st.atlas = Ask(region, "GetAtlas")
-	st.file = (not st.atlas) and (Ask(region, "GetTextureFileID") or Ask(region, "GetTexture")) or nil
-	st.coords = CurrentCoords(region, st.atlas)
-	st.variant, st.how = variant, how
-	region:SetTexture(OLD_ART[variant])
-	if #st.coords == 8 then region:SetTexCoord(unpack(st.coords)) end
-	st.swapped = true
-end
-
-local function Restore(region)
-	local st = tracked[region]
-	if not (st and st.swapped) then return end
-	busy = true
-	local ok = pcall(function()
-		if st.atlas then
-			region:SetAtlas(st.atlas)
-		elseif st.file then
-			region:SetTexture(st.file)
-			if #st.coords == 8 then region:SetTexCoord(unpack(st.coords)) end
-		end
-	end)
-	busy = false
-	if ok then st.swapped = false end
-end
-
-local function HookTexture(region)
-	if hooked[region] or type(region.SetAtlas) ~= "function" then return end
-	hooked[region] = true
-	hooksecurefunc(region, "SetAtlas", function(self)
-		if busy then return end
-		local st = tracked[self]
-		if st then st.swapped = false end
-		if Enabled() then Recheck(self) end
-	end)
-end
-
-local function HookStatusBar(statusBar)
-	if hooked[statusBar] or type(statusBar.SetStatusBarTexture) ~= "function" then return end
-	hooked[statusBar] = true
-	hooksecurefunc(statusBar, "SetStatusBarTexture", function(self)
-		if busy or not Enabled() then return end
-		local ok, tex = pcall(self.GetStatusBarTexture, self)
-		if ok and type(tex) == "table" and not ShowingOurs(tex) then
-			local st = tracked[tex]
-			if st then st.swapped = false end
-			Recheck(tex)
-		end
-	end)
-end
-
-Recheck = function(region, rootName)
-	local st = tracked[region]
-	if st and st.swapped then return end
-	local variant, how = Identify(region)
-	if not variant then return end
-	local ok = pcall(Swap, region, variant, how, rootName)
-	if ok then HookTexture(region) end
-	return ok
-end
-
-local learnedFromPlayerFrame = false
-local function LearnFromPlayerFrame()
+local function PlayerFrameTexture()
 	local container = _G.PlayerFrame and _G.PlayerFrame.PlayerFrameContainer
 	local tex = container and container.FrameTexture
-	if type(tex) ~= "table" or ShowingOurs(tex) then return false end
+	return type(tex) == "table" and tex or nil
+end
+
+local function LearnFromPlayerFrame()
+	local tex = PlayerFrameTexture()
+	if not tex then return false end
 	local _, ids = FileClues(tex)
-	for _, id in ipairs(ids) do learned[id] = learned[id] or "2x" end
+	for _, id in ipairs(ids) do learned[id] = true end
 	learnedFromPlayerFrame = #ids > 0
 	return learnedFromPlayerFrame
 end
 
-local function ApplyNow()
-	local textures = AllTextures()
-	if not Enabled() then
-		for region in pairs(tracked) do Restore(region) end
-		return
+local function Walk(frame, depth, out)
+	if depth > 8 or type(frame) ~= "table" then return end
+	if frame.IsForbidden and frame:IsForbidden() then return end
+	if Ask(frame, "GetObjectType") == "StatusBar" then return end
+	if frame.GetRegions then
+		for _, region in ipairs({ frame:GetRegions() }) do
+			if region ~= overlay and Ask(region, "GetObjectType") == "Texture" then out[#out + 1] = region end
+		end
 	end
+	if frame.GetChildren then
+		for _, child in ipairs({ frame:GetChildren() }) do Walk(child, depth + 1, out) end
+	end
+end
 
-	local sawName = false
-	for _, entry in ipairs(textures) do
-		if not ShowingOurs(entry[1]) and VariantFromNames((FileClues(entry[1]))) then sawName = true end
-		Recheck(entry[1], entry[2])
+local function FindFrameArt()
+	local all = {}
+	if type(_G.PlayerFrame) == "table" then Walk(_G.PlayerFrame, 0, all) end
+	local fromFile, sawName = {}, false
+	local function collect()
+		fromFile = {}
+		for _, region in ipairs(all) do
+			local yes, byName = FromUnitFrameFile(region)
+			if yes then fromFile[#fromFile + 1] = region end
+			if byName then sawName = true end
+		end
 	end
+	collect()
 	if sawName then
+		collect()
 		matchMode = "by file name"
 	elseif next(KNOWN_FILE_IDS) then
 		matchMode = "by known file IDs"
 	elseif learnedFromPlayerFrame or (not next(learned) and LearnFromPlayerFrame()) then
+		collect()
 		matchMode = "LAST RESORT: by the player frame's own art (no file names readable)"
 	elseif next(learned) then
 		matchMode = "by file IDs learned from names earlier"
 	else
 		matchMode = "nothing to match: no file names, no known IDs, no player frame art found"
 	end
-
-	for _, entry in ipairs(textures) do
-		Recheck(entry[1], entry[2])
-		HookTexture(entry[1])
-		if entry[3] then HookStatusBar(entry[3]) end
+	local wide = {}
+	for _, region in ipairs(fromFile) do
+		local w = Ask(region, "GetWidth")
+		if type(w) == "number" and w >= MIN_HIDE_WIDTH then wide[#wide + 1] = region end
 	end
+	return wide, fromFile
+end
+
+local function SetAlphaQuiet(region, alpha)
+	busy = true
+	pcall(region.SetAlpha, region, alpha)
+	busy = false
+end
+
+local function HookAlpha(region)
+	if hookedAlpha[region] or type(region.SetAlpha) ~= "function" then return end
+	hookedAlpha[region] = true
+	hooksecurefunc(region, "SetAlpha", function(self, alpha)
+		if busy or hidden[self] == nil then return end
+		hidden[self] = alpha
+		if Enabled() then SetAlphaQuiet(self, 0) end
+	end)
+end
+
+local function Hide(region)
+	if hidden[region] == nil then
+		hidden[region] = Ask(region, "GetAlpha") or 1
+	end
+	HookAlpha(region)
+	SetAlphaQuiet(region, 0)
+end
+
+local function GiveBackAll()
+	for region, alpha in pairs(hidden) do
+		SetAlphaQuiet(region, alpha)
+		hidden[region] = nil
+	end
+	if overlay then overlay:Hide() end
+end
+
+local function Layout()
+	if not overlay then return false end
+	local find = KUI.FindPlayerManaBar
+	local mana = find and find()
+	local ring = KUI.PORTRAIT_RING
+	if not (mana and ring) then
+		layoutNote = "power bar not found -- old art not shown"
+		return false
+	end
+	local W = Ask(mana, "GetWidth")
+	if type(W) ~= "number" or W <= 0 then
+		layoutNote = "power bar has no width yet"
+		return false
+	end
+	local pixel = KUI.UnitsPerPixel and KUI.UnitsPerPixel(mana) or 1
+	local k = ring.r * W / RING_R
+	local cx = ring.cx * W
+	local cyUp = ring.up * W - ring.dropPx * pixel
+	overlay:ClearAllPoints()
+	overlay:SetPoint("TOPLEFT", mana, "BOTTOMLEFT", cx - RING_X * k, cyUp + RING_Y * k)
+	overlay:SetSize(PIECE_W * k, PIECE_H * k)
+	layoutNote = string.format("%.1f x %.1f UI units, top-left %.1f, %.1f from the power bar's bottom-left (power bar %.1f wide)",
+		PIECE_W * k, PIECE_H * k, cx - RING_X * k, cyUp + RING_Y * k, W)
+	if not manaHooked and mana.HookScript then
+		manaHooked = true
+		mana:HookScript("OnSizeChanged", function() if Enabled() and overlay and overlay:IsShown() then Layout() end end)
+	end
+	return true
+end
+
+local function MakeOverlay(likeRegion)
+	if overlay then return end
+	local holder = (likeRegion and likeRegion.GetParent and likeRegion:GetParent()) or _G.PlayerFrame
+	local layer, sublevel = Ask(likeRegion or holder, "GetDrawLayer")
+	overlay = holder:CreateTexture("KainUIForeverOldPlayerArt", layer or "BORDER", nil, sublevel or 0)
+	overlay:SetTexture(OLD_PLAYER)
+	overlay:SetTexCoord(0, PIECE_W / TEX_W, 0, PIECE_H / TEX_H)
+end
+
+local function ApplyNow()
+	if not Enabled() then
+		GiveBackAll()
+		return
+	end
+	local wide = FindFrameArt()
+	if #wide == 0 then
+		GiveBackAll()
+		layoutNote = "Blizzard's ring and panel not recognised -- old art not shown"
+		return
+	end
+	MakeOverlay(PlayerFrameTexture() or wide[1])
+	if not Layout() then
+		GiveBackAll()
+		return
+	end
+	for _, region in ipairs(wide) do Hide(region) end
+	overlay:Show()
 end
 
 function KUI:ApplyClassicFrameArt()
@@ -272,39 +250,30 @@ function KUI:SetClassicFrameArt(enabled)
 	KUI:ApplyClassicFrameArt()
 end
 
-function KUI:FrameArtScanReport()
-	print("|cff33ff99Kain-UI Forever|r frame art scan:")
-	print("  restore old portrait art: " .. (Enabled() and "ON" or "OFF") .. " | matched " .. matchMode)
-	local ids = {}
-	for id, v in pairs(learned) do ids[#ids + 1] = tostring(id) .. "=" .. v end
-	table.sort(ids)
-	print("  uiunitframe file IDs learned: " .. (#ids > 0 and table.concat(ids, ", ") or "none"))
-	local perRoot, swapped, total = {}, 0, 0
-	for region, st in pairs(tracked) do
-		total = total + 1
-		if st.swapped then swapped = swapped + 1 end
-		local key = st.root or "?"
-		perRoot[key] = perRoot[key] or {}
-		table.insert(perRoot[key], string.format("%s%s (%s, %s)",
-			(region.GetDebugName and region:GetDebugName()) or "?",
-			st.swapped and "" or " [Blizzard's]", tostring(st.atlas or st.file), st.variant or "?"))
-	end
-	print(string.format("  textures from the uiunitframe file: %d, showing the old art: %d", total, swapped))
-	for _, name in ipairs(ROOTS) do
-		local list = perRoot[name]
-		if list then
-			table.sort(list)
-			print("  " .. name .. ": " .. table.concat(list, "; "))
-		elseif _G[name] == nil then
-			print("  " .. name .. ": not on this client")
-		end
-	end
+local function Describe(region)
+	local w, h = Ask(region, "GetWidth"), Ask(region, "GetHeight")
+	return string.format("%s %sx%s atlas %s alpha %s", (region.GetDebugName and region:GetDebugName()) or "?",
+		w and string.format("%.0f", w) or "?", h and string.format("%.0f", h) or "?",
+		tostring(Ask(region, "GetAtlas")), tostring(Ask(region, "GetAlpha")))
+end
 
-	local container = _G.PlayerFrame and _G.PlayerFrame.PlayerFrameContainer
-	local tex = container and container.FrameTexture
-	if type(tex) == "table" then
+function KUI:FrameArtScanReport()
+	print("|cff33ff99Kain-UI Forever|r portrait art scan:")
+	local wide, fromFile = FindFrameArt()
+	print("  restore old portrait art: " .. (Enabled() and "ON" or "OFF") .. " | uiunitframe file matched " .. matchMode)
+	local ids = {}
+	for id in pairs(learned) do ids[#ids + 1] = tostring(id) end
+	table.sort(ids)
+	print("  file IDs learned: " .. (#ids > 0 and table.concat(ids, ", ") or "none"))
+	print(string.format("  PlayerFrame textures from that file: %d (wide enough to hide: %d)", #fromFile, #wide))
+	for _, region in ipairs(fromFile) do
+		print("    " .. (hidden[region] ~= nil and "[hidden] " or "") .. Describe(region))
+	end
+	print("  old art: " .. (overlay and (overlay:IsShown() and "showing" or "made, hidden") or "not made") .. " -- " .. layoutNote)
+	local tex = PlayerFrameTexture()
+	if tex then
 		local names, fileIds = FileClues(tex)
-		print(string.format("  PlayerFrame FrameTexture: atlas %s | names: %s | IDs: %s", tostring(Ask(tex, "GetAtlas")),
+		print(string.format("  PlayerFrame FrameTexture: %s | names: %s | IDs: %s", Describe(tex),
 			#names > 0 and table.concat(names, ", ") or "none", #fileIds > 0 and table.concat(fileIds, ", ") or "none"))
 	else
 		print("  PlayerFrame FrameTexture: not found")
@@ -312,7 +281,7 @@ function KUI:FrameArtScanReport()
 end
 
 local eventFrame = CreateFrame("Frame")
-for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE" }) do
+for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
 eventFrame:SetScript("OnEvent", function()

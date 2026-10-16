@@ -964,7 +964,7 @@ local function BuildPanel()
 				function() return KUI.db.classicFrameArt end,
 				function(checked) KUI:SetClassicFrameArt(checked) end)
 			AddInfoButton(content, artCheck.label, "Restore old portrait art",
-				"Brings back the previous look of the player, target, focus, pet and party portraits, where the health and power bars join the portrait ring. Untick to go back to the current look.")
+				"Brings back the previous look of your portrait, where the health and power bars join the portrait ring. Untick to go back to the current look.")
 			y4 = y4 - 26
 		end
 	end
