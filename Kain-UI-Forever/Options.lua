@@ -7,6 +7,7 @@ KUI.SKIP = {
 	micro = false,
 	dragging = false,
 	xpbar = false,
+	frameart = false,
 	vendor = false,
 	macros = false,
 	loot = false,
@@ -46,6 +47,7 @@ function KUI:ApplyAll()
 	Run("micro", "ApplyMicroMenuVisibility")
 	Run("dragging", "ApplyGlobalDragging")
 	Run("xpbar", "ApplyXPBar")
+	Run("frameart", "ApplyClassicFrameArt")
 	Run("vendor", "ApplyAutoSellGreys")
 	Run("vendor", "ApplyAutoRepair")
 	Run("loot", "ApplyLootRollDragging")
@@ -236,6 +238,7 @@ function KUI:ApplyKainPreset()
 	Set("SetGlobalDragging", p.globalDragging)
 	Set("SetXPBarUnderPortrait", p.xpBarUnderPortrait)
 	Set("SetHideDefaultXPBar", p.xpBarHideDefault)
+	Set("SetClassicFrameArt", p.classicFrameArt)
 	Set("SetTooltipAnchorMode", p.tooltipAnchorMode)
 	Set("SetTooltipAnchorLocked", p.tooltipAnchorLocked)
 	if p.tooltipAnchorPos then
@@ -955,6 +958,15 @@ local function BuildPanel()
 			function() return KUI.db.xpBarHideDefault end,
 			function(checked) KUI:SetHideDefaultXPBar(checked) end)
 		y4 = y4 - 26
+
+		if KUI.SetClassicFrameArt then
+			local artCheck = CreateCheckbox(content, "Restore old portrait art", COL4_X, y4,
+				function() return KUI.db.classicFrameArt end,
+				function(checked) KUI:SetClassicFrameArt(checked) end)
+			AddInfoButton(content, artCheck.label, "Restore old portrait art",
+				"Brings back the previous look of the player, target, focus, pet and party portraits, where the health and power bars join the portrait ring. Untick to go back to the current look.")
+			y4 = y4 - 26
+		end
 	end
 
 	if KUI.SetTooltipAnchorMode then

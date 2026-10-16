@@ -220,6 +220,7 @@ local TOGGLES = {
 	{ key = "globalDragging", set = "SetGlobalDragging" },
 	{ key = "xpBarUnderPortrait", set = "SetXPBarUnderPortrait" },
 	{ key = "xpBarHideDefault", set = "SetHideDefaultXPBar" },
+	{ key = "classicFrameArt", set = "SetClassicFrameArt" },
 	{ key = "tooltipAnchorLocked", set = "SetTooltipAnchorLocked", get = NotFalse("tooltipAnchorLocked") },
 	{ key = "tooltipAnchorMode", set = "SetTooltipAnchorMode",
 		get = function(db) return db.tooltipAnchorMode == "growRight" end,
@@ -264,7 +265,7 @@ local function SetToggle(t, on)
 end
 
 local SCANS = {
-	"bagscan", "bagdebug", "microscan", "bagdividerscan", "xpscan", "socialscan", "allynotescan",
+	"bagscan", "bagdebug", "microscan", "bagdividerscan", "xpscan", "frameartscan", "socialscan", "allynotescan",
 	"levelshotscan", "wowheadscan", "errorscan", "sparklescan", "dragscan", "vendorscan",
 	"iconpickerscan", "macroscan", "fastlootscan", "contrastscan", "minimapposscan",
 	"chatshorthandscan", "chatnumscan", "chathistoryscan", "chatlinkscan", "minimapstratascan",

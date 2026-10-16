@@ -10,6 +10,10 @@ local OUTLINE_PX = 1
 local FRAME_PX = BRONZE_PX + OUTLINE_PX
 local SQUARE_LEFT = true
 
+local RING_CUT = true
+local RING_CX, RING_UP, RING_R = -0.2682, 0.1840, 0.2623
+local RING_TUCK_PX = 2
+
 local XP_COLOR = { 0.58, 0.0, 0.55 }
 local XP_COLOR_RESTED = { 0.0, 0.39, 0.88 }
 local RESTED_EXTENSION_COLOR = { 0.36, 0.62, 1.0, 0.6 }
@@ -105,10 +109,30 @@ local function SetRowsColor(rows, color)
 	end
 end
 
+local function RingLeft(y)
+	local w = bar.widthPx
+	local cx, cy, r = RING_CX * w, -RING_UP * w, RING_R * w - RING_TUCK_PX
+	local dy = y - cy
+	local span = r * r - dy * dy
+	if span <= 0 then return math.floor(cx + 0.5) end
+	return math.floor(cx + math.sqrt(span) + 0.5)
+end
+
+local function RowStart(i, insets)
+	if bar.ringLeft then return bar.ringLeft[i] end
+	return SQUARE_LEFT and 0 or insets[i]
+end
+
+local function FillEnd(fraction)
+	local start = bar.fillStart or 0
+	if not fraction then return start end
+	return math.floor(start + (bar.widthPx - start) * fraction + 0.5)
+end
+
 local function DrawFill(rows, insets, widthPx, pixel, fraction)
-	local filled = fraction and math.floor(widthPx * fraction + 0.5) or 0
+	local filled = FillEnd(fraction)
 	for i, row in ipairs(rows) do
-		local left = SQUARE_LEFT and 0 or insets[i]
+		local left = RowStart(i, insets)
 		local right = widthPx - insets[i]
 		local width = math.min(right, filled) - left
 		if width > 0 then
@@ -126,11 +150,11 @@ local function DrawDivider()
 	local rows = bar.dividerRows
 	local insets = bar.layers[#bar.layers].insets
 	local widthPx, pixel = bar.widthPx, bar.pixel
-	local filled = math.floor(widthPx * (bar.fillFraction or 0) + 0.5)
-	local restedEnd = bar.restedFraction and math.floor(widthPx * bar.restedFraction + 0.5) or 0
-	local show = bar.hasRested and filled > 0 and restedEnd > filled and filled < widthPx
+	local filled = FillEnd(bar.fillFraction or 0)
+	local restedEnd = FillEnd(bar.restedFraction)
+	local show = bar.hasRested and filled > (bar.fillStart or 0) and restedEnd > filled and filled < widthPx
 	for i, row in ipairs(rows) do
-		local left = SQUARE_LEFT and 0 or insets[i]
+		local left = RowStart(i, insets)
 		local right = widthPx - insets[i]
 
 		local x0 = math.max(left, filled)
@@ -162,10 +186,25 @@ local function Render()
 	local widthPx = math.max(1, math.floor(width / pixel + 0.5))
 	bar.pixel, bar.widthPx = pixel, widthPx
 
+	if bar.ringCut then
+		local starts, furthest = {}, 0
+		for i = 1, BAR_HEIGHT_PX do
+			starts[i] = RingLeft(i - 0.5)
+			furthest = math.min(furthest, starts[i])
+		end
+		bar.ringLeft, bar.fillStart = starts, furthest
+	else
+		bar.ringLeft, bar.fillStart = nil, 0
+	end
+
+	bar:SetHitRectInsets(-HOVER_PAD_X + bar.fillStart * pixel, -HOVER_PAD_X, -HOVER_PAD_Y, -HOVER_PAD_Y)
+
 	bar:SetHeight(BAR_HEIGHT_PX * pixel)
 	for _, layer in ipairs(bar.layers) do
 		for i, row in ipairs(layer.rows) do
-			local left = -layer.grow + (SQUARE_LEFT and 0 or layer.insets[i])
+
+			local left = bar.ringCut and RingLeft(i - 0.5 - layer.grow)
+				or (-layer.grow + (SQUARE_LEFT and 0 or layer.insets[i]))
 			local right = widthPx + layer.grow - layer.insets[i]
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", bar, "TOPLEFT", left * pixel, -(i - 1 - layer.grow) * pixel)
@@ -180,6 +219,7 @@ local function Layout()
 	local pixel = UnitsPerPixel(bar)
 	local drop = (BAR_GAP_PX + FRAME_PX) * pixel
 	local target, source = FindManaBar()
+	bar.ringCut = RING_CUT and target ~= nil
 	if target then
 		bar:SetPoint("TOPLEFT", target, "BOTTOMLEFT", 0, -drop)
 		bar:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", 0, -drop)
@@ -567,6 +607,12 @@ function KUI:XPBarScanReport()
 	if bar and bar.widthPx then
 		print(string.format("  shape: pill, %d x %d screen pixels inside a %d px frame (1 pixel = %.3f UI units)",
 			bar.widthPx, BAR_HEIGHT_PX, FRAME_PX, bar.pixel))
+		if bar.ringLeft then
+			print(string.format("  left end: cut to the portrait ring, rows start %s px from the power bar's left edge (fill starts at %d)",
+				table.concat(bar.ringLeft, ", "), bar.fillStart))
+		else
+			print("  left end: square (not cut to the ring -- the power bar wasn't found)")
+		end
 	end
 
 	for _, name in ipairs({ "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer" }) do

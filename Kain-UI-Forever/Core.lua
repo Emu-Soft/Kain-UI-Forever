@@ -14,6 +14,7 @@ KUI.defaults = {
 	globalDragging = false,
 	xpBarUnderPortrait = false,
 	xpBarHideDefault = false,
+	classicFrameArt = false,
 	framePositions = {},
 	autoSellGreys = false,
 	autoRepair = false,
@@ -71,6 +72,7 @@ KUI.KAIN_PRESET = {
 	globalDragging = true,
 	xpBarUnderPortrait = true,
 	xpBarHideDefault = true,
+	classicFrameArt = true,
 
 	minimapElementsUnlocked = false,
 	platerStyle = true,
@@ -719,6 +721,8 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:BagDividerScanReport()
 	elseif command == "xpscan" and KUI.XPBarScanReport then
 		KUI:XPBarScanReport()
+	elseif command == "frameartscan" and KUI.FrameArtScanReport then
+		KUI:FrameArtScanReport()
 	elseif command == "socialscan" and KUI.SocialButtonScanReport then
 		KUI:SocialButtonScanReport()
 	elseif command == "allynotescan" and KUI.AllyNoteScanReport then
