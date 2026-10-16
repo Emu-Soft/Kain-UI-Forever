@@ -285,12 +285,15 @@ function KUI:PlayerFrameDump()
 	if type(root) ~= "table" then print("|cffff6060Kain-UI Forever:|r PlayerFrame not found.") return end
 	local lines, paths = {}, {}
 	local function add(s) lines[#lines + 1] = s end
-	local function num(v) return type(v) == "number" and string.format("%.1f", v) or tostring(v) end
+
+	local function str(v) if IsSecret(v) then return "secret" end return tostring(v) end
+	local function num(v) if IsSecret(v) then return "secret" end return type(v) == "number" and string.format("%.1f", v) or tostring(v) end
 	local function NameOf(obj)
 		if obj == nil then return "nil" end
+		if IsSecret(obj) then return "secret" end
 		if paths[obj] then return paths[obj] end
 		local n = Ask(obj, "GetName")
-		return n or "?"
+		return type(n) == "string" and n or "?"
 	end
 
 	local function KeyMap(frame)
@@ -323,8 +326,8 @@ function KUI:PlayerFrameDump()
 		local count = Ask(obj, "GetNumPoints") or 0
 		for p = 1, count do
 			local ok, point, rel, relPoint, x, y = pcall(obj.GetPoint, obj, p)
-			if ok and not IsSecret(x) then
-				out[#out + 1] = string.format("%s>%s:%s(%s,%s)", tostring(point), NameOf(rel), tostring(relPoint), num(x), num(y))
+			if ok then
+				out[#out + 1] = string.format("%s>%s:%s(%s,%s)", str(point), NameOf(rel), str(relPoint), num(x), num(y))
 			end
 		end
 		return #out > 0 and table.concat(out, " ") or "no points"
@@ -334,7 +337,7 @@ function KUI:PlayerFrameDump()
 	end
 	local _, physicalH = (GetPhysicalScreenSize or function() end)()
 	add(string.format("Kain-UI portrait dump | screen height %s | UIParent scale %s | PlayerFrame effective scale %s",
-		tostring(physicalH), num(Ask(_G.UIParent, "GetScale")), num(Ask(root, "GetEffectiveScale"))))
+		str(physicalH), num(Ask(_G.UIParent, "GetScale")), num(Ask(root, "GetEffectiveScale"))))
 	local fns = {}
 	for _, n in ipairs({ "PlayerFrame_GetHealthBar", "PlayerFrame_GetManaBar", "PlayerFrame_GetAlternatePowerBar", "PlayerFrame_UpdateArt",
 			"PlayerFrame_ToPlayerArt", "PlayerFrame_ToVehicleArt", "PlayerFrame_UpdatePlayerNameTextAnchor", "PlayerFrame_UpdateLevelTextAnchor",
@@ -347,8 +350,8 @@ function KUI:PlayerFrameDump()
 		if frame.IsForbidden and frame:IsForbidden() then
 			add(path .. " <forbidden>")
 		else
-			add(string.format("%s [%s] %s level %s shown %s protected %s alpha %s | %s", path, tostring(Ask(frame, "GetObjectType")),
-				Size(frame), tostring(Ask(frame, "GetFrameLevel")), tostring(Ask(frame, "IsShown")), tostring(Ask(frame, "IsProtected")),
+			add(string.format("%s [%s] %s level %s shown %s protected %s alpha %s | %s", path, str(Ask(frame, "GetObjectType")),
+				Size(frame), str(Ask(frame, "GetFrameLevel")), str(Ask(frame, "IsShown")), str(Ask(frame, "IsProtected")),
 				num(Ask(frame, "GetAlpha")), Points(frame)))
 			if frame.GetRegions then
 				for _, region in ipairs({ frame:GetRegions() }) do
@@ -358,21 +361,25 @@ function KUI:PlayerFrameDump()
 					if kind == "Texture" or kind == "MaskTexture" then
 						local names, ids = FileClues(region)
 						local c = { pcall(region.GetTexCoord, region) }
-						table.remove(c, 1)
-						for k2, v in ipairs(c) do c[k2] = string.format("%.3f", tonumber(v) or 0) end
+						local cok = table.remove(c, 1)
+						if not cok then c = {} end
+						for k2 = 1, #c do
+							local v = c[k2]
+							c[k2] = IsSecret(v) and "secret" or (type(v) == "number" and string.format("%.3f", v) or "?")
+						end
 						local masks = {}
 						for m = 1, (Ask(region, "GetNumMaskTextures") or 0) do
 							masks[#masks + 1] = NameOf(Ask(region, "GetMaskTexture", m))
 						end
-						extra = string.format(" atlas %s file %s%s coords %s%s", tostring(Ask(region, "GetAtlas")),
-							#names > 0 and names[1] or "?", #ids > 0 and ("/" .. ids[1]) or "", table.concat(c, ","),
+						extra = string.format(" atlas %s file %s%s coords %s%s", str(Ask(region, "GetAtlas")),
+							#names > 0 and names[1] or "?", #ids > 0 and ("/" .. str(ids[1])) or "", table.concat(c, ","),
 							#masks > 0 and (" masks " .. table.concat(masks, ",")) or "")
 					elseif kind == "FontString" then
 						local text = Ask(region, "GetText")
 						extra = " text " .. (type(text) == "string" and ("'" .. text:sub(1, 20) .. "'") or "?")
 					end
-					add(string.format("  %s (%s %s/%s) %s shown %s alpha %s | %s%s", paths[region] or "?", tostring(kind), tostring(layer),
-						tostring(sub), Size(region), tostring(Ask(region, "IsShown")), num(Ask(region, "GetAlpha")), Points(region), extra))
+					add(string.format("  %s (%s %s/%s) %s shown %s alpha %s | %s%s", paths[region] or "?", str(kind), str(layer),
+						str(sub), Size(region), str(Ask(region, "IsShown")), num(Ask(region, "GetAlpha")), Points(region), extra))
 				end
 			end
 		end
