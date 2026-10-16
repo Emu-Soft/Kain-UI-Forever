@@ -280,6 +280,112 @@ function KUI:FrameArtScanReport()
 	end
 end
 
+function KUI:PlayerFrameDump()
+	local root = _G.PlayerFrame
+	if type(root) ~= "table" then print("|cffff6060Kain-UI Forever:|r PlayerFrame not found.") return end
+	local lines, paths = {}, {}
+	local function add(s) lines[#lines + 1] = s end
+	local function num(v) return type(v) == "number" and string.format("%.1f", v) or tostring(v) end
+	local function NameOf(obj)
+		if obj == nil then return "nil" end
+		if paths[obj] then return paths[obj] end
+		local n = Ask(obj, "GetName")
+		return n or "?"
+	end
+
+	local function KeyMap(frame)
+		local map = {}
+		pcall(function() for k, v in pairs(frame) do if type(v) == "table" then map[v] = k end end end)
+		return map
+	end
+	local queue = { { root, "PlayerFrame", 0 } }
+	local i = 1
+	while queue[i] do
+		local frame, path, depth = queue[i][1], queue[i][2], queue[i][3]
+		i = i + 1
+		paths[frame] = path
+		if depth < 7 and not (frame.IsForbidden and frame:IsForbidden()) then
+			local keys = KeyMap(frame)
+			if frame.GetRegions then
+				for n, region in ipairs({ frame:GetRegions() }) do
+					paths[region] = path .. "." .. tostring(keys[region] or Ask(region, "GetName") or ("#r" .. n))
+				end
+			end
+			if frame.GetChildren then
+				for n, child in ipairs({ frame:GetChildren() }) do
+					queue[#queue + 1] = { child, path .. "." .. tostring(keys[child] or Ask(child, "GetName") or ("#c" .. n)), depth + 1 }
+				end
+			end
+		end
+	end
+	local function Points(obj)
+		local out = {}
+		local count = Ask(obj, "GetNumPoints") or 0
+		for p = 1, count do
+			local ok, point, rel, relPoint, x, y = pcall(obj.GetPoint, obj, p)
+			if ok and not IsSecret(x) then
+				out[#out + 1] = string.format("%s>%s:%s(%s,%s)", tostring(point), NameOf(rel), tostring(relPoint), num(x), num(y))
+			end
+		end
+		return #out > 0 and table.concat(out, " ") or "no points"
+	end
+	local function Size(obj)
+		return num(Ask(obj, "GetWidth")) .. "x" .. num(Ask(obj, "GetHeight"))
+	end
+	local _, physicalH = (GetPhysicalScreenSize or function() end)()
+	add(string.format("Kain-UI portrait dump | screen height %s | UIParent scale %s | PlayerFrame effective scale %s",
+		tostring(physicalH), num(Ask(_G.UIParent, "GetScale")), num(Ask(root, "GetEffectiveScale"))))
+	local fns = {}
+	for _, n in ipairs({ "PlayerFrame_GetHealthBar", "PlayerFrame_GetManaBar", "PlayerFrame_GetAlternatePowerBar", "PlayerFrame_UpdateArt",
+			"PlayerFrame_ToPlayerArt", "PlayerFrame_ToVehicleArt", "PlayerFrame_UpdatePlayerNameTextAnchor", "PlayerFrame_UpdateLevelTextAnchor",
+			"PlayerFrame_UpdateStatus", "PlayerFrame_OnEvent", "UnitFrame_Update", "UnitFrameHealthBar_Update", "TextStatusBar_UpdateTextString" }) do
+		fns[#fns + 1] = n .. "=" .. (type(_G[n]) == "function" and "yes" or "no")
+	end
+	add("functions: " .. table.concat(fns, " "))
+	for n = 1, i - 1 do
+		local frame, path = queue[n][1], queue[n][2]
+		if frame.IsForbidden and frame:IsForbidden() then
+			add(path .. " <forbidden>")
+		else
+			add(string.format("%s [%s] %s level %s shown %s protected %s alpha %s | %s", path, tostring(Ask(frame, "GetObjectType")),
+				Size(frame), tostring(Ask(frame, "GetFrameLevel")), tostring(Ask(frame, "IsShown")), tostring(Ask(frame, "IsProtected")),
+				num(Ask(frame, "GetAlpha")), Points(frame)))
+			if frame.GetRegions then
+				for _, region in ipairs({ frame:GetRegions() }) do
+					local kind = Ask(region, "GetObjectType")
+					local layer, sub = Ask(region, "GetDrawLayer")
+					local extra = ""
+					if kind == "Texture" or kind == "MaskTexture" then
+						local names, ids = FileClues(region)
+						local c = { pcall(region.GetTexCoord, region) }
+						table.remove(c, 1)
+						for k2, v in ipairs(c) do c[k2] = string.format("%.3f", tonumber(v) or 0) end
+						local masks = {}
+						for m = 1, (Ask(region, "GetNumMaskTextures") or 0) do
+							masks[#masks + 1] = NameOf(Ask(region, "GetMaskTexture", m))
+						end
+						extra = string.format(" atlas %s file %s%s coords %s%s", tostring(Ask(region, "GetAtlas")),
+							#names > 0 and names[1] or "?", #ids > 0 and ("/" .. ids[1]) or "", table.concat(c, ","),
+							#masks > 0 and (" masks " .. table.concat(masks, ",")) or "")
+					elseif kind == "FontString" then
+						local text = Ask(region, "GetText")
+						extra = " text " .. (type(text) == "string" and ("'" .. text:sub(1, 20) .. "'") or "?")
+					end
+					add(string.format("  %s (%s %s/%s) %s shown %s alpha %s | %s%s", paths[region] or "?", tostring(kind), tostring(layer),
+						tostring(sub), Size(region), tostring(Ask(region, "IsShown")), num(Ask(region, "GetAlpha")), Points(region), extra))
+				end
+			end
+		end
+	end
+	local text = table.concat(lines, "\n")
+	if KUI.ShowCopyText then
+		KUI:ShowCopyText("Kain-UI portrait dump -- Ctrl+C to copy", text)
+	else
+		print(text)
+	end
+	print(string.format("|cff33ff99Kain-UI Forever|r portrait dump: %d lines, %d characters -- in the copy window.", #lines, #text))
+end
+
 local eventFrame = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)

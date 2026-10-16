@@ -723,6 +723,8 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:XPBarScanReport()
 	elseif command == "frameartscan" and KUI.FrameArtScanReport then
 		KUI:FrameArtScanReport()
+	elseif command == "portraitdump" and KUI.PlayerFrameDump then
+		KUI:PlayerFrameDump()
 	elseif command == "socialscan" and KUI.SocialButtonScanReport then
 		KUI:SocialButtonScanReport()
 	elseif command == "allynotescan" and KUI.AllyNoteScanReport then
