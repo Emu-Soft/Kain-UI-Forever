@@ -130,6 +130,26 @@ local function AllTextures()
 	return out
 end
 
+local function IsWholeFile(c)
+	return #c == 8 and c[1] == 0 and c[2] == 0 and c[3] == 0 and c[4] == 1
+		and c[5] == 1 and c[6] == 0 and c[7] == 1 and c[8] == 1
+end
+
+local function CurrentCoords(region, atlas)
+	local c = { region:GetTexCoord() }
+	if #c == 8 and not IsWholeFile(c) then return c end
+	if atlas and C_Texture and C_Texture.GetAtlasInfo then
+		local ok, info = pcall(C_Texture.GetAtlasInfo, atlas)
+		if ok and type(info) == "table" then
+			local l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
+			if type(l) == "number" and type(r) == "number" and type(t) == "number" and type(b) == "number" then
+				return { l, t, l, b, r, t, r, b }
+			end
+		end
+	end
+	return c
+end
+
 local Recheck
 
 local function Swap(region, variant, how, rootName)
@@ -138,7 +158,7 @@ local function Swap(region, variant, how, rootName)
 	st.root = rootName or st.root
 	st.atlas = Ask(region, "GetAtlas")
 	st.file = (not st.atlas) and (Ask(region, "GetTextureFileID") or Ask(region, "GetTexture")) or nil
-	st.coords = { region:GetTexCoord() }
+	st.coords = CurrentCoords(region, st.atlas)
 	st.variant, st.how = variant, how
 	region:SetTexture(OLD_ART[variant])
 	if #st.coords == 8 then region:SetTexCoord(unpack(st.coords)) end
