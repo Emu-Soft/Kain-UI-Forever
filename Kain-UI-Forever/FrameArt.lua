@@ -2,24 +2,31 @@ local addonName, KUI = ...
 
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
 local OLD_PLAYER = MEDIA .. "PlayerFrameOld"
-local TEX_W, TEX_H = 512, 256
-local PIECE_W, PIECE_H = 392, 140
-local RING_X, RING_Y, RING_R = 69.96, 70.06, 66.63
-local MIN_HIDE_WIDTH = 50
+local TEX_W, TEX_H = 256, 128
+local PIECE_W, PIECE_H = 198, 77
+local RING_X, RING_Y = 37.24, 37.98
+local PORTRAIT_SIZE = 60
 
-local NAME_2X, NAME_1X = "uiunitframe2xc60", "uiunitframec60"
+local PIECE_SX = 1.0177
 
-local KNOWN_FILE_IDS = {}
+local HEALTH_TOP = RING_Y - 29
+local MANA_TOP = RING_Y - 50
+local NAME_MID = RING_Y - 20.5
+local XP_SLOT = { left = (66 - RING_X) * PIECE_SX, right = (192 - RING_X) * PIECE_SX, top = RING_Y - 61, bottom = RING_Y - 71 }
+local MAX_SHIFT = 15
 
+local overlay
+local applied = false
+local pending = false
+local note = "not applied yet"
 local hidden = {}
 local hookedAlpha = {}
-local learned = {}
-local learnedFromPlayerFrame = false
-local matchMode = "not applied yet"
-local layoutNote = "not laid out yet"
-local overlay
-local manaHooked = false
+local moved = {}
+local ours = {}
+local unmasked = {}
+local nameJustify
 local busy = false
+local hooked = false
 local errorShown = false
 
 local function Enabled()
@@ -31,11 +38,21 @@ local function IsSecret(v)
 end
 
 local function Ask(obj, method, ...)
+	if type(obj) ~= "table" then return nil end
 	local fn = obj[method]
 	if type(fn) ~= "function" then return nil end
 	local ok, v, v2 = pcall(fn, obj, ...)
 	if not ok or IsSecret(v) then return nil end
 	return v, v2
+end
+
+local function Dig(root, ...)
+	local node = root
+	for i = 1, select("#", ...) do
+		if type(node) ~= "table" then return nil end
+		node = node[(select(i, ...))]
+	end
+	return type(node) == "table" and node or nil
 end
 
 local function FileClues(region)
@@ -63,86 +80,37 @@ local function FileClues(region)
 	return names, ids
 end
 
-local function NameMatches(names)
-	for _, n in ipairs(names) do
-		if n:find(NAME_2X, 1, true) or n:find(NAME_1X, 1, true) then return true end
-	end
-	return false
+local function Parts()
+	local pf = _G.PlayerFrame
+	local container = Dig(pf, "PlayerFrameContainer")
+	local main = Dig(pf, "PlayerFrameContent", "PlayerFrameContentMain")
+	local contextual = Dig(pf, "PlayerFrameContent", "PlayerFrameContentContextual")
+	local health = (type(PlayerFrame_GetHealthBar) == "function" and select(2, pcall(PlayerFrame_GetHealthBar)))
+	if type(health) ~= "table" then health = Dig(main, "HealthBarsContainer", "HealthBar") end
+	local mana = KUI.FindPlayerManaBar and KUI.FindPlayerManaBar()
+	if type(mana) ~= "table" then mana = Dig(main, "ManaBarArea", "ManaBar") end
+	local healthContainer = Dig(main, "HealthBarsContainer") or (health and health.GetParent and health:GetParent())
+	return {
+		container = container,
+		portrait = Dig(container, "PlayerPortrait"),
+		frameTexture = Dig(container, "FrameTexture"),
+		vehicleTexture = Dig(container, "VehicleFrameTexture"),
+		hide = {
+			Dig(container, "FrameTexture"), Dig(container, "AlternatePowerFrameTexture"), Dig(container, "FrameFlash"),
+			Dig(main, "StatusTexture"), Dig(contextual, "PlayerPortraitCornerIcon"),
+		},
+		health = health,
+		healthContainer = healthContainer,
+		healthMask = Dig(healthContainer, "HealthBarMask"),
+		mana = mana,
+		manaMask = Dig(mana, "ManaBarMask"),
+		name = Dig(main, "PlayerName") or _G.PlayerName,
+	}
 end
 
-local function FromUnitFrameFile(region)
-	local names, ids = FileClues(region)
-	if NameMatches(names) then
-		for _, id in ipairs(ids) do learned[id] = true end
-		return true, true
-	end
-	for _, id in ipairs(ids) do
-		if KNOWN_FILE_IDS[id] or learned[id] then return true, false end
-	end
-	return false, false
-end
-
-local function PlayerFrameTexture()
-	local container = _G.PlayerFrame and _G.PlayerFrame.PlayerFrameContainer
-	local tex = container and container.FrameTexture
-	return type(tex) == "table" and tex or nil
-end
-
-local function LearnFromPlayerFrame()
-	local tex = PlayerFrameTexture()
-	if not tex then return false end
-	local _, ids = FileClues(tex)
-	for _, id in ipairs(ids) do learned[id] = true end
-	learnedFromPlayerFrame = #ids > 0
-	return learnedFromPlayerFrame
-end
-
-local function Walk(frame, depth, out)
-	if depth > 8 or type(frame) ~= "table" then return end
-	if frame.IsForbidden and frame:IsForbidden() then return end
-	if Ask(frame, "GetObjectType") == "StatusBar" then return end
-	if frame.GetRegions then
-		for _, region in ipairs({ frame:GetRegions() }) do
-			if region ~= overlay and Ask(region, "GetObjectType") == "Texture" then out[#out + 1] = region end
-		end
-	end
-	if frame.GetChildren then
-		for _, child in ipairs({ frame:GetChildren() }) do Walk(child, depth + 1, out) end
-	end
-end
-
-local function FindFrameArt()
-	local all = {}
-	if type(_G.PlayerFrame) == "table" then Walk(_G.PlayerFrame, 0, all) end
-	local fromFile, sawName = {}, false
-	local function collect()
-		fromFile = {}
-		for _, region in ipairs(all) do
-			local yes, byName = FromUnitFrameFile(region)
-			if yes then fromFile[#fromFile + 1] = region end
-			if byName then sawName = true end
-		end
-	end
-	collect()
-	if sawName then
-		collect()
-		matchMode = "by file name"
-	elseif next(KNOWN_FILE_IDS) then
-		matchMode = "by known file IDs"
-	elseif learnedFromPlayerFrame or (not next(learned) and LearnFromPlayerFrame()) then
-		collect()
-		matchMode = "LAST RESORT: by the player frame's own art (no file names readable)"
-	elseif next(learned) then
-		matchMode = "by file IDs learned from names earlier"
-	else
-		matchMode = "nothing to match: no file names, no known IDs, no player frame art found"
-	end
-	local wide = {}
-	for _, region in ipairs(fromFile) do
-		local w = Ask(region, "GetWidth")
-		if type(w) == "number" and w >= MIN_HIDE_WIDTH then wide[#wide + 1] = region end
-	end
-	return wide, fromFile
+local function InVehicle()
+	local pf = _G.PlayerFrame
+	return type(pf) == "table" and pf.state == "vehicle"
 end
 
 local function SetAlphaQuiet(region, alpha)
@@ -157,91 +125,184 @@ local function HookAlpha(region)
 	hooksecurefunc(region, "SetAlpha", function(self, alpha)
 		if busy or hidden[self] == nil then return end
 		hidden[self] = alpha
-		if Enabled() then SetAlphaQuiet(self, 0) end
+		if applied then SetAlphaQuiet(self, 0) end
 	end)
 end
 
-local function Hide(region)
-	if hidden[region] == nil then
-		hidden[region] = Ask(region, "GetAlpha") or 1
-	end
+local function HideRegion(region)
+	if hidden[region] == nil then hidden[region] = Ask(region, "GetAlpha") or 1 end
 	HookAlpha(region)
 	SetAlphaQuiet(region, 0)
 end
 
-local function GiveBackAll()
+local function SavePoints(obj)
+	if moved[obj] then return end
+	local list = {}
+	for i = 1, (Ask(obj, "GetNumPoints") or 0) do
+		local ok, point, rel, relPoint, x, y = pcall(obj.GetPoint, obj, i)
+		if ok and not IsSecret(x) and not IsSecret(y) then list[#list + 1] = { point, rel, relPoint, x, y } end
+	end
+	moved[obj] = list
+end
+
+local function SetPoints(obj, list, dy)
+	obj:ClearAllPoints()
+	for _, p in ipairs(list) do obj:SetPoint(p[1], p[2], p[3], p[4], p[5] + (dy or 0)) end
+end
+
+local function CurrentPoints(obj)
+	local list = {}
+	for i = 1, (Ask(obj, "GetNumPoints") or 0) do
+		local ok, point, rel, relPoint, x, y = pcall(obj.GetPoint, obj, i)
+		if ok then list[#list + 1] = { point, rel, relPoint, x, y } end
+	end
+	return list
+end
+
+local function SamePoints(a, b)
+	if not a or not b or #a ~= #b then return false end
+	for i = 1, #a do
+		for j = 1, 3 do if a[i][j] ~= b[i][j] then return false end end
+		for j = 4, 5 do
+			if IsSecret(a[i][j]) or IsSecret(b[i][j]) or math.abs((a[i][j] or 0) - (b[i][j] or 0)) > 0.001 then return false end
+		end
+	end
+	return true
+end
+
+local function ForgetReanchored()
+	for obj in pairs(moved) do
+		if not SamePoints(CurrentPoints(obj), ours[obj]) then moved[obj], ours[obj] = nil, nil end
+	end
+end
+
+local function Shift(obj, dy)
+	if not obj or not dy or dy == 0 then return true end
+	if math.abs(dy) > MAX_SHIFT then return false end
+	SavePoints(obj)
+	if #moved[obj] == 0 then moved[obj] = nil return false end
+	SetPoints(obj, moved[obj], dy)
+	ours[obj] = CurrentPoints(obj)
+	return true
+end
+
+local function RemoveMask(texture, mask)
+	if type(texture) ~= "table" or type(mask) ~= "table" or type(texture.RemoveMaskTexture) ~= "function" then return end
+	if pcall(texture.RemoveMaskTexture, texture, mask) then unmasked[#unmasked + 1] = { texture, mask } end
+end
+
+local function GiveBack()
 	for region, alpha in pairs(hidden) do
 		SetAlphaQuiet(region, alpha)
 		hidden[region] = nil
 	end
 	if overlay then overlay:Hide() end
+	ForgetReanchored()
+	for obj, list in pairs(moved) do
+		if #list > 0 then pcall(SetPoints, obj, list, 0) end
+		moved[obj], ours[obj] = nil, nil
+	end
+	for _, pair in ipairs(unmasked) do pcall(pair[1].AddMaskTexture, pair[1], pair[2]) end
+	unmasked = {}
+	local p = Parts()
+	if nameJustify and p.name and p.name.SetJustifyH then pcall(p.name.SetJustifyH, p.name, nameJustify) end
+	nameJustify = nil
+	applied = false
 end
 
-local function Layout()
-	if not overlay then return false end
-	local find = KUI.FindPlayerManaBar
-	local mana = find and find()
-	local ring = KUI.PORTRAIT_RING
-	if not (mana and ring) then
-		layoutNote = "power bar not found -- old art not shown"
-		return false
-	end
-	local W = Ask(mana, "GetWidth")
-	if type(W) ~= "number" or W <= 0 then
-		layoutNote = "power bar has no width yet"
-		return false
-	end
-	local pixel = KUI.UnitsPerPixel and KUI.UnitsPerPixel(mana) or 1
-	local k = ring.r * W / RING_R
-	local cx = ring.cx * W
-	local cyUp = ring.up * W - ring.dropPx * pixel
-	overlay:ClearAllPoints()
-	overlay:SetPoint("TOPLEFT", mana, "BOTTOMLEFT", cx - RING_X * k, cyUp + RING_Y * k)
-	overlay:SetSize(PIECE_W * k, PIECE_H * k)
-	layoutNote = string.format("%.1f x %.1f UI units, top-left %.1f, %.1f from the power bar's bottom-left (power bar %.1f wide)",
-		PIECE_W * k, PIECE_H * k, cx - RING_X * k, cyUp + RING_Y * k, W)
-	if not manaHooked and mana.HookScript then
-		manaHooked = true
-		mana:HookScript("OnSizeChanged", function() if Enabled() and overlay and overlay:IsShown() then Layout() end end)
-	end
-	return true
-end
-
-local function MakeOverlay(likeRegion)
-	if overlay then return end
-	local holder = (likeRegion and likeRegion.GetParent and likeRegion:GetParent()) or _G.PlayerFrame
-	local layer, sublevel = Ask(likeRegion or holder, "GetDrawLayer")
-	overlay = holder:CreateTexture("KainUIForeverOldPlayerArt", layer or "BORDER", nil, sublevel or 0)
-	overlay:SetTexture(OLD_PLAYER)
-	overlay:SetTexCoord(0, PIECE_W / TEX_W, 0, PIECE_H / TEX_H)
+local function Fail(why)
+	note = why
+	GiveBack()
+	return false
 end
 
 local function ApplyNow()
 	if not Enabled() then
-		GiveBackAll()
+		if InCombatLockdown() and next(moved) then pending = true return end
+		GiveBack()
+		note = "off"
 		return
 	end
-	local wide = FindFrameArt()
-	if #wide == 0 then
-		GiveBackAll()
-		layoutNote = "Blizzard's ring and panel not recognised -- old art not shown"
+	if InCombatLockdown() then
+		pending = true
+		note = "waiting for combat to end"
 		return
 	end
-	MakeOverlay(PlayerFrameTexture() or wide[1])
-	if not Layout() then
-		GiveBackAll()
-		return
+	pending = false
+	GiveBack()
+	if InVehicle() then note = "in a vehicle: Blizzard's frame shown" return end
+	local p = Parts()
+	if not (p.container and p.portrait and p.health and p.mana and p.frameTexture) then
+		return Fail("player frame pieces not found (portrait, bars or frame art) -- old art not shown")
 	end
-	for _, region in ipairs(wide) do Hide(region) end
+	local pw = Ask(p.portrait, "GetWidth")
+	local _, pcY = p.portrait:GetCenter()
+	if type(pw) ~= "number" or pw <= 0 or type(pcY) ~= "number" or IsSecret(pcY) then
+		return Fail("portrait has no size or position yet")
+	end
+	local k = pw / PORTRAIT_SIZE
+
+	if not overlay then
+		local layer, sublevel = Ask(p.frameTexture, "GetDrawLayer")
+		overlay = p.container:CreateTexture("KainUIForeverOldPlayerArt", layer or "BACKGROUND", nil, sublevel or 2)
+		overlay:SetTexture(OLD_PLAYER)
+		overlay:SetTexCoord(0, PIECE_W / TEX_W, 0, PIECE_H / TEX_H)
+	end
+	overlay:ClearAllPoints()
+	overlay:SetPoint("TOPLEFT", p.portrait, "CENTER", -RING_X * PIECE_SX * k, RING_Y * k)
+	overlay:SetSize(PIECE_W * PIECE_SX * k, PIECE_H * k)
+
+	local healthTop, manaTop = Ask(p.health, "GetTop"), Ask(p.mana, "GetTop")
+	if type(healthTop) ~= "number" or type(manaTop) ~= "number" then return Fail("bars have no position yet") end
+	if not Shift(p.healthContainer, pcY + HEALTH_TOP * k - healthTop) then return Fail("health bar is not where the measurements expect -- old art not shown") end
+	if not Shift(p.mana, pcY + MANA_TOP * k - manaTop) then return Fail("power bar is not where the measurements expect -- old art not shown") end
+	RemoveMask(p.health.GetStatusBarTexture and p.health:GetStatusBarTexture(), p.healthMask)
+	RemoveMask(p.mana.GetStatusBarTexture and p.mana:GetStatusBarTexture(), p.manaMask)
+
+	if p.name then
+		local _, nameY = p.name:GetCenter()
+		if type(nameY) == "number" and not IsSecret(nameY) then Shift(p.name, pcY + NAME_MID * k - nameY) end
+		nameJustify = Ask(p.name, "GetJustifyH") or "CENTER"
+		pcall(p.name.SetJustifyH, p.name, "LEFT")
+	end
+
+	for _, region in ipairs(p.hide) do HideRegion(region) end
 	overlay:Show()
+	applied = true
+	note = string.format("showing: piece %.1f x %.1f on the portrait's centre; health moved %s, power %s",
+		PIECE_W * PIECE_SX * k, PIECE_H * k, moved[p.healthContainer] and "up" or "no", moved[p.mana] and "nudged" or "not moved")
+end
+
+local function InstallHooks()
+	if hooked then return end
+	hooked = true
+
+	local function Relaid()
+		ForgetReanchored()
+		if Enabled() then
+			if C_Timer and C_Timer.After then C_Timer.After(0, function() KUI:ApplyClassicFrameArt() end) else KUI:ApplyClassicFrameArt() end
+		end
+	end
+	for _, fn in ipairs({ "PlayerFrame_UpdateArt", "PlayerFrame_ToPlayerArt", "PlayerFrame_UpdatePlayerNameTextAnchor" }) do
+		if type(_G[fn]) == "function" then hooksecurefunc(fn, Relaid) end
+	end
+	if type(_G.PlayerFrame_ToVehicleArt) == "function" then
+		hooksecurefunc("PlayerFrame_ToVehicleArt", function()
+			if applied and not InCombatLockdown() then GiveBack() if KUI.ApplyXPBar then KUI:ApplyXPBar() end end
+		end)
+	end
 end
 
 function KUI:ApplyClassicFrameArt()
+	InstallHooks()
+	local wasApplied = applied
 	local ok, err = pcall(ApplyNow)
 	if not ok and not errorShown then
 		errorShown = true
 		print("|cffff6060Kain-UI Forever:|r restoring the old portrait art hit an error and will stay quiet about it: " .. tostring(err))
 	end
+
+	if (applied or wasApplied) and KUI.ApplyXPBar then KUI:ApplyXPBar() end
 end
 
 function KUI:SetClassicFrameArt(enabled)
@@ -250,34 +311,33 @@ function KUI:SetClassicFrameArt(enabled)
 	KUI:ApplyClassicFrameArt()
 end
 
-local function Describe(region)
-	local w, h = Ask(region, "GetWidth"), Ask(region, "GetHeight")
-	return string.format("%s %sx%s atlas %s alpha %s", (region.GetDebugName and region:GetDebugName()) or "?",
-		w and string.format("%.0f", w) or "?", h and string.format("%.0f", h) or "?",
-		tostring(Ask(region, "GetAtlas")), tostring(Ask(region, "GetAlpha")))
+function KUI:GetClassicXPSlot()
+	if not applied then return nil end
+	local p = Parts()
+	local pw = p.portrait and Ask(p.portrait, "GetWidth")
+	if type(pw) ~= "number" or pw <= 0 then return nil end
+	local k = pw / PORTRAIT_SIZE
+	return {
+		anchor = p.portrait,
+		left = XP_SLOT.left * k, right = XP_SLOT.right * k, top = XP_SLOT.top * k, bottom = XP_SLOT.bottom * k,
+		level = (Ask(p.container, "GetFrameLevel") or 1) + 2,
+	}
 end
 
 function KUI:FrameArtScanReport()
 	print("|cff33ff99Kain-UI Forever|r portrait art scan:")
-	local wide, fromFile = FindFrameArt()
-	print("  restore old portrait art: " .. (Enabled() and "ON" or "OFF") .. " | uiunitframe file matched " .. matchMode)
-	local ids = {}
-	for id in pairs(learned) do ids[#ids + 1] = tostring(id) end
-	table.sort(ids)
-	print("  file IDs learned: " .. (#ids > 0 and table.concat(ids, ", ") or "none"))
-	print(string.format("  PlayerFrame textures from that file: %d (wide enough to hide: %d)", #fromFile, #wide))
-	for _, region in ipairs(fromFile) do
-		print("    " .. (hidden[region] ~= nil and "[hidden] " or "") .. Describe(region))
-	end
-	print("  old art: " .. (overlay and (overlay:IsShown() and "showing" or "made, hidden") or "not made") .. " -- " .. layoutNote)
-	local tex = PlayerFrameTexture()
-	if tex then
-		local names, fileIds = FileClues(tex)
-		print(string.format("  PlayerFrame FrameTexture: %s | names: %s | IDs: %s", Describe(tex),
-			#names > 0 and table.concat(names, ", ") or "none", #fileIds > 0 and table.concat(fileIds, ", ") or "none"))
-	else
-		print("  PlayerFrame FrameTexture: not found")
-	end
+	print("  restore old portrait art: " .. (Enabled() and "ON" or "OFF") .. " | " .. note .. (pending and " (waiting for combat to end)" or ""))
+	local p = Parts()
+	local function have(v) return v and "found" or "MISSING" end
+	print(string.format("  portrait %s, frame art %s, health bar %s (container %s, mask %s), power bar %s (mask %s), name %s",
+		have(p.portrait), have(p.frameTexture), have(p.health), have(p.healthContainer), have(p.healthMask), have(p.mana), have(p.manaMask), have(p.name)))
+	local n = 0
+	for _ in pairs(hidden) do n = n + 1 end
+	local m = 0
+	for _ in pairs(moved) do m = m + 1 end
+	print(string.format("  Blizzard art hidden: %d | moved: %d | masks removed: %d | in a vehicle: %s", n, m, #unmasked, tostring(InVehicle())))
+	local slot = KUI:GetClassicXPSlot()
+	print("  XP bar slot: " .. (slot and string.format("%.1f to %.1f across, %.1f to %.1f down from the portrait's centre", slot.left, slot.right, -slot.top, -slot.bottom) or "not in use"))
 end
 
 function KUI:PlayerFrameDump()
@@ -394,9 +454,10 @@ function KUI:PlayerFrameDump()
 end
 
 local eventFrame = CreateFrame("Frame")
-for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
+for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
-eventFrame:SetScript("OnEvent", function()
-	if Enabled() then KUI:ApplyClassicFrameArt() end
+eventFrame:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" and not pending then return end
+	if Enabled() or pending then KUI:ApplyClassicFrameArt() end
 end)

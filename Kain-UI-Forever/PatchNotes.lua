@@ -2,10 +2,10 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.307",
+		version = "1.0.308",
 		sections = {
 			{ title = "New", items = {
-				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, where the health and power bars join the portrait ring.",
+				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, with a thin bronze ring and the name above three bars. Your XP bar sits in the third one.",
 			} },
 			{ title = "Changed", items = {
 				"The XP bar under the portrait now reaches all the way to the portrait ring and follows its curve, instead of stopping short of it.",
