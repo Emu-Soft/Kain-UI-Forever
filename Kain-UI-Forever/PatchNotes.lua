@@ -2,7 +2,7 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.309",
+		version = "1.0.310",
 		sections = {
 			{ title = "New", items = {
 				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, with a thin bronze ring, the name above taller health and power bars, the black level disc and your faction crest in a small ring.",

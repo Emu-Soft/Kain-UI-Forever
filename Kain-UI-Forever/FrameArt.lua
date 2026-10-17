@@ -14,8 +14,12 @@ local ART = {
 
 local LEVEL_AT = { -20.93, -23.88 }
 local FACTION_AT = { -37.06, -6.08 }
+
+local CREST_NUDGE = { -1.07, -0.47 }
 local BARS_LEFT = 31.6
-local HEALTH_H = 26
+local HEALTH_H = 28
+
+local BAR_W = 126
 local HEALTH_MID = -0.86
 local MANA_MID = -16.4
 local NAME_AT = { 35, 15.5 }
@@ -316,7 +320,7 @@ local function ApplyNow()
 	Place(MakeTexture("ring", p.container, layer, math.min(sublevel + 1, 7)), "ring", p.portrait, FACTION_AT[1], FACTION_AT[2], k)
 	local crest = MakeTexture("crest", p.container, layer, math.min(sublevel + 2, 7))
 	local faction = FactionKey()
-	if faction then Place(crest, faction, p.portrait, FACTION_AT[1], FACTION_AT[2], k) end
+	if faction then Place(crest, faction, p.portrait, FACTION_AT[1] + CREST_NUDGE[1], FACTION_AT[2] + CREST_NUDGE[2], k) end
 	Place(MakeTexture("level", p.container, layer, math.min(sublevel + 3, 7)), "level", p.portrait, LEVEL_AT[1], LEVEL_AT[2], k)
 
 	local healthTop0, containerTop = Ask(p.health, "GetTop"), Ask(p.healthContainer, "GetTop")
@@ -328,11 +332,12 @@ local function ApplyNow()
 	local hdx = pcX + BARS_LEFT * k - healthLeft
 	local hdy = (pcY + HEALTH_MID * k + healthH / 2) - healthTop0
 	if not Shift(p.healthContainer, hdx, hdy) then return Fail("health bar is not where the measurements expect -- old art not shown") end
-	Resize(p.health, nil, healthH)
-	Resize(p.healthContainer, nil, healthH - 2 * above)
+	Resize(p.health, BAR_W * k, healthH)
+	Resize(p.healthContainer, BAR_W * k, healthH - 2 * above)
 	if not Shift(p.mana, pcX + BARS_LEFT * k - manaLeft, (pcY + MANA_MID * k + manaH / 2) - manaTop) then
 		return Fail("power bar is not where the measurements expect -- old art not shown")
 	end
+	Resize(p.mana, BAR_W * k, nil)
 	RemoveMask(p.health.GetStatusBarTexture and p.health:GetStatusBarTexture(), p.healthMask)
 	RemoveMask(p.mana.GetStatusBarTexture and p.mana:GetStatusBarTexture(), p.manaMask)
 
@@ -409,9 +414,17 @@ function KUI:FrameArtScanReport()
 	print(string.format("  Blizzard art hidden: %d | moved: %d | resized: %d | masks removed: %d | in a vehicle: %s", n, m, s, #unmasked, tostring(InVehicle())))
 end
 
-function KUI:PlayerFrameDump()
-	local root = _G.PlayerFrame
-	if type(root) ~= "table" then print("|cffff6060Kain-UI Forever:|r PlayerFrame not found.") return end
+local DUMP_ROOTS = { [""] = "PlayerFrame", player = "PlayerFrame", target = "TargetFrame", focus = "FocusFrame",
+	party = "PartyFrame", tot = "TargetFrameToT", boss = "Boss1TargetFrame" }
+function KUI:PlayerFrameDump(which)
+	which = type(which) == "string" and which:lower() or ""
+	local rootName = DUMP_ROOTS[which]
+	if not rootName then
+		print("|cffff6060Kain-UI Forever:|r usage: /kainui portraitdump [player|target|focus|party|tot|boss]")
+		return
+	end
+	local root = _G[rootName]
+	if type(root) ~= "table" then print("|cffff6060Kain-UI Forever:|r " .. rootName .. " not found.") return end
 	local lines, paths = {}, {}
 	local function add(s) lines[#lines + 1] = s end
 
@@ -430,7 +443,7 @@ function KUI:PlayerFrameDump()
 		pcall(function() for k, v in pairs(frame) do if type(v) == "table" then map[v] = k end end end)
 		return map
 	end
-	local queue = { { root, "PlayerFrame", 0 } }
+	local queue = { { root, rootName, 0 } }
 	local i = 1
 	while queue[i] do
 		local frame, path, depth = queue[i][1], queue[i][2], queue[i][3]
@@ -465,12 +478,15 @@ function KUI:PlayerFrameDump()
 		return num(Ask(obj, "GetWidth")) .. "x" .. num(Ask(obj, "GetHeight"))
 	end
 	local _, physicalH = (GetPhysicalScreenSize or function() end)()
-	add(string.format("Kain-UI portrait dump | screen height %s | UIParent scale %s | PlayerFrame effective scale %s",
-		str(physicalH), num(Ask(_G.UIParent, "GetScale")), num(Ask(root, "GetEffectiveScale"))))
+	add(string.format("Kain-UI portrait dump of %s | screen height %s | UIParent scale %s | effective scale %s | unit %s exists %s, classification %s",
+		rootName, str(physicalH), num(Ask(_G.UIParent, "GetScale")), num(Ask(root, "GetEffectiveScale")), str(root.unit),
+		str(root.unit and UnitExists and UnitExists(root.unit)), str(root.unit and UnitClassification and UnitClassification(root.unit))))
 	local fns = {}
 	for _, n in ipairs({ "PlayerFrame_GetHealthBar", "PlayerFrame_GetManaBar", "PlayerFrame_GetAlternatePowerBar", "PlayerFrame_UpdateArt",
 			"PlayerFrame_ToPlayerArt", "PlayerFrame_ToVehicleArt", "PlayerFrame_UpdatePlayerNameTextAnchor", "PlayerFrame_UpdateLevelTextAnchor",
-			"PlayerFrame_UpdateStatus", "PlayerFrame_OnEvent", "UnitFrame_Update", "UnitFrameHealthBar_Update", "TextStatusBar_UpdateTextString" }) do
+			"PlayerFrame_UpdateStatus", "PlayerFrame_OnEvent", "UnitFrame_Update", "UnitFrameHealthBar_Update", "TextStatusBar_UpdateTextString",
+			"TargetFrame_Update", "TargetFrame_CheckClassification", "TargetFrame_CheckFaction", "TargetFrame_UpdateLevelTextAnchor",
+			"PartyMemberFrame_UpdateArt", "PartyFrame_UpdatePartyFrames", "UpdatePartyFrames" }) do
 		fns[#fns + 1] = n .. "=" .. (type(_G[n]) == "function" and "yes" or "no")
 	end
 	add("functions: " .. table.concat(fns, " "))

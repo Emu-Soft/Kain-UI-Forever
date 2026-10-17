@@ -265,7 +265,7 @@ local function SetToggle(t, on)
 end
 
 local SCANS = {
-	"bagscan", "bagdebug", "microscan", "bagdividerscan", "xpscan", "frameartscan", "portraitdump", "socialscan", "allynotescan",
+	"bagscan", "bagdebug", "microscan", "bagdividerscan", "xpscan", "frameartscan", "portraitdump", "portraitdump target", "portraitdump party", "portraitdump nope", "socialscan", "allynotescan",
 	"levelshotscan", "wowheadscan", "errorscan", "sparklescan", "dragscan", "vendorscan",
 	"iconpickerscan", "macroscan", "fastlootscan", "contrastscan", "minimapposscan",
 	"chatshorthandscan", "chatnumscan", "chathistoryscan", "chatlinkscan", "minimapstratascan",
