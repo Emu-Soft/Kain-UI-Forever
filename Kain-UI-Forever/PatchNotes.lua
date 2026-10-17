@@ -2,10 +2,10 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.310",
+		version = "1.0.311",
 		sections = {
 			{ title = "New", items = {
-				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, with a thin bronze ring, the name above taller health and power bars, the black level disc and your faction crest in a small ring.",
+				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, your target and focus, and your party: thin bronze rings, names on a band, health and power bars filling their slots, the black level disc and your faction crest in a small ring.",
 			} },
 			{ title = "Changed", items = {
 				"The XP bar under the portrait now reaches all the way to the portrait ring and follows its curve, instead of stopping short of it.",
