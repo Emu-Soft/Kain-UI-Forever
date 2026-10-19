@@ -242,11 +242,19 @@ local function ClassText(unit)
 end
 
 local TEXT = {}
+
+local function FullName(unit)
+	if type(GetUnitName) == "function" then
+		local ok, name = pcall(GetUnitName, unit, true)
+		if ok and type(name) == "string" then return name end
+	end
+	return Text(UnitName(unit))
+end
 TEXT.name = function(fs, unit)
-	fs:SetFormattedText("%s%s", AfkPrefix(unit), Text(UnitName(unit)))
+	fs:SetFormattedText("%s%s", AfkPrefix(unit), FullName(unit))
 end
 TEXT.nameGroup = function(fs, unit)
-	fs:SetFormattedText("%s%s%s", AfkPrefix(unit), Text(UnitName(unit)), GroupSuffix(unit))
+	fs:SetFormattedText("%s%s%s", AfkPrefix(unit), FullName(unit), GroupSuffix(unit))
 end
 TEXT.curhp = function(fs, unit)
 	local dead = DeadText(unit)
@@ -745,6 +753,23 @@ local function RefreshAuras(f)
 	end
 end
 
+local FullUpdate, PlacePanel
+
+local function OnePixel(f)
+	local _, height = 0, nil
+	if type(GetPhysicalScreenSize) == "function" then _, height = GetPhysicalScreenSize() end
+	local scale = f:GetEffectiveScale()
+	if not (PlainNumber(height) and height > 0 and PlainNumber(scale) and scale > 0) then return 1 end
+	return 768 / (height * scale)
+end
+
+PlacePanel = function(f)
+	local edge = LOOK.clip - OnePixel(f)
+	f.panel:ClearAllPoints()
+	f.panel:SetPoint("TOPLEFT", f, "TOPLEFT", edge, -edge)
+	f.panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -edge, edge)
+end
+
 local function NewBar(parent, level)
 	local bar = CreateFrame("StatusBar", nil, parent)
 	bar:SetStatusBarTexture(BAR_TEXTURE)
@@ -760,12 +785,23 @@ local function NewBar(parent, level)
 	return bar
 end
 
+local textFont
+local function TextFont()
+	if not textFont then
+		textFont = CreateFont("KainUIForeverKainedFont")
+		textFont:SetFont(LOOK.font, LOOK.fontSize, "")
+		textFont:SetShadowColor(0, 0, 0, 1)
+		textFont:SetShadowOffset(1, -1)
+		textFont:SetTextColor(1, 1, 1, 1)
+	end
+	return textFont
+end
+
 local function NewText(layer)
 	local fs = layer:CreateFontString(nil, "OVERLAY")
-	fs:SetFont(LOOK.font, LOOK.fontSize, "")
-	fs:SetShadowOffset(1, -1)
+	fs:SetFontObject(TextFont())
 	fs:SetShadowColor(0, 0, 0, 1)
-	fs:SetTextColor(1, 1, 1, 1)
+	fs:SetShadowOffset(1, -1)
 	fs:SetWordWrap(false)
 	return fs
 end
@@ -778,8 +814,6 @@ local function ShowTooltip(self)
 	GameTooltip:SetUnit(self.unit)
 	GameTooltip:Show()
 end
-
-local FullUpdate
 
 local function Build(spec, parent)
 	local f = CreateFrame("Button", "KainUIForeverKained" .. TitleCase(spec.key), parent, "SecureUnitButtonTemplate")
@@ -798,10 +832,9 @@ local function Build(spec, parent)
 	_G.ClickCastFrames[f] = true
 
 	local panel = f:CreateTexture(nil, "BACKGROUND")
-	panel:SetPoint("TOPLEFT", f, "TOPLEFT", LOOK.inset, -LOOK.inset)
-	panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -LOOK.inset, LOOK.inset)
 	panel:SetColorTexture(LOOK.panel[1], LOOK.panel[2], LOOK.panel[3], LOOK.panel[4])
 	f.panel = panel
+	PlacePanel(f)
 
 	local level = f:GetFrameLevel()
 	f.health = NewBar(f, level + 1)
@@ -1391,7 +1424,8 @@ local eventFrame = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED",
 		"GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "RAID_TARGET_UPDATE", "PLAYER_UPDATE_RESTING",
 		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "UNIT_PET", "PLAYER_ENTERING_WORLD",
-		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" }) do
+		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
+		"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
 eventFrame:SetScript("OnEvent", function(_, event, unit)
@@ -1411,6 +1445,11 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		end
 	end
 	if not Showing() then return end
+	if event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
+
+		Each(function(f) pcall(PlacePanel, f) end)
+		return
+	end
 	local player = frames.player
 	if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_UPDATE_RESTING" then
 		if player then

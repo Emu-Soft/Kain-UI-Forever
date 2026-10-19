@@ -123,7 +123,7 @@ local function RingLeft(y)
 end
 
 local NO_INSETS = setmetatable({}, { __index = function() return 0 end })
-local KAINED_EDGE = { 0, 0, 0, 0.8 }
+local KAINED_EDGE = { 0.6, 0.6, 0.6, 1 }
 local function Insets(layer)
 	return bar.square and NO_INSETS or layer.insets
 end
@@ -233,8 +233,8 @@ end
 local function Layout()
 	bar:ClearAllPoints()
 
-	local kained, kainedInset, kainedClip, kainedScale = nil, 0, 0, 1
-	if KUI.KainedXPAnchor then kained, kainedInset, kainedClip, kainedScale = KUI:KainedXPAnchor() end
+	local kained, kainedClip, kainedScale = nil, 0, 1
+	if KUI.KainedXPAnchor then kained, _, kainedClip, kainedScale = KUI:KainedXPAnchor() end
 	local parent = kained and UIParent or _G.PlayerFrame
 	if bar:GetParent() ~= parent then
 		bar:SetParent(parent)
@@ -247,7 +247,8 @@ local function Layout()
 	if kained then
 
 		bar.ringCut = false
-		local x, y = (kainedClip or 0) * (kainedScale or 1), (kainedInset or 0) * (kainedScale or 1) - pixel
+
+		local x, y = (kainedClip or 0) * (kainedScale or 1), (kainedClip or 0) * (kainedScale or 1) - 2 * pixel
 		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", x, y)
 		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -x, y)
 		anchorNote = "under Kained Unit Frames' player frame"
