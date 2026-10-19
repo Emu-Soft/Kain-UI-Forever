@@ -648,19 +648,19 @@ local function ApplyFrame(f)
 
 	local layer, sublevel = Ask(p.frameTexture, "GetDrawLayer")
 	layer, sublevel = layer or "BACKGROUND", sublevel or 2
-	local function Sub(n) return math.min(sublevel + n, 7) end
 	Place(MakeTexture(st, "piece", p.holder, layer, sublevel, f.key == "player" and "KainUIForeverOldPlayerArt" or nil), L.piece, p.portrait, 0, 0, k)
-	if L.level then Place(MakeTexture(st, "level", p.holder, layer, Sub(4)), "level", p.portrait, L.level[1], L.level[2], k) end
+
+	MakeLayer(st, root)
+	local discs = st.capFrame
+	if L.level then Place(MakeTexture(st, "level", discs, "OVERLAY", 7), "level", p.portrait, L.level[1], L.level[2], k) end
 	if L.faction then
 		local spot, nudge = L.faction.at, L.faction.crestNudge
-		Place(MakeTexture(st, "ringFill", p.holder, layer, Sub(1)), "ringFill", p.portrait, spot[1], spot[2], k)
-		Place(MakeTexture(st, "ring", p.holder, layer, Sub(2)), "ring", p.portrait, spot[1], spot[2], k)
-		local crest = MakeTexture(st, "crest", p.holder, layer, Sub(3))
+		Place(MakeTexture(st, "ringFill", discs, "OVERLAY", 4), "ringFill", p.portrait, spot[1], spot[2], k)
+		Place(MakeTexture(st, "ring", discs, "OVERLAY", 5), "ring", p.portrait, spot[1], spot[2], k)
+		local crest = MakeTexture(st, "crest", discs, "OVERLAY", 6)
 		local faction = FactionKey()
 		if faction then Place(crest, faction, p.portrait, spot[1] + nudge[1], spot[2] + nudge[2], k) end
 	end
-
-	MakeLayer(st, root)
 	SetLevel(st.layer, base + 1)
 	SetLevel(st.capFrame, base + 2)
 	SetPoints(st.layer, Corners(root))
@@ -720,12 +720,12 @@ local function ApplyFrame(f)
 		band:SetShown(Ask(p.band, "IsShown") ~= false)
 	end
 
-	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 6), "cap", p.portrait, 0, 0, k) end
+	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 2), "cap", p.portrait, 0, 0, k) end
 
 	if p.flash then
 		local glow = st.tex.flash
 		if not glow then
-			glow = MakeTexture(st, "flash", st.capFrame, "OVERLAY", 7)
+			glow = MakeTexture(st, "flash", st.capFrame, "OVERLAY", 3)
 			glow:SetTexture(FLASH_ART)
 		end
 		Place(glow, L.piece, p.portrait, 0, 0, k)
