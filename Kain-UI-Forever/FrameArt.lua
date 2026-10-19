@@ -257,9 +257,14 @@ local function SaveSize(st, obj)
 end
 
 local function Reanchor(st, obj, list)
-	if not SavePoints(st, obj) then return false end
+	if not SavePoints(st, obj) then return false, "the game won't say where they are" end
 	SaveSize(st, obj)
-	SetPoints(obj, list)
+	local ok, err = pcall(SetPoints, obj, list)
+	if not ok then
+		pcall(function() obj:ClearAllPoints(); for _, q in ipairs(st.moved[obj]) do obj:SetPoint(q[1], q[2], q[3], q[4], q[5]) end end)
+		st.moved[obj] = nil
+		return false, tostring(err)
+	end
 	st.ours[obj] = CurrentPoints(obj)
 	return true
 end
@@ -300,6 +305,13 @@ local function Lift(st, frames, minLevel, skip)
 	end
 end
 
+local function PortraitAt(root, portrait)
+	local x, y = Ask(portrait, "GetCenter")
+	local l, b = Ask(root, "GetLeft"), Ask(root, "GetBottom")
+	if type(x) ~= "number" or type(y) ~= "number" or type(l) ~= "number" or type(b) ~= "number" then return nil end
+	return { x - l, y - b }
+end
+
 local function Drifted(st)
 	for obj in pairs(st.moved) do
 		if not SamePoints(CurrentPoints(obj), st.ours[obj]) then return true end
@@ -307,12 +319,18 @@ local function Drifted(st)
 	for _, l in ipairs(st.lifted) do
 		if Ask(l[1], "GetFrameLevel") ~= l[3] then return true end
 	end
+	local f = st.frame
+	if f and st.portraitAt then
+		local root = f.root()
+		local now = root and PortraitAt(root, f.parts(root).portrait)
+		if not now or math.abs(now[1] - st.portraitAt[1]) > 0.01 or math.abs(now[2] - st.portraitAt[2]) > 0.01 then return true end
+	end
 	return false
 end
 
 local function ForgetReanchored(st)
 	for obj in pairs(st.moved) do
-		if not SamePoints(CurrentPoints(obj), st.ours[obj]) then st.moved[obj], st.ours[obj] = nil, nil end
+		if st.ours[obj] and not SamePoints(CurrentPoints(obj), st.ours[obj]) then st.moved[obj], st.ours[obj] = nil, nil end
 	end
 end
 
@@ -332,12 +350,12 @@ local function Place(t, artKey, portrait, x, y, k)
 	t:SetSize(a.w * s, a.h * s)
 end
 
-local function PlaceRect(obj, artKey, r, portrait, k)
+local function PlaceRect(obj, artKey, r, frame, at, k)
 	local a = ART[artKey]
 	local s = a.scale * k
 	SetPoints(obj, {
-		{ "TOPLEFT", portrait, "CENTER", (r[1] - a.cx) * s, (a.cy - r[2]) * s },
-		{ "BOTTOMRIGHT", portrait, "CENTER", (r[3] - a.cx) * s, (a.cy - r[4]) * s },
+		{ "TOPLEFT", frame, "BOTTOMLEFT", at[1] + (r[1] - a.cx) * s, at[2] + (a.cy - r[2]) * s },
+		{ "BOTTOMRIGHT", frame, "BOTTOMLEFT", at[1] + (r[3] - a.cx) * s, at[2] + (a.cy - r[4]) * s },
 	})
 end
 
@@ -489,6 +507,7 @@ end
 
 local function ApplyFrame(f)
 	local st = State(f.key)
+	st.frame = f
 	local root = f.root()
 	local p = root and f.parts(root)
 	if not Enabled() then
@@ -513,6 +532,9 @@ local function ApplyFrame(f)
 	local pw = Ask(p.portrait, "GetWidth")
 	if type(pw) ~= "number" or pw <= 0 then return Fail(st, p, "portrait has no size yet") end
 	local k = pw / L.portrait
+	local at = PortraitAt(root, p.portrait)
+	if not at then return Fail(st, p, "portrait has no position yet") end
+	st.portraitAt = at
 	local base = Ask(p.holder, "GetFrameLevel")
 	if type(base) ~= "number" then return Fail(st, p, "frame has no level yet") end
 
@@ -522,12 +544,12 @@ local function ApplyFrame(f)
 	Place(MakeTexture(st, "piece", p.holder, layer, sublevel, f.key == "player" and "KainUIForeverOldPlayerArt" or nil), L.piece, p.portrait, 0, 0, k)
 	if L.level then Place(MakeTexture(st, "level", p.holder, layer, Sub(4)), "level", p.portrait, L.level[1], L.level[2], k) end
 	if L.faction then
-		local at, nudge = L.faction.at, L.faction.crestNudge
-		Place(MakeTexture(st, "ringFill", p.holder, layer, Sub(1)), "ringFill", p.portrait, at[1], at[2], k)
-		Place(MakeTexture(st, "ring", p.holder, layer, Sub(2)), "ring", p.portrait, at[1], at[2], k)
+		local spot, nudge = L.faction.at, L.faction.crestNudge
+		Place(MakeTexture(st, "ringFill", p.holder, layer, Sub(1)), "ringFill", p.portrait, spot[1], spot[2], k)
+		Place(MakeTexture(st, "ring", p.holder, layer, Sub(2)), "ring", p.portrait, spot[1], spot[2], k)
 		local crest = MakeTexture(st, "crest", p.holder, layer, Sub(3))
 		local faction = FactionKey()
-		if faction then Place(crest, faction, p.portrait, at[1] + nudge[1], at[2] + nudge[2], k) end
+		if faction then Place(crest, faction, p.portrait, spot[1] + nudge[1], spot[2] + nudge[2], k) end
 	end
 
 	MakeLayer(st, root)
@@ -537,7 +559,7 @@ local function ApplyFrame(f)
 	SetPoints(st.capFrame, Corners(root))
 	for _, which in ipairs({ "health", "mana" }) do
 		SetLevel(st.bar[which], base + 1)
-		PlaceRect(st.bar[which], L.piece, slots[which], p.portrait, k)
+		PlaceRect(st.bar[which], L.piece, slots[which], root, at, k)
 	end
 
 	local skip = { [st.layer] = true, [st.capFrame] = true }
@@ -553,11 +575,11 @@ local function ApplyFrame(f)
 	local numbers = st.numbers
 	if slots.numbers then
 		if not numbers then numbers = CreateFrame("Frame", nil, st.layer); st.numbers = numbers end
-		PlaceRect(numbers, L.piece, slots.numbers, p.portrait, k)
+		PlaceRect(numbers, L.piece, slots.numbers, root, at, k)
 	end
-	if not (Reanchor(st, p.healthContainer, Corners(slots.numbers and numbers or st.bar.health))
-			and Reanchor(st, p.health, Corners(st.bar.health)) and Reanchor(st, p.mana, Corners(st.bar.mana))) then
-		return Fail(st, p, "bars can't be moved (the game won't say where they are) -- old art not shown")
+	for _, pair in ipairs({ { p.healthContainer, slots.numbers and numbers or st.bar.health }, { p.health, st.bar.health }, { p.mana, st.bar.mana } }) do
+		local moved, why = Reanchor(st, pair[1], Corners(pair[2]))
+		if not moved then return Fail(st, p, "bars can't be moved (" .. why .. ") -- old art not shown") end
 	end
 	HideRegion(st, BarFill(p.health))
 	HideRegion(st, BarFill(p.mana))
@@ -581,7 +603,7 @@ local function ApplyFrame(f)
 		end
 		local atlas = Ask(p.band, "GetAtlas")
 		if not (type(atlas) == "string" and band.SetAtlas and pcall(band.SetAtlas, band, atlas)) then band:SetTexture(BAR_TEXTURE) end
-		PlaceRect(band, L.piece, slots.band, p.portrait, k)
+		PlaceRect(band, L.piece, slots.band, root, at, k)
 		local colour = { pcall(p.band.GetVertexColor, p.band) }
 		if table.remove(colour, 1) then pcall(band.SetVertexColor, band, unpack(colour)) end
 		Reanchor(st, p.band, Corners(band))
