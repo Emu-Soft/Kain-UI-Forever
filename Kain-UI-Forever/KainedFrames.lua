@@ -17,7 +17,7 @@ local LOOK = {
 	portraitCutoff = 50,
 	auraSize = 16,
 	auraSpacing = 2,
-	xpRoom = 10,
+	xpRoom = 7,
 }
 
 local function RGB(r, g, b) return { r, g, b } end
@@ -625,8 +625,10 @@ local function FadeTo(f, alpha, fast)
 	fade:Show()
 end
 
+local previewingNow
 local function UpdateFade(f)
 	if not f.fade then return end
+	if previewingNow and previewingNow() then FadeTo(f, 1) return end
 	if InCombatLockdown() or f.fade.casting then FadeTo(f, 1, f.fade.casting) return end
 	local unit = f.unit
 	local ptype = PowerType(unit)
@@ -889,6 +891,11 @@ end
 
 FullUpdate = function(f)
 	if not built then return end
+	if f.preview then
+
+		local real = UnitExists(f.spec.unit)
+		f.unit = (Plain(real) and real) and f.spec.unit or "player"
+	end
 	local exists = UnitExists(f.unit)
 	if Plain(exists) and not exists then return end
 	Safe(function()
@@ -1106,7 +1113,7 @@ end
 
 function KUI:KainedXPAnchor()
 	if not Showing() then return nil end
-	return frames.player, LOOK.inset
+	return frames.player, LOOK.inset, LOOK.clip, frames.player.spec.scale or 1
 end
 
 function KUI:KainedXPChanged()
@@ -1166,6 +1173,9 @@ end
 local movers = {}
 local unlocked = false
 local placePending = false
+local previewing = false
+local previewPending = false
+previewingNow = function() return previewing end
 
 local function Movable()
 	local list = {}
@@ -1223,7 +1233,7 @@ local function NewMover(m)
 	box:RegisterForDrag("LeftButton")
 	local bg = box:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints(box)
-	bg:SetColorTexture(0.1, 0.7, 0.2, 0.35)
+	bg:SetColorTexture(0.1, 0.7, 0.2, 0.25)
 	for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
 		local t = box:CreateTexture(nil, "BORDER")
 		t:SetColorTexture(0.3, 1, 0.4, 0.9)
@@ -1231,8 +1241,9 @@ local function NewMover(m)
 		t:SetPoint(side[2], box, side[2])
 		if i <= 2 then t:SetHeight(1) else t:SetWidth(1) end
 	end
+
 	local label = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	label:SetPoint("CENTER", box, "CENTER")
+	label:SetPoint("BOTTOM", box, "TOP", 0, 1)
 	label:SetText(LABELS[m.key] or m.label)
 	box:SetScript("OnDragStart", function(self)
 		self:StartMoving()
@@ -1264,6 +1275,42 @@ local function NewMover(m)
 	return box
 end
 
+local function StartPreview()
+	if previewing or InCombatLockdown() then return end
+	previewing = true
+	for _, spec in ipairs(UNITS) do
+		local f = frames[spec.key]
+		if f and spec.unit ~= "player" then
+			if UnregisterUnitWatch then pcall(UnregisterUnitWatch, f) end
+			f.preview = true
+			f:Show()
+			FullUpdate(f)
+		end
+	end
+	local player = frames.player
+	if player and player.fade then
+		player.fade:Hide()
+		player.fade.target = 1
+		player:SetAlpha(1)
+	end
+end
+
+local function StopPreview()
+	if not previewing then return end
+	if InCombatLockdown() then previewPending = true return end
+	previewing, previewPending = false, false
+	for _, spec in ipairs(UNITS) do
+		local f = frames[spec.key]
+		if f and f.preview then
+			f.preview = nil
+			f.unit = spec.unit
+			if RegisterUnitWatch then RegisterUnitWatch(f) end
+			FullUpdate(f)
+		end
+	end
+	if frames.player then pcall(UpdateFade, frames.player) end
+end
+
 local function SnapElements(on)
 	KUI.AlignElements = KUI.AlignElements or {}
 	for i = #KUI.AlignElements, 1, -1 do
@@ -1292,6 +1339,7 @@ function KUI:SetKainedUnlocked(on)
 		end
 	end
 	SnapElements(on)
+	if on then StartPreview() else StopPreview() end
 	return true
 end
 
@@ -1352,6 +1400,16 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		KUI:KainedXPChanged()
 	end
 	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
+	if event == "PLAYER_REGEN_DISABLED" and previewing then StopPreview() end
+	if event == "PLAYER_REGEN_ENABLED" then
+
+		if unlocked then
+			previewPending = false
+			StartPreview()
+		elseif previewPending then
+			StopPreview()
+		end
+	end
 	if not Showing() then return end
 	local player = frames.player
 	if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_UPDATE_RESTING" then

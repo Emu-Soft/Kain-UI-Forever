@@ -122,6 +122,12 @@ local function RingLeft(y)
 	return math.floor(cx + math.sqrt(span) + 0.5)
 end
 
+local NO_INSETS = setmetatable({}, { __index = function() return 0 end })
+local KAINED_EDGE = { 0, 0, 0, 0.8 }
+local function Insets(layer)
+	return bar.square and NO_INSETS or layer.insets
+end
+
 local function RowStart(i, insets)
 	if bar.ringLeft then return bar.ringLeft[i] end
 	return SQUARE_LEFT and 0 or insets[i]
@@ -152,7 +158,7 @@ end
 
 local function DrawDivider()
 	local rows = bar.dividerRows
-	local insets = bar.layers[#bar.layers].insets
+	local insets = Insets(bar.layers[#bar.layers])
 	local widthPx, pixel = bar.widthPx, bar.pixel
 	local filled = FillEnd(bar.fillFraction or 0)
 	local restedEnd = FillEnd(bar.restedFraction)
@@ -176,7 +182,7 @@ end
 
 local function RenderFill()
 	if not (bar and bar.widthPx) then return end
-	local insets = bar.layers[#bar.layers].insets
+	local insets = Insets(bar.layers[#bar.layers])
 	DrawFill(bar.restedRows, insets, bar.widthPx, bar.pixel, bar.restedFraction)
 	DrawFill(bar.fillRows, insets, bar.widthPx, bar.pixel, bar.fillFraction)
 	DrawDivider()
@@ -204,15 +210,21 @@ local function Render()
 	bar:SetHitRectInsets(-HOVER_PAD_X + bar.fillStart * pixel, -HOVER_PAD_X, -HOVER_PAD_Y, -HOVER_PAD_Y)
 
 	bar:SetHeight(BAR_HEIGHT_PX * pixel)
-	for _, layer in ipairs(bar.layers) do
+	for index, layer in ipairs(bar.layers) do
+		local insets = Insets(layer)
+
+		local hidden = bar.square and index == 1
+		local color = (bar.square and index == 2) and KAINED_EDGE or layer.color
 		for i, row in ipairs(layer.rows) do
 
 			local left = bar.ringCut and RingLeft(i - 0.5 - layer.grow)
-				or (-layer.grow + (SQUARE_LEFT and 0 or layer.insets[i]))
-			local right = widthPx + layer.grow - layer.insets[i]
+				or (-layer.grow + (SQUARE_LEFT and 0 or insets[i]))
+			local right = widthPx + layer.grow - insets[i]
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", bar, "TOPLEFT", left * pixel, -(i - 1 - layer.grow) * pixel)
 			row:SetSize((right - left) * pixel, pixel)
+			if color then row:SetColorTexture(color[1], color[2], color[3], color[4] or 1) end
+			row:SetShown(not hidden)
 		end
 	end
 	RenderFill()
@@ -221,8 +233,8 @@ end
 local function Layout()
 	bar:ClearAllPoints()
 
-	local kained, kainedInset = nil, 0
-	if KUI.KainedXPAnchor then kained, kainedInset = KUI:KainedXPAnchor() end
+	local kained, kainedInset, kainedClip, kainedScale = nil, 0, 0, 1
+	if KUI.KainedXPAnchor then kained, kainedInset, kainedClip, kainedScale = KUI:KainedXPAnchor() end
 	local parent = kained and UIParent or _G.PlayerFrame
 	if bar:GetParent() ~= parent then
 		bar:SetParent(parent)
@@ -231,10 +243,13 @@ local function Layout()
 	end
 	local pixel = UnitsPerPixel(bar)
 	local drop = (BAR_GAP_PX + FRAME_PX) * pixel
+	bar.square = kained ~= nil
 	if kained then
+
 		bar.ringCut = false
-		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", kainedInset, kainedInset - drop)
-		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -kainedInset, kainedInset - drop)
+		local x, y = (kainedClip or 0) * (kainedScale or 1), (kainedInset or 0) * (kainedScale or 1) - pixel
+		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", x, y)
+		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -x, y)
 		anchorNote = "under Kained Unit Frames' player frame"
 		bar:SetHeight(BAR_HEIGHT_PX * pixel)
 		Render()
@@ -491,6 +506,7 @@ local function CreateBar()
 		local height = BAR_HEIGHT_PX + 2 * shape.grow
 		table.insert(bar.layers, {
 			grow = shape.grow,
+			color = shape.color,
 			insets = PillInsets(height),
 			rows = MakeRows(height, "BACKGROUND", shape.sublevel, shape.color),
 		})
