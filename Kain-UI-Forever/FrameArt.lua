@@ -60,6 +60,7 @@ local function PlayerParts(pf)
 		},
 		lift = { content },
 		pvpIcon = pvpIcon,
+		flash = Dig(container, "FrameFlash"),
 		health = health, healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
 		mana = mana, manaMask = Dig(mana, "ManaBarMask"),
 		name = Dig(main, "PlayerName") or _G.PlayerName,
@@ -82,6 +83,7 @@ local function TargetParts(tf)
 		mana = Dig(main, "ManaBar"), manaMask = Dig(main, "ManaBar", "ManaBarMask"),
 		name = Dig(main, "Name"),
 		band = band,
+		flash = Dig(container, "Flash"),
 	}
 end
 
@@ -96,6 +98,7 @@ local function PartyParts(member)
 		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
 		mana = Dig(member, "manabar"), manaMask = Dig(member, "manabar", "ManaBarMask"),
 		name = Dig(member, "name"),
+		flash = Dig(member, "Flash"),
 	}
 end
 
@@ -207,6 +210,50 @@ local function FileClues(region)
 	return names, ids
 end
 
+local FLASH_ART = MEDIA .. "PlayerFrameOldFlash"
+local flashOf = setmetatable({}, { __mode = "k" })
+
+local function UpdateFlash(st)
+	local t, region = st.tex and st.tex.flash, st.flashRegion
+	if not (t and region) then return end
+	local show = st.applied and Ask(region, "IsShown") and true or false
+	t:SetShown(show)
+	if not show then return end
+	local alpha = st.hidden[region]
+	if type(alpha) ~= "number" or IsSecret(alpha) then alpha = 1 end
+	local c = st.flashColour
+	pcall(t.SetVertexColor, t, c and c[1] or 1, c and c[2] or 0, c and c[3] or 0, alpha)
+end
+
+local function FlashColour(st, r, g, b)
+	if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" or IsSecret(r) or IsSecret(g) or IsSecret(b)
+		or (r > 0.95 and g > 0.95 and b > 0.95) then
+		st.flashColour = nil
+	else
+		st.flashColour = { r, g, b }
+	end
+end
+
+local flashHooked = setmetatable({}, { __mode = "k" })
+local function FollowFlash(st, region)
+	flashOf[region] = st
+	st.flashRegion = region
+	FlashColour(st, select(2, pcall(region.GetVertexColor, region)))
+	if flashHooked[region] then return end
+	flashHooked[region] = true
+	for _, method in ipairs({ "Show", "Hide", "SetShown" }) do
+		if type(region[method]) == "function" then
+			hooksecurefunc(region, method, function(self) if flashOf[self] then UpdateFlash(flashOf[self]) end end)
+		end
+	end
+	if type(region.SetVertexColor) == "function" then
+		hooksecurefunc(region, "SetVertexColor", function(self, r, g, b)
+			local fst = flashOf[self]
+			if fst then FlashColour(fst, r, g, b); UpdateFlash(fst) end
+		end)
+	end
+end
+
 local function SetAlphaQuiet(region, alpha)
 	busy = true
 	pcall(region.SetAlpha, region, alpha)
@@ -221,6 +268,7 @@ local function HookAlpha(region)
 		if busy or not st or st.hidden[self] == nil then return end
 		st.hidden[self] = alpha
 		if st.applied then SetAlphaQuiet(self, 0) end
+		if flashOf[self] then UpdateFlash(flashOf[self]) end
 	end)
 end
 
@@ -672,11 +720,20 @@ local function ApplyFrame(f)
 		band:SetShown(Ask(p.band, "IsShown") ~= false)
 	end
 
-	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 7), "cap", p.portrait, 0, 0, k) end
+	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 6), "cap", p.portrait, 0, 0, k) end
+
+	if p.flash then
+		local glow = st.tex.flash
+		if not glow then
+			glow = MakeTexture(st, "flash", st.capFrame, "OVERLAY", 7)
+			glow:SetTexture(FLASH_ART)
+		end
+		Place(glow, L.piece, p.portrait, 0, 0, k)
+	end
 
 	for _, region in ipairs(p.hide) do HideRegion(st, region) end
 	for key, t in pairs(st.tex) do
-		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" then t:Show() end
+		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" and key ~= "flash" then t:Show() end
 	end
 	if f.poll and not st.polling then
 
@@ -694,6 +751,10 @@ local function ApplyFrame(f)
 	st.unit = UnitOf(f, root)
 	st.applied = true
 	RefreshBars(st)
+	if p.flash then
+		FollowFlash(st, p.flash)
+		UpdateFlash(st)
+	end
 	if f.key == "player" then
 		HookFaction(p.pvpIcon)
 		UpdateFaction()
