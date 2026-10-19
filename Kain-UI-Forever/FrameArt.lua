@@ -4,6 +4,7 @@ local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
 local OLD_ART = MEDIA .. "PlayerFrameOld"
 
 local FILL = MEDIA .. "Fill"
+local BAND = MEDIA .. "BandTarget"
 local POWER_FILL = { MANA = "Mana", RAGE = "Rage", ENERGY = "Energy", FOCUS = "Focus", RUNIC_POWER = "RunicPower" }
 local TEX_W, TEX_H = 512, 128
 local LIFT = 3
@@ -22,7 +23,7 @@ local ART = {
 
 local SLOTS = {
 	player = { health = { 68, 29, 192, 49 }, mana = { 68, 50, 192, 60 } },
-	target = { health = { 4, 27, 130, 46 }, numbers = { 4, 27, 126, 46 }, mana = { 4, 48, 135, 57 }, band = { 4, 12, 127, 25 } },
+	target = { health = { 4, 27, 130, 46 }, numbers = { 4, 27, 126, 46 }, mana = { 4, 48, 135, 57 }, band = { 4, 12, 145, 25 } },
 	party  = { health = { 44, 17, 113, 26 }, mana = { 44, 28, 113, 34 } },
 }
 
@@ -638,32 +639,25 @@ local function ApplyFrame(f)
 	end
 
 	if slots.band and p.band then
-		local band, shade = st.tex.band, st.tex.bandShade
+		local band = st.tex.band
 		if not band then
-			band = st.layer:CreateTexture(nil, "BACKGROUND", nil, 0)
-			band:SetColorTexture(1, 1, 1, 1)
-			shade = st.layer:CreateTexture(nil, "BACKGROUND", nil, 1)
-			shade:SetColorTexture(1, 1, 1, 1)
-			if not (CreateColor and pcall(shade.SetGradient, shade, "VERTICAL", CreateColor(0, 0, 0, 0.3), CreateColor(0, 0, 0, 0.8))) then
-				shade:SetColorTexture(0, 0, 0, 0.5)
-			end
-			st.tex.band, st.tex.bandShade = band, shade
+			band = st.layer:CreateTexture(nil, "BACKGROUND")
+			band:SetTexture(BAND)
+			st.tex.band = band
 		end
 		PlaceRect(band, L.piece, slots.band, root, at, k)
-		PlaceRect(shade, L.piece, slots.band, root, at, k)
 		local colour = { pcall(p.band.GetVertexColor, p.band) }
 		if table.remove(colour, 1) then pcall(band.SetVertexColor, band, unpack(colour)) end
 		Reanchor(st, p.band, Corners(band))
-		Follow(st, p.band, band, "band", nil, shade)
+		Follow(st, p.band, band, "band")
 		band:SetShown(Ask(p.band, "IsShown") ~= false)
-		shade:SetShown(band:IsShown())
 	end
 
 	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 7), "cap", p.portrait, 0, 0, k) end
 
 	for _, region in ipairs(p.hide) do HideRegion(st, region) end
 	for key, t in pairs(st.tex) do
-		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" and key ~= "bandShade" then t:Show() end
+		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" then t:Show() end
 	end
 	st.layer:Show()
 	st.capFrame:Show()
