@@ -2,6 +2,15 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.325",
+		sections = {
+			{ title = "New", items = {
+				"GCDWatch (in Settings, under Nameplates): see what an enemy just did as an icon with its name beside their nameplate. Their spells show with a gold edge, buffs they just gained with a green edge, and in duels the debuffs they just put on you with a red edge, while a sweep counts down over the icon. There's also an optional bar for your target that you can place anywhere. The Settings button beside it opens all its options, and /kui gcdw lists its commands. Off unless you tick it; the recommended preset turns it on.",
+				"GCDWatch is based on Forever GCD by Tarolg, used under its MIT license. If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off, so nothing shows twice.",
+			} },
+		},
+	},
+	{
 		version = "1.0.324",
 		sections = {
 			{ title = "New", items = {
@@ -744,6 +753,7 @@ local HELP_COMMANDS = {
 	{ "/kui installmacros", "Add the starter macros again." },
 	{ "/kui weaponswap", "Rebuild the weapon swap macro." },
 	{ "/kui linksoff", "Switch Enhance Chat off straight away, if chat ever misbehaves." },
+	{ "/kui gcdw", "GCDWatch: open its settings and list its commands (on, off, status, unlock, lock, preview)." },
 	{ "/kui factoryreset confirm", "Erase all of this addon's settings and start fresh. Can't be undone." },
 	{ "/kainuiemoji on", "Show emoji in chat. /kainuiemoji off hides them." },
 	{ "/kainuiemoji list", "List every emoji code you can type, like :smile:." },

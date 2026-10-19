@@ -34,6 +34,9 @@ KUI.defaults = {
 	followRXPObjectives = false,
 	lfgShowZone = true,
 	levelUpScreenshot = false,
+
+	gcdWatch = false,
+	gcdWatchSettings = {},
 }
 
 KUI.KAIN_PRESET = {
@@ -93,6 +96,7 @@ KUI.KAIN_PRESET = {
 
 	socialButtonPos = { x = 0, y = 219 },
 	socialButtonUnlocked = false,
+	gcdWatch = true,
 }
 
 local function CopyDefaults(dst, src)
@@ -672,7 +676,7 @@ KUI.USER_COMMANDS = {
 	[""] = true, help = true, snapshot = true, factoryreset = true,
 	resetdrag = true, resetlootroll = true, zonebarreset = true, xpreset = true,
 	installmacros = true, weaponswap = true, linksoff = true, clearerrors = true,
-	enabledev = true, disabledev = true,
+	enabledev = true, disabledev = true, gcdw = true,
 }
 
 function KUI:IsDevMode()
@@ -822,6 +826,9 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:GuildDifficultyScanReport()
 	elseif command == "zonebarreset" and KUI.ResetZoneBarPosition then
 		KUI:ResetZoneBarPosition()
+	elseif command == "gcdw" and KUI.GCDWatchCommand then
+
+		KUI:GCDWatchCommand(rest)
 	elseif command == "nameplatecapture" and KUI.NameplateCaptureReport then
 		KUI:NameplateCaptureReport()
 	elseif command == "stresstest" and KUI.StressTest then

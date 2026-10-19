@@ -16,6 +16,7 @@ KUI.SKIP = {
 	border = false,
 	rxptweaks = false,
 	camera = false,
+	gcdwatch = false,
 }
 
 local function Run(group, funcName, ...)
@@ -67,6 +68,7 @@ function KUI:ApplyAll()
 	Run("rxptweaks", "ApplyRXPTweaks")
 	Run("rxptweaks", "ApplyFollowRXPObjectives")
 	Run("camera", "ApplyCameraTweaks")
+	Run("gcdwatch", "ApplyGCDWatch")
 end
 
 local panel
@@ -248,6 +250,8 @@ function KUI:ApplyKainPreset()
 	end
 
 	if p.platerStyle ~= nil then Set("SetPlaterStyle", p.platerStyle) end
+
+	if p.gcdWatch ~= nil then Set("SetGCDWatch", p.gcdWatch) end
 	if p.mailIconScreenPos then
 		Set("SetMailIconScreenPosition", p.mailIconScreenPos.left, p.mailIconScreenPos.top)
 	elseif p.mailIconPos then
@@ -616,6 +620,32 @@ local function BuildPanel()
 			end)
 		AddInfoButton(content, platerCheck.label, "Plater style",
 			"Configures Blizzard's nameplates to resemble Plater. Unticking restores your previous nameplate settings.")
+		y1 = y1 - 24
+	end
+
+	if KUI.SetGCDWatch then
+		if not KUI.SetPlaterStyle then
+			CreateSectionHeader(content, "Nameplates", COL1_X, y1)
+			y1 = y1 - 22
+		end
+		local gcdCheck = CreateCheckbox(content, "GCDWatch", COL1_X, y1,
+			function() return KUI.db.gcdWatch end,
+			function(checked) KUI:SetGCDWatch(checked) end)
+		AddInfoButton(content, gcdCheck.label, "GCDWatch",
+			"Shows what an enemy just did as an icon over their nameplate: their spells, their new buffs, and in duels the debuffs they put on you. Based on Forever GCD by Tarolg. If Forever GCD is installed, it does this instead.")
+		local gcdButton = CreateFrame("Button", "KainUIForeverGCDWatchSettingsButton", content, "UIPanelButtonTemplate")
+		gcdButton:SetSize(110, 20)
+		gcdButton:SetPoint("LEFT", gcdCheck.label, "RIGHT", 26, 0)
+		gcdButton:SetText("Settings")
+		gcdButton:SetScript("OnClick", function() KUI:OpenGCDWatchSettings() end)
+		AddInfoButton(content, gcdButton, "GCDWatch settings",
+			"What flashes, where the icon sits, how it looks, and the optional target bar. Also /kui gcdw.")
+		table.insert(refreshers, function()
+			local yielded = KUI.IsGCDWatchYielded and KUI:IsGCDWatchYielded()
+			gcdCheck:SetEnabled(not yielded)
+			local grey = yielded and 0.5 or 1
+			gcdCheck.label:SetTextColor(grey, grey, grey)
+		end)
 		y1 = y1 - 24
 	end
 
