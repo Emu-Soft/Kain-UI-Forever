@@ -15,6 +15,7 @@ KUI.defaults = {
 	xpBarUnderPortrait = false,
 	xpBarHideDefault = false,
 	classicFrameArt = false,
+	kainedFrames = false,
 	framePositions = {},
 	autoSellGreys = false,
 	autoRepair = false,
@@ -727,6 +728,8 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:XPBarScanReport()
 	elseif command == "frameartscan" and KUI.FrameArtScanReport then
 		KUI:FrameArtScanReport()
+	elseif command == "kainedscan" and KUI.KainedScanReport then
+		KUI:KainedScanReport()
 	elseif command == "portraitdump" and KUI.PlayerFrameDump then
 		KUI:PlayerFrameDump(rest)
 	elseif command == "socialscan" and KUI.SocialButtonScanReport then

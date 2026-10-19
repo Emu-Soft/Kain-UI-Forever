@@ -2,6 +2,16 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.326",
+		sections = {
+			{ title = "New", items = {
+				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",
+				"Kained: a lite take on Shadowed Unit (SUF), set up the way it's used in the recommended setup. Compact dark bars with class-coloured health (others by whether they're friendly, neutral or hostile), portraits for you, your target and your party, health and power numbers with percentages, buffs and debuffs, raid marks, leader, PvP and ready-check icons, combo points for rogues and cat-form druids, and a druid's mana while shapeshifted. Your own bars fade away out of combat at full health and power and come back when you fight, cast, get hurt or pick a target. It covers you, your pet, your target and its target, your focus and its target, and your party (hidden in raids, where Blizzard's raid view stays). It has no options of its own.",
+				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait sits under your own bars.",
+			} },
+		},
+	},
+	{
 		version = "1.0.325",
 		sections = {
 			{ title = "New", items = {
@@ -14,7 +24,7 @@ local PATCH_NOTES = {
 		version = "1.0.324",
 		sections = {
 			{ title = "New", items = {
-				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, your target and focus (and their target of target), and your party: thin bronze rings, names on a coloured band, health and power bars that fill their slots edge to edge (and run under the ring on your target), the black level disc and your faction crest in a small ring, and the old red glow in combat. Health and power numbers, heal predictions and right-click menus work as before.",
+				"Forever Beta (in Settings, the Style menu under the XP bar option): brings back the previous look of your portrait, your target and focus (and their target of target), and your party: thin bronze rings, names on a coloured band, health and power bars that fill their slots edge to edge (and run under the ring on your target), the black level disc and your faction crest in a small ring, and the old red glow in combat. Health and power numbers, heal predictions and right-click menus work as before.",
 			} },
 			{ title = "Changed", items = {
 				"The XP bar under the portrait now reaches all the way to the portrait ring and follows its curve, instead of stopping short of it.",

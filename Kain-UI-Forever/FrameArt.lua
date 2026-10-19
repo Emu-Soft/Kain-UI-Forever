@@ -169,7 +169,9 @@ local hooked = {}
 local errorShown = false
 
 local function Enabled()
-	return KUI.db and KUI.db.classicFrameArt == true
+	if not (KUI.db and KUI.db.classicFrameArt == true) then return false end
+	if KUI.db.kainedFrames == true then return false end
+	return not (KUI.KainedHoldsBlizzardFrames and KUI:KainedHoldsBlizzardFrames())
 end
 
 local function IsSecret(v)

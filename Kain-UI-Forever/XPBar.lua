@@ -220,8 +220,26 @@ end
 
 local function Layout()
 	bar:ClearAllPoints()
+
+	local kained, kainedInset = nil, 0
+	if KUI.KainedXPAnchor then kained, kainedInset = KUI:KainedXPAnchor() end
+	local parent = kained and UIParent or _G.PlayerFrame
+	if bar:GetParent() ~= parent then
+		bar:SetParent(parent)
+		bar:SetFrameStrata((kained or parent):GetFrameStrata())
+		bar:SetFrameLevel((kained or parent):GetFrameLevel() + (kained and 10 or 1))
+	end
 	local pixel = UnitsPerPixel(bar)
 	local drop = (BAR_GAP_PX + FRAME_PX) * pixel
+	if kained then
+		bar.ringCut = false
+		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", kainedInset, kainedInset - drop)
+		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -kainedInset, kainedInset - drop)
+		anchorNote = "under Kained Unit Frames' player frame"
+		bar:SetHeight(BAR_HEIGHT_PX * pixel)
+		Render()
+		return
+	end
 	local target, source = FindManaBar()
 
 	local oldArt = KUI.IsClassicArtShowing and KUI:IsClassicArtShowing()
@@ -582,6 +600,8 @@ function KUI:SetXPBarUnderPortrait(enabled)
 	if not KUI.db then return end
 	KUI.db.xpBarUnderPortrait = enabled and true or false
 	KUI:ApplyXPBar()
+
+	if KUI.KainedXPChanged then KUI:KainedXPChanged() end
 end
 
 function KUI:SetHideDefaultXPBar(enabled)

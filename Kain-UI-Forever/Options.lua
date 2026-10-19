@@ -8,6 +8,7 @@ KUI.SKIP = {
 	dragging = false,
 	xpbar = false,
 	frameart = false,
+	kained = false,
 	vendor = false,
 	macros = false,
 	loot = false,
@@ -49,6 +50,7 @@ function KUI:ApplyAll()
 	Run("dragging", "ApplyGlobalDragging")
 	Run("xpbar", "ApplyXPBar")
 	Run("frameart", "ApplyClassicFrameArt")
+	Run("kained", "ApplyKainedFrames")
 	Run("vendor", "ApplyAutoSellGreys")
 	Run("vendor", "ApplyAutoRepair")
 	Run("loot", "ApplyLootRollDragging")
@@ -240,7 +242,12 @@ function KUI:ApplyKainPreset()
 	Set("SetGlobalDragging", p.globalDragging)
 	Set("SetXPBarUnderPortrait", p.xpBarUnderPortrait)
 	Set("SetHideDefaultXPBar", p.xpBarHideDefault)
-	Set("SetClassicFrameArt", p.classicFrameArt)
+
+	if KUI.SetUnitFrameStyle then
+		Set("SetUnitFrameStyle", p.unitFrameStyle or (p.classicFrameArt and "beta" or "launch"))
+	else
+		Set("SetClassicFrameArt", p.classicFrameArt)
+	end
 	Set("SetTooltipAnchorMode", p.tooltipAnchorMode)
 	Set("SetTooltipAnchorLocked", p.tooltipAnchorLocked)
 	if p.tooltipAnchorPos then
@@ -989,13 +996,47 @@ local function BuildPanel()
 			function(checked) KUI:SetHideDefaultXPBar(checked) end)
 		y4 = y4 - 26
 
-		if KUI.SetClassicFrameArt then
-			local artCheck = CreateCheckbox(content, "Restore old portrait art", COL4_X, y4,
-				function() return KUI.db.classicFrameArt end,
-				function(checked) KUI:SetClassicFrameArt(checked) end)
-			AddInfoButton(content, artCheck.label, "Restore old portrait art",
-				"Brings back the previous look of your portrait, target, focus and party: thin bronze rings, names on a band, bars filling their slots. Waits until you're out of combat. Untick to go back to the current look.")
-			y4 = y4 - 26
+		if KUI.SetUnitFrameStyle and KUI.UNIT_FRAME_STYLES then
+			local styleLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			styleLabel:SetPoint("TOPLEFT", COL4_X + 4, y4)
+			styleLabel:SetText("Style")
+			AddInfoButton(content, styleLabel, "Style",
+				"Forever Launch: Blizzard's unit frames. Forever Beta: Blizzard's with the previous look (thin bronze rings, names on a band). Kained Unit Frames: a lite version of Kain's Shadowed Unit Frames setup for your player, pet, target, focus and party. Changes wait until you're out of combat; leaving Kained Unit Frames needs a /reload.")
+			y4 = y4 - 16
+			local styleButton = CreateFrame("Button", "KainUIForeverUnitFrameStyleButton", content, "UIPanelButtonTemplate")
+			styleButton:SetSize(170, 22)
+			styleButton:SetPoint("TOPLEFT", COL4_X, y4)
+			local styles = KUI.UNIT_FRAME_STYLES
+			local function SyncStyle()
+				local current = KUI:GetUnitFrameStyle()
+				for _, style in ipairs(styles) do
+					if style.value == current then styleButton:SetText(style.label) end
+				end
+			end
+			local flat = KUI.GCDWatch and KUI.GCDWatch.FlatMenu
+			if flat and flat.DownArrow then flat.DownArrow(styleButton) end
+			styleButton:SetScript("OnClick", function(self)
+				if flat and flat.Open then
+					flat.Open(self, function(_, root)
+						for _, style in ipairs(styles) do
+							local radio = root:CreateRadio(style.label,
+								function() return KUI:GetUnitFrameStyle() == style.value end,
+								function() KUI:SetUnitFrameStyle(style.value); SyncStyle() end)
+							radio:SetTooltip(style.tip)
+						end
+					end)
+					return
+				end
+				local current, index = KUI:GetUnitFrameStyle(), 1
+				for i, style in ipairs(styles) do
+					if style.value == current then index = i % #styles + 1 end
+				end
+				KUI:SetUnitFrameStyle(styles[index].value)
+				SyncStyle()
+			end)
+			table.insert(refreshers, SyncStyle)
+			SyncStyle()
+			y4 = y4 - 30
 		end
 	end
 
