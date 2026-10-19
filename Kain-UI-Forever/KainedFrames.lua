@@ -148,21 +148,15 @@ local function Safe(fn, ...)
 	return ok
 end
 
-local ABBREVIATE = {
-	{ breakpoint = 100000000, abbreviation = "m", precision = 0 },
-	{ breakpoint = 1000000, abbreviation = "m", precision = 2 },
-	{ breakpoint = 1000, abbreviation = "k", precision = 1 },
-}
 local function Short(n)
-	if PlainNumber(n) then
-		if n >= 100000000 then return string.format("%dm", n / 1000000) end
-		if n >= 1000000 then return string.format("%.2fm", n / 1000000) end
-		if n >= 1000 then return string.format("%.1fk", n / 1000) end
-		return string.format("%d", n)
-	end
 	if type(AbbreviateNumbers) == "function" then
-		local ok, s = pcall(AbbreviateNumbers, n, ABBREVIATE)
+		local ok, s = pcall(AbbreviateNumbers, n)
 		if ok and type(s) ~= "nil" then return s end
+	end
+	if PlainNumber(n) then
+		if n >= 1000000 then return string.format("%.1fM", math.floor(n / 100000) / 10) end
+		if n >= 1000 then return string.format("%.1fK", math.floor(n / 100) / 10) end
+		return string.format("%d", n)
 	end
 	return n
 end
