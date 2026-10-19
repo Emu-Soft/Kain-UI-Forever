@@ -57,8 +57,8 @@ local function PlayerParts(pf)
 		},
 		lift = { content },
 		pvpIcon = pvpIcon,
-		health = health, healthContainer = healthContainer,
-		mana = mana,
+		health = health, healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
+		mana = mana, manaMask = Dig(mana, "ManaBarMask"),
 		name = Dig(main, "PlayerName") or _G.PlayerName,
 	}
 end
@@ -75,8 +75,8 @@ local function TargetParts(tf)
 		frameTexture = Dig(container, "FrameTexture"),
 		hide = { Dig(container, "FrameTexture"), Dig(container, "Flash"), Dig(main, "LevelBackgroundCircle"), band },
 		lift = { content },
-		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer,
-		mana = Dig(main, "ManaBar"),
+		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
+		mana = Dig(main, "ManaBar"), manaMask = Dig(main, "ManaBar", "ManaBarMask"),
 		name = Dig(main, "Name"),
 		band = band,
 	}
@@ -90,8 +90,8 @@ local function PartyParts(member)
 		frameTexture = Dig(member, "Texture"),
 		hide = { Dig(member, "Texture"), Dig(member, "Flash"), Dig(member, "PartyMemberOverlay", "Status") },
 		liftChildren = member,
-		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer,
-		mana = Dig(member, "manabar"),
+		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
+		mana = Dig(member, "manabar"), manaMask = Dig(member, "manabar", "ManaBarMask"),
 		name = Dig(member, "name"),
 	}
 end
@@ -131,7 +131,7 @@ local states = {}
 local function State(key)
 	local st = states[key]
 	if not st then
-		st = { applied = false, note = "not applied yet", tex = {}, hidden = {}, moved = {}, ours = {}, sized = {}, lifted = {} }
+		st = { applied = false, note = "not applied yet", tex = {}, hidden = {}, moved = {}, ours = {}, sized = {}, lifted = {}, unmasked = {} }
 		states[key] = st
 	end
 	return st
@@ -414,13 +414,51 @@ local function RefreshBars(st)
 	if not (st.applied and st.bar and u) then return end
 	local health, mana = st.bar.health, st.bar.mana
 	Fill(health, UnitHealthMax, UnitHealth, u)
-	if (u ~= "player" and Flag(UnitIsTapDenied, u)) or (Flag(UnitIsConnected, u) == false and Flag(UnitExists, u)) then
-		health:SetStatusBarColor(0.5, 0.5, 0.5)
-	else
-		health:SetStatusBarColor(0, 1, 0)
-	end
 	Fill(mana, UnitPowerMax, UnitPower, u)
-	mana:SetStatusBarColor(PowerColour(u))
+
+	if st.ownColour.health then
+		if (u ~= "player" and Flag(UnitIsTapDenied, u)) or (Flag(UnitIsConnected, u) == false and Flag(UnitExists, u)) then
+			health:SetStatusBarColor(0.5, 0.5, 0.5)
+		else
+			health:SetStatusBarColor(0, 1, 0)
+		end
+	end
+	if st.ownColour.mana then mana:SetStatusBarColor(PowerColour(u)) end
+end
+
+local function CopyFill(st, which, blizzard)
+	local ours = st.bar[which]
+	local atlas = Ask(BarFill(blizzard), "GetAtlas")
+	if type(atlas) == "string" and atlas ~= "" and pcall(ours.SetStatusBarTexture, ours, atlas) and Ask(BarFill(ours), "GetAtlas") == atlas then
+		st.ownColour[which] = false
+		local colour = { pcall(blizzard.GetStatusBarColor, blizzard) }
+		if table.remove(colour, 1) and colour[1] ~= nil then
+			pcall(ours.SetStatusBarColor, ours, unpack(colour))
+		else
+			ours:SetStatusBarColor(1, 1, 1)
+		end
+		local grey = { pcall(blizzard.GetStatusBarDesaturated or function() end, blizzard) }
+		if grey[1] and grey[2] ~= nil and ours.SetStatusBarDesaturated then pcall(ours.SetStatusBarDesaturated, ours, grey[2]) end
+	else
+		ours:SetStatusBarTexture(BAR_TEXTURE)
+		st.ownColour[which] = true
+	end
+end
+
+local function Unmask(st, bar, mask)
+	if type(bar) ~= "table" or type(mask) ~= "table" then return end
+	local frames = {}
+	Descend(bar, frames, {})
+	for _, frame in ipairs(frames) do
+		for _, region in ipairs({ frame:GetRegions() }) do
+			local count = Ask(region, "GetNumMaskTextures")
+			for i = (type(count) == "number" and count or 0), 1, -1 do
+				if Ask(region, "GetMaskTexture", i) == mask and pcall(region.RemoveMaskTexture, region, mask) then
+					st.unmasked[#st.unmasked + 1] = { region, mask }
+				end
+			end
+		end
+	end
 end
 
 local function MakeLayer(st, root)
@@ -431,6 +469,8 @@ local function MakeLayer(st, root)
 	for _, which in ipairs({ "health", "mana" }) do
 		local bar = CreateFrame("StatusBar", nil, st.layer)
 		bar:SetStatusBarTexture(BAR_TEXTURE)
+		st.ownColour = st.ownColour or {}
+		st.ownColour[which] = true
 		bar:SetMinMaxValues(0, 1)
 		bar:SetValue(1)
 		st.bar[which] = bar
@@ -439,13 +479,17 @@ end
 
 local barOf = setmetatable({}, { __mode = "k" })
 local barHooked = setmetatable({}, { __mode = "k" })
-local function Follow(st, blizzard, ours, kind)
-	barOf[blizzard] = { st = st, ours = ours }
+local function Follow(st, blizzard, ours, kind, which, also)
+	barOf[blizzard] = { st = st, ours = ours, which = which, also = also }
 	if barHooked[blizzard] then return end
 	barHooked[blizzard] = true
 	local function shown(self)
 		local b = barOf[self]
-		if b and b.st.applied then b.ours:SetShown(Ask(self, "IsShown") and true or false) end
+		if b and b.st.applied then
+			local show = Ask(self, "IsShown") and true or false
+			b.ours:SetShown(show)
+			if b.also then b.also:SetShown(show) end
+		end
 	end
 	for _, method in ipairs({ "Show", "Hide", "SetShown" }) do
 		if type(blizzard[method]) == "function" then hooksecurefunc(blizzard, method, shown) end
@@ -453,8 +497,20 @@ local function Follow(st, blizzard, ours, kind)
 	if kind == "bar" and type(blizzard.SetStatusBarTexture) == "function" then
 		hooksecurefunc(blizzard, "SetStatusBarTexture", function(self)
 			local b = barOf[self]
-			if b and b.st.applied then HideRegion(b.st, BarFill(self)) end
+			if b and b.st.applied then
+				HideRegion(b.st, BarFill(self))
+				CopyFill(b.st, b.which, self)
+				RefreshBars(b.st)
+			end
 		end)
+		for _, method in ipairs({ "SetStatusBarColor", "SetStatusBarDesaturated" }) do
+			if type(blizzard[method]) == "function" then
+				hooksecurefunc(blizzard, method, function(self, ...)
+					local b = barOf[self]
+					if b and b.st.applied and not b.st.ownColour[b.which] and type(b.ours[method]) == "function" then pcall(b.ours[method], b.ours, ...) end
+				end)
+			end
+		end
 	elseif kind == "band" and type(blizzard.SetVertexColor) == "function" then
 		hooksecurefunc(blizzard, "SetVertexColor", function(self, ...)
 			local b = barOf[self]
@@ -484,6 +540,8 @@ local function GiveBack(st, p)
 	end
 	for _, l in ipairs(st.lifted) do SetLevel(l[1], l[2]) end
 	st.lifted = {}
+	for _, pair in ipairs(st.unmasked) do pcall(pair[1].AddMaskTexture, pair[1], pair[2]) end
+	st.unmasked = {}
 	if st.justify and p and p.name and p.name.SetJustifyH then pcall(p.name.SetJustifyH, p.name, st.justify) end
 	st.justify = nil
 	st.applied = false
@@ -583,8 +641,12 @@ local function ApplyFrame(f)
 	end
 	HideRegion(st, BarFill(p.health))
 	HideRegion(st, BarFill(p.mana))
-	Follow(st, p.health, st.bar.health, "bar")
-	Follow(st, p.mana, st.bar.mana, "bar")
+	Follow(st, p.health, st.bar.health, "bar", "health")
+	Follow(st, p.mana, st.bar.mana, "bar", "mana")
+	CopyFill(st, "health", p.health)
+	CopyFill(st, "mana", p.mana)
+	Unmask(st, p.health, p.healthMask)
+	Unmask(st, p.mana, p.manaMask)
 	st.bar.health:SetShown(Ask(p.health, "IsShown") ~= false)
 	st.bar.mana:SetShown(Ask(p.mana, "IsShown") ~= false)
 
@@ -596,26 +658,33 @@ local function ApplyFrame(f)
 	end
 
 	if slots.band and p.band then
-		local band = st.tex.band
+		local band, shade = st.tex.band, st.tex.bandShade
 		if not band then
-			band = st.layer:CreateTexture(nil, "BACKGROUND")
-			st.tex.band = band
+			band = st.layer:CreateTexture(nil, "BACKGROUND", nil, 0)
+			band:SetColorTexture(1, 1, 1, 1)
+			band:SetAlpha(0.7)
+			shade = st.layer:CreateTexture(nil, "BACKGROUND", nil, 1)
+			shade:SetColorTexture(1, 1, 1, 1)
+			if not (CreateColor and pcall(shade.SetGradient, shade, "VERTICAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.5))) then
+				shade:SetColorTexture(0, 0, 0, 0.2)
+			end
+			st.tex.band, st.tex.bandShade = band, shade
 		end
-		local atlas = Ask(p.band, "GetAtlas")
-		if not (type(atlas) == "string" and band.SetAtlas and pcall(band.SetAtlas, band, atlas)) then band:SetTexture(BAR_TEXTURE) end
 		PlaceRect(band, L.piece, slots.band, root, at, k)
+		PlaceRect(shade, L.piece, slots.band, root, at, k)
 		local colour = { pcall(p.band.GetVertexColor, p.band) }
 		if table.remove(colour, 1) then pcall(band.SetVertexColor, band, unpack(colour)) end
 		Reanchor(st, p.band, Corners(band))
-		Follow(st, p.band, band, "band")
+		Follow(st, p.band, band, "band", nil, shade)
 		band:SetShown(Ask(p.band, "IsShown") ~= false)
+		shade:SetShown(band:IsShown())
 	end
 
 	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 7), "cap", p.portrait, 0, 0, k) end
 
 	for _, region in ipairs(p.hide) do HideRegion(st, region) end
 	for key, t in pairs(st.tex) do
-		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" then t:Show() end
+		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" and key ~= "bandShade" then t:Show() end
 	end
 	st.layer:Show()
 	st.capFrame:Show()

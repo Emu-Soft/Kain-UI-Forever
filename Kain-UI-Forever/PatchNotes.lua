@@ -2,7 +2,7 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.313",
+		version = "1.0.314",
 		sections = {
 			{ title = "New", items = {
 				"Restore old portrait art (in Settings, under the XP bar option): brings back the previous look of your portrait, your target and focus, and your party: thin bronze rings, names on a coloured band, health and power bars that fill their slots edge to edge (and run under the ring on your target), the black level disc and your faction crest in a small ring. Health and power numbers, heal predictions and right-click menus work as before.",
