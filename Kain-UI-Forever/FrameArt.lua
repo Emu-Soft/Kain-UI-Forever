@@ -2,7 +2,9 @@ local addonName, KUI = ...
 
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
 local OLD_ART = MEDIA .. "PlayerFrameOld"
+local BAR_TEXTURE = "Interface\\TargetingFrame\\UI-StatusBar"
 local TEX_W, TEX_H = 512, 128
+local LIFT = 3
 
 local ART = {
 	player   = { x = 0,   y = 0,  w = 198, h = 74, cx = 36.40,  cy = 37.31, scale = 1 },
@@ -15,7 +17,12 @@ local ART = {
 	cap      = { x = 440, y = 0,  w = 64,  h = 66, cx = 31.59,  cy = 32.93, scale = 1 },
 	party    = { x = 240, y = 72, w = 119, h = 46, cx = 23.38,  cy = 22.40, scale = 1 },
 }
-local MAX_SHIFT = 15
+
+local SLOTS = {
+	player = { health = { 68, 29, 192, 49 }, mana = { 68, 50, 192, 60 } },
+	target = { health = { 4, 27, 130, 46 }, numbers = { 4, 27, 126, 46 }, mana = { 4, 48, 135, 57 }, band = { 4, 12, 127, 25 } },
+	party  = { health = { 44, 17, 113, 26 }, mana = { 44, 28, 113, 34 } },
+}
 
 local function Dig(root, ...)
 	local node = root
@@ -28,8 +35,9 @@ end
 
 local function PlayerParts(pf)
 	local container = Dig(pf, "PlayerFrameContainer")
-	local main = Dig(pf, "PlayerFrameContent", "PlayerFrameContentMain")
-	local contextual = Dig(pf, "PlayerFrameContent", "PlayerFrameContentContextual")
+	local content = Dig(pf, "PlayerFrameContent")
+	local main = Dig(content, "PlayerFrameContentMain")
+	local contextual = Dig(content, "PlayerFrameContentContextual")
 	local health = (type(PlayerFrame_GetHealthBar) == "function" and select(2, pcall(PlayerFrame_GetHealthBar)))
 	if type(health) ~= "table" then health = Dig(main, "HealthBarsContainer", "HealthBar") end
 	local mana = KUI.FindPlayerManaBar and KUI.FindPlayerManaBar()
@@ -44,81 +52,76 @@ local function PlayerParts(pf)
 			Dig(container, "FrameTexture"), Dig(container, "AlternatePowerFrameTexture"), Dig(container, "FrameFlash"),
 			Dig(main, "StatusTexture"), Dig(contextual, "PlayerPortraitCornerIcon"),
 			Dig(main, "LevelBackgroundCircle"), pvpIcon,
+
+			Dig(healthContainer, "PlayerFrameHealthBarAnimatedLoss") or _G.PlayerFrameHealthBarAnimatedLoss,
 		},
+		lift = { content },
 		pvpIcon = pvpIcon,
-		health = health, healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
-		mana = mana, manaMask = Dig(mana, "ManaBarMask"),
+		health = health, healthContainer = healthContainer,
+		mana = mana,
 		name = Dig(main, "PlayerName") or _G.PlayerName,
 	}
 end
 
 local function TargetParts(tf)
 	local container = Dig(tf, "TargetFrameContainer")
-	local main = Dig(tf, "TargetFrameContent", "TargetFrameContentMain")
+	local content = Dig(tf, "TargetFrameContent")
+	local main = Dig(content, "TargetFrameContentMain")
 	local healthContainer = Dig(main, "HealthBarsContainer")
-	local mana = Dig(main, "ManaBar")
+	local band = Dig(main, "ReputationColor")
 	return {
 		holder = container,
 		portrait = Dig(container, "Portrait"),
 		frameTexture = Dig(container, "FrameTexture"),
-		hide = { Dig(container, "FrameTexture"), Dig(container, "Flash"), Dig(main, "LevelBackgroundCircle") },
-		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
-		mana = mana, manaMask = Dig(mana, "ManaBarMask"),
+		hide = { Dig(container, "FrameTexture"), Dig(container, "Flash"), Dig(main, "LevelBackgroundCircle"), band },
+		lift = { content },
+		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer,
+		mana = Dig(main, "ManaBar"),
 		name = Dig(main, "Name"),
-		band = Dig(main, "ReputationColor"),
+		band = band,
 	}
 end
 
 local function PartyParts(member)
 	local healthContainer = Dig(member, "HealthBarContainer")
-	local mana = Dig(member, "manabar")
 	return {
 		holder = member,
 		portrait = Dig(member, "portrait"),
 		frameTexture = Dig(member, "Texture"),
 		hide = { Dig(member, "Texture"), Dig(member, "Flash"), Dig(member, "PartyMemberOverlay", "Status") },
-		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer, healthMask = Dig(healthContainer, "HealthBarMask"),
-		mana = mana, manaMask = Dig(mana, "ManaBarMask"),
+		liftChildren = member,
+		health = Dig(healthContainer, "HealthBar"), healthContainer = healthContainer,
+		mana = Dig(member, "manabar"),
 		name = Dig(member, "name"),
 	}
 end
 
 local TARGET_LAYOUT = {
 	piece = "target", portrait = 58, cap = true,
-	bars = { left = -152 },
-	health = { w = 126, cw = 122, h = 28.5, mid = -2.57 },
-	mana = { w = 128, mid = -18.57 },
 	name = { -150.2, 15.43 },
-	band = { -152, 21.93, -26, 8.93 },
 	level = { 22.99, -25.32 },
 }
 local PARTY_LAYOUT = {
 	piece = "party", portrait = 37,
-	bars = { left = 22.8 },
-	health = { w = 66, cw = 66, mid = 0.9 },
-	mana = { w = 66, mid = -8.6 },
 	name = { 21.8, 12.7 },
 }
 
 local FRAMES = {
 	{
-		key = "player", root = function() return _G.PlayerFrame end, parts = PlayerParts,
+		key = "player", unit = "player", root = function() return _G.PlayerFrame end, parts = PlayerParts,
 		layout = {
 			piece = "player", portrait = 60,
-			bars = { left = 31.6 },
-			health = { w = 127.5, cw = 127.5, h = 28, mid = -0.86 },
-			mana = { w = 127.5, mid = -16.4 },
 			name = { 35, 15.5, auto = true },
 			level = { -20.93, -23.88 },
 			faction = { at = { -37.06, -6.08 }, crestNudge = { -1.07, -0.47 } },
 		},
 		vehicle = function() local pf = _G.PlayerFrame return type(pf) == "table" and pf.state == "vehicle" end,
 	},
-	{ key = "target", root = function() return _G.TargetFrame end, parts = TargetParts, layout = TARGET_LAYOUT },
-	{ key = "focus", root = function() return _G.FocusFrame end, parts = TargetParts, layout = TARGET_LAYOUT },
+	{ key = "target", unit = "target", root = function() return _G.TargetFrame end, parts = TargetParts, layout = TARGET_LAYOUT },
+	{ key = "focus", unit = "focus", root = function() return _G.FocusFrame end, parts = TargetParts, layout = TARGET_LAYOUT },
 }
 for i = 1, 4 do
-	FRAMES[#FRAMES + 1] = { key = "party" .. i, root = function() return Dig(_G.PartyFrame, "MemberFrame" .. i) end,
+	FRAMES[#FRAMES + 1] = { key = "party" .. i, unit = "party" .. i, root = function() return Dig(_G.PartyFrame, "MemberFrame" .. i) end,
 		parts = PartyParts, layout = PARTY_LAYOUT }
 end
 local FRAME_BY_KEY = {}
@@ -128,7 +131,7 @@ local states = {}
 local function State(key)
 	local st = states[key]
 	if not st then
-		st = { applied = false, note = "not applied yet", tex = {}, hidden = {}, moved = {}, ours = {}, sized = {}, unmasked = {} }
+		st = { applied = false, note = "not applied yet", tex = {}, hidden = {}, moved = {}, ours = {}, sized = {}, lifted = {} }
 		states[key] = st
 	end
 	return st
@@ -200,11 +203,16 @@ local function HookAlpha(region)
 end
 
 local function HideRegion(st, region)
-	if not region then return end
+	if type(region) ~= "table" then return end
 	if st.hidden[region] == nil then st.hidden[region] = Ask(region, "GetAlpha") or 1 end
 	hiddenBy[region] = st
 	HookAlpha(region)
 	SetAlphaQuiet(region, 0)
+end
+
+local function BarFill(bar)
+	local fill = Ask(bar, "GetStatusBarTexture")
+	return type(fill) == "table" and fill or nil
 end
 
 local function CurrentPoints(obj)
@@ -227,6 +235,12 @@ local function SamePoints(a, b)
 	return true
 end
 
+local function SetPoints(obj, list)
+	if SamePoints(CurrentPoints(obj), list) then return end
+	obj:ClearAllPoints()
+	for _, p in ipairs(list) do obj:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+end
+
 local function SavePoints(st, obj)
 	if st.moved[obj] then return true end
 	local list = CurrentPoints(obj)
@@ -238,37 +252,62 @@ local function SavePoints(st, obj)
 	return true
 end
 
-local function SetPoints(obj, list, dx, dy)
-	obj:ClearAllPoints()
-	for _, p in ipairs(list) do obj:SetPoint(p[1], p[2], p[3], p[4] + (dx or 0), p[5] + (dy or 0)) end
-end
-
-local function Shift(st, obj, dx, dy)
-	if not obj then return true end
-	if math.abs(dx) > MAX_SHIFT or math.abs(dy) > MAX_SHIFT then return false end
-	if not SavePoints(st, obj) then return false end
-	SetPoints(obj, st.moved[obj], dx, dy)
-	st.ours[obj] = CurrentPoints(obj)
-	return true
+local function SaveSize(st, obj)
+	if not st.sized[obj] then st.sized[obj] = { Ask(obj, "GetWidth"), Ask(obj, "GetHeight") } end
 end
 
 local function Reanchor(st, obj, list)
 	if not SavePoints(st, obj) then return false end
-	SetPoints(obj, list, 0, 0)
+	SaveSize(st, obj)
+	SetPoints(obj, list)
 	st.ours[obj] = CurrentPoints(obj)
 	return true
 end
 
-local function Resize(st, obj, w, h)
-	if not obj then return end
-	if not st.sized[obj] then st.sized[obj] = { Ask(obj, "GetWidth"), Ask(obj, "GetHeight") } end
-	if w then obj:SetWidth(w) end
-	if h then obj:SetHeight(h) end
+local function Corners(target)
+	return { { "TOPLEFT", target, "TOPLEFT", 0, 0 }, { "BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0 } }
 end
 
-local function RemoveMask(st, texture, mask)
-	if type(texture) ~= "table" or type(mask) ~= "table" or type(texture.RemoveMaskTexture) ~= "function" then return end
-	if pcall(texture.RemoveMaskTexture, texture, mask) then st.unmasked[#st.unmasked + 1] = { texture, mask } end
+local function SetLevel(frame, level)
+	if Ask(frame, "GetFrameLevel") ~= level then pcall(frame.SetFrameLevel, frame, level) end
+end
+
+local function Descend(frame, list, skip)
+	if type(frame) ~= "table" or skip[frame] then return end
+	list[#list + 1] = frame
+	if type(frame.GetChildren) == "function" then
+		for _, child in ipairs({ frame:GetChildren() }) do Descend(child, list, skip) end
+	end
+end
+
+local function Lift(st, frames, minLevel, skip)
+	local list = {}
+	for _, frame in ipairs(frames) do Descend(frame, list, skip) end
+	local low
+	for _, frame in ipairs(frames) do
+		local level = Ask(frame, "GetFrameLevel")
+		if level and (not low or level < low) then low = level end
+	end
+	if not low or low >= minLevel then return end
+	local by = minLevel - low
+	local was = {}
+	for _, frame in ipairs(list) do was[frame] = Ask(frame, "GetFrameLevel") end
+	for _, frame in ipairs(list) do
+		if was[frame] then
+			st.lifted[#st.lifted + 1] = { frame, was[frame], was[frame] + by }
+			SetLevel(frame, was[frame] + by)
+		end
+	end
+end
+
+local function Drifted(st)
+	for obj in pairs(st.moved) do
+		if not SamePoints(CurrentPoints(obj), st.ours[obj]) then return true end
+	end
+	for _, l in ipairs(st.lifted) do
+		if Ask(l[1], "GetFrameLevel") ~= l[3] then return true end
+	end
+	return false
 end
 
 local function ForgetReanchored(st)
@@ -289,9 +328,17 @@ local function Place(t, artKey, portrait, x, y, k)
 	local a = ART[artKey]
 	local s = a.scale * k
 	t:SetTexCoord(a.x / TEX_W, (a.x + a.w) / TEX_W, a.y / TEX_H, (a.y + a.h) / TEX_H)
-	t:ClearAllPoints()
-	t:SetPoint("TOPLEFT", portrait, "CENTER", x * k - a.cx * s, y * k + a.cy * s)
+	SetPoints(t, { { "TOPLEFT", portrait, "CENTER", x * k - a.cx * s, y * k + a.cy * s } })
 	t:SetSize(a.w * s, a.h * s)
+end
+
+local function PlaceRect(obj, artKey, r, portrait, k)
+	local a = ART[artKey]
+	local s = a.scale * k
+	SetPoints(obj, {
+		{ "TOPLEFT", portrait, "CENTER", (r[1] - a.cx) * s, (a.cy - r[2]) * s },
+		{ "BOTTOMRIGHT", portrait, "CENTER", (r[3] - a.cx) * s, (a.cy - r[4]) * s },
+	})
 end
 
 local function FactionKey()
@@ -317,6 +364,87 @@ local function HookFaction(icon)
 	end
 end
 
+local function Flag(fn, unit)
+	if type(fn) ~= "function" then return nil end
+	local ok, v = pcall(fn, unit)
+	if not ok or IsSecret(v) then return nil end
+	return v and true or false
+end
+
+local function Fill(bar, maxFn, curFn, unit)
+	if type(maxFn) ~= "function" or type(curFn) ~= "function" then return end
+	pcall(function()
+		bar:SetMinMaxValues(0, maxFn(unit))
+		bar:SetValue(curFn(unit))
+	end)
+end
+
+local function PowerColour(unit)
+	local ok, kind, token = pcall(UnitPowerType or function() end, unit)
+	local colours = type(PowerBarColor) == "table" and PowerBarColor or nil
+	local c
+	if ok and colours then
+		if type(token) == "string" and not IsSecret(token) then c = colours[token] end
+		if not c and type(kind) == "number" and not IsSecret(kind) then c = colours[kind] end
+	end
+	if type(c) ~= "table" or type(c.r) ~= "number" then return 0, 0, 1 end
+	return c.r, c.g, c.b
+end
+
+local function RefreshBars(st)
+	local u = st.unit
+	if not (st.applied and st.bar and u) then return end
+	local health, mana = st.bar.health, st.bar.mana
+	Fill(health, UnitHealthMax, UnitHealth, u)
+	if (u ~= "player" and Flag(UnitIsTapDenied, u)) or (Flag(UnitIsConnected, u) == false and Flag(UnitExists, u)) then
+		health:SetStatusBarColor(0.5, 0.5, 0.5)
+	else
+		health:SetStatusBarColor(0, 1, 0)
+	end
+	Fill(mana, UnitPowerMax, UnitPower, u)
+	mana:SetStatusBarColor(PowerColour(u))
+end
+
+local function MakeLayer(st, root)
+	if st.layer then return end
+	st.layer = CreateFrame("Frame", nil, root)
+	st.capFrame = CreateFrame("Frame", nil, root)
+	st.bar = {}
+	for _, which in ipairs({ "health", "mana" }) do
+		local bar = CreateFrame("StatusBar", nil, st.layer)
+		bar:SetStatusBarTexture(BAR_TEXTURE)
+		bar:SetMinMaxValues(0, 1)
+		bar:SetValue(1)
+		st.bar[which] = bar
+	end
+end
+
+local barOf = setmetatable({}, { __mode = "k" })
+local barHooked = setmetatable({}, { __mode = "k" })
+local function Follow(st, blizzard, ours, kind)
+	barOf[blizzard] = { st = st, ours = ours }
+	if barHooked[blizzard] then return end
+	barHooked[blizzard] = true
+	local function shown(self)
+		local b = barOf[self]
+		if b and b.st.applied then b.ours:SetShown(Ask(self, "IsShown") and true or false) end
+	end
+	for _, method in ipairs({ "Show", "Hide", "SetShown" }) do
+		if type(blizzard[method]) == "function" then hooksecurefunc(blizzard, method, shown) end
+	end
+	if kind == "bar" and type(blizzard.SetStatusBarTexture) == "function" then
+		hooksecurefunc(blizzard, "SetStatusBarTexture", function(self)
+			local b = barOf[self]
+			if b and b.st.applied then HideRegion(b.st, BarFill(self)) end
+		end)
+	elseif kind == "band" and type(blizzard.SetVertexColor) == "function" then
+		hooksecurefunc(blizzard, "SetVertexColor", function(self, ...)
+			local b = barOf[self]
+			if b and b.st.applied then pcall(b.ours.SetVertexColor, b.ours, ...) end
+		end)
+	end
+end
+
 local function GiveBack(st, p)
 	for region, alpha in pairs(st.hidden) do
 		SetAlphaQuiet(region, alpha)
@@ -324,10 +452,11 @@ local function GiveBack(st, p)
 		hiddenBy[region] = nil
 	end
 	for _, t in pairs(st.tex) do t:Hide() end
+	if st.layer then st.layer:Hide() end
 	if st.capFrame then st.capFrame:Hide() end
 	ForgetReanchored(st)
 	for obj, list in pairs(st.moved) do
-		if #list > 0 then pcall(SetPoints, obj, list, 0, 0) end
+		if #list > 0 then pcall(SetPoints, obj, list) end
 		st.moved[obj], st.ours[obj] = nil, nil
 	end
 	for obj, size in pairs(st.sized) do
@@ -335,8 +464,8 @@ local function GiveBack(st, p)
 		if size[2] then pcall(obj.SetHeight, obj, size[2]) end
 		st.sized[obj] = nil
 	end
-	for _, pair in ipairs(st.unmasked) do pcall(pair[1].AddMaskTexture, pair[1], pair[2]) end
-	st.unmasked = {}
+	for _, l in ipairs(st.lifted) do SetLevel(l[1], l[2]) end
+	st.lifted = {}
 	if st.justify and p and p.name and p.name.SetJustifyH then pcall(p.name.SetJustifyH, p.name, st.justify) end
 	st.justify = nil
 	st.applied = false
@@ -349,7 +478,13 @@ local function Fail(st, p, why)
 end
 
 local function Busy(st)
-	return next(st.moved) or next(st.sized) or #st.unmasked > 0
+	return next(st.moved) or next(st.sized) or #st.lifted > 0
+end
+
+local function UnitOf(f, root)
+	local u = root and root.unit
+	if type(u) == "string" and not IsSecret(u) and u ~= "" then return u end
+	return f.unit
 end
 
 local function ApplyFrame(f)
@@ -374,12 +509,12 @@ local function ApplyFrame(f)
 		return Fail(st, p, "frame pieces not found (portrait, bars or frame art) -- old art not shown")
 	end
 	local L = f.layout
+	local slots = SLOTS[L.piece]
 	local pw = Ask(p.portrait, "GetWidth")
-	local pcX, pcY = Ask(p.portrait, "GetCenter")
-	if type(pw) ~= "number" or pw <= 0 or type(pcX) ~= "number" or type(pcY) ~= "number" then
-		return Fail(st, p, "portrait has no size or position yet")
-	end
+	if type(pw) ~= "number" or pw <= 0 then return Fail(st, p, "portrait has no size yet") end
 	local k = pw / L.portrait
+	local base = Ask(p.holder, "GetFrameLevel")
+	if type(base) ~= "number" then return Fail(st, p, "frame has no level yet") end
 
 	local layer, sublevel = Ask(p.frameTexture, "GetDrawLayer")
 	layer, sublevel = layer or "BACKGROUND", sublevel or 2
@@ -395,66 +530,94 @@ local function ApplyFrame(f)
 		if faction then Place(crest, faction, p.portrait, at[1] + nudge[1], at[2] + nudge[2], k) end
 	end
 
-	local healthTop0, containerTop0, healthH0 = Ask(p.health, "GetTop"), Ask(p.healthContainer, "GetTop"), Ask(p.health, "GetHeight")
-	if not (healthTop0 and containerTop0 and healthH0) then return Fail(st, p, "bars have no position yet") end
-	local above = healthTop0 - containerTop0
-	local healthH = L.health.h and L.health.h * k or healthH0
-	Resize(st, p.health, L.health.w * k, L.health.h and healthH or nil)
-	Resize(st, p.healthContainer, L.health.cw * k, L.health.h and (healthH - 2 * above) or nil)
-	Resize(st, p.mana, L.mana.w * k, nil)
-	local healthLeft, healthTop = Ask(p.health, "GetLeft"), Ask(p.health, "GetTop")
-	if not (healthLeft and healthTop) then return Fail(st, p, "bars have no position yet") end
-	if not Shift(st, p.healthContainer, pcX + L.bars.left * k - healthLeft, (pcY + L.health.mid * k + healthH / 2) - healthTop) then
-		return Fail(st, p, "health bar is not where the measurements expect -- old art not shown")
+	MakeLayer(st, root)
+	SetLevel(st.layer, base + 1)
+	SetLevel(st.capFrame, base + 2)
+	SetPoints(st.layer, Corners(root))
+	SetPoints(st.capFrame, Corners(root))
+	for _, which in ipairs({ "health", "mana" }) do
+		SetLevel(st.bar[which], base + 1)
+		PlaceRect(st.bar[which], L.piece, slots[which], p.portrait, k)
 	end
-	local manaLeft, manaTop, manaH = Ask(p.mana, "GetLeft"), Ask(p.mana, "GetTop"), Ask(p.mana, "GetHeight")
-	if not (manaLeft and manaTop and manaH) then return Fail(st, p, "bars have no position yet") end
-	if not Shift(st, p.mana, pcX + L.bars.left * k - manaLeft, (pcY + L.mana.mid * k + manaH / 2) - manaTop) then
-		return Fail(st, p, "power bar is not where the measurements expect -- old art not shown")
+
+	local skip = { [st.layer] = true, [st.capFrame] = true }
+	local lift = p.lift
+	if p.liftChildren then
+		lift = {}
+		for _, child in ipairs({ p.liftChildren:GetChildren() }) do
+			if not skip[child] then lift[#lift + 1] = child end
+		end
 	end
-	RemoveMask(st, p.health.GetStatusBarTexture and p.health:GetStatusBarTexture(), p.healthMask)
-	RemoveMask(st, p.mana.GetStatusBarTexture and p.mana:GetStatusBarTexture(), p.manaMask)
+	Lift(st, lift or {}, base + LIFT, skip)
+
+	local numbers = st.numbers
+	if slots.numbers then
+		if not numbers then numbers = CreateFrame("Frame", nil, st.layer); st.numbers = numbers end
+		PlaceRect(numbers, L.piece, slots.numbers, p.portrait, k)
+	end
+	if not (Reanchor(st, p.healthContainer, Corners(slots.numbers and numbers or st.bar.health))
+			and Reanchor(st, p.health, Corners(st.bar.health)) and Reanchor(st, p.mana, Corners(st.bar.mana))) then
+		return Fail(st, p, "bars can't be moved (the game won't say where they are) -- old art not shown")
+	end
+	HideRegion(st, BarFill(p.health))
+	HideRegion(st, BarFill(p.mana))
+	Follow(st, p.health, st.bar.health, "bar")
+	Follow(st, p.mana, st.bar.mana, "bar")
+	st.bar.health:SetShown(Ask(p.health, "IsShown") ~= false)
+	st.bar.mana:SetShown(Ask(p.mana, "IsShown") ~= false)
 
 	if p.name then
 		st.justify = Ask(p.name, "GetJustifyH") or "CENTER"
 		Reanchor(st, p.name, { { "LEFT", p.portrait, "CENTER", L.name[1] * k, L.name[2] * k } })
-		if L.name.auto then Resize(st, p.name, 0, nil) end
+		if L.name.auto then SaveSize(st, p.name); p.name:SetWidth(0) end
 		pcall(p.name.SetJustifyH, p.name, "LEFT")
 	end
 
-	if L.band and p.band then
-		local b = L.band
-		Reanchor(st, p.band, { { "TOPLEFT", p.portrait, "CENTER", b[1] * k, b[2] * k }, { "BOTTOMRIGHT", p.portrait, "CENTER", b[3] * k, b[4] * k } })
+	if slots.band and p.band then
+		local band = st.tex.band
+		if not band then
+			band = st.layer:CreateTexture(nil, "BACKGROUND")
+			st.tex.band = band
+		end
+		local atlas = Ask(p.band, "GetAtlas")
+		if not (type(atlas) == "string" and band.SetAtlas and pcall(band.SetAtlas, band, atlas)) then band:SetTexture(BAR_TEXTURE) end
+		PlaceRect(band, L.piece, slots.band, p.portrait, k)
+		local colour = { pcall(p.band.GetVertexColor, p.band) }
+		if table.remove(colour, 1) then pcall(band.SetVertexColor, band, unpack(colour)) end
+		Reanchor(st, p.band, Corners(band))
+		Follow(st, p.band, band, "band")
+		band:SetShown(Ask(p.band, "IsShown") ~= false)
 	end
 
-	if L.cap then
-		if not st.capFrame then st.capFrame = CreateFrame("Frame", nil, root) end
-		local level = math.max(Ask(p.health, "GetFrameLevel") or 1, Ask(p.mana, "GetFrameLevel") or 1)
-		st.capFrame:SetFrameLevel(level + 1)
-		st.capFrame:SetAllPoints(root)
-		Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 7), "cap", p.portrait, 0, 0, k)
-		st.capFrame:Show()
-	end
+	if L.cap then Place(MakeTexture(st, "cap", st.capFrame, "OVERLAY", 7), "cap", p.portrait, 0, 0, k) end
 
 	for _, region in ipairs(p.hide) do HideRegion(st, region) end
 	for key, t in pairs(st.tex) do
-		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" then t:Show() end
+		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" then t:Show() end
 	end
+	st.layer:Show()
+	st.capFrame:Show()
+	st.unit = UnitOf(f, root)
 	st.applied = true
+	RefreshBars(st)
 	if f.key == "player" then
 		HookFaction(p.pvpIcon)
 		UpdateFaction()
 	end
-	st.note = string.format("showing: old art 1:1 on the portrait's centre (k %.2f); bars at %.1f", k, L.bars.left * k)
+	st.note = string.format("showing: old art 1:1 on the portrait's centre (k %.2f), our bars in its slots", k)
 end
 
 local function Relaid(key)
+	if not Enabled() then return end
 	local st = State(key)
-	ForgetReanchored(st)
-	if Enabled() then
-		local function again() KUI:ApplyClassicFrameArt(key) end
-		if C_Timer and C_Timer.After then C_Timer.After(0, again) else again() end
+	if st.applied and not Drifted(st) then
+		st.unit = UnitOf(FRAME_BY_KEY[key], FRAME_BY_KEY[key].root())
+		RefreshBars(st)
+		return
 	end
+	ForgetReanchored(st)
+	local function again() KUI:ApplyClassicFrameArt(key) end
+	if C_Timer and C_Timer.After then C_Timer.After(0, again) else again() end
 end
 
 local function HookMethod(obj, method, fn)
@@ -472,6 +635,7 @@ local function InstallHooks()
 				local st = State("player")
 				if st.applied and not InCombatLockdown() then
 					GiveBack(st, PlayerParts(_G.PlayerFrame))
+					st.note = "in a vehicle: Blizzard's frame shown"
 					if KUI.ApplyXPBar then KUI:ApplyXPBar() end
 				end
 			end)
@@ -534,15 +698,15 @@ function KUI:FrameArtScanReport()
 		local p = root and f.parts(root)
 		local missing = {}
 		if p then
-			for _, part in ipairs({ "portrait", "frameTexture", "health", "healthContainer", "healthMask", "mana", "manaMask", "name" }) do
+			for _, part in ipairs({ "portrait", "frameTexture", "health", "healthContainer", "mana", "name" }) do
 				if not p[part] then missing[#missing + 1] = part end
 			end
 		end
-		local n, m, s = 0, 0, 0
+		local n, m = 0, 0
 		for _ in pairs(st.hidden) do n = n + 1 end
 		for _ in pairs(st.moved) do m = m + 1 end
-		for _ in pairs(st.sized) do s = s + 1 end
-		print(string.format("  %s: %s | hidden %d, moved %d, resized %d, masks off %d%s", f.key, st.note, n, m, s, #st.unmasked,
+		print(string.format("  %s: %s | hidden/faded %d, moved %d, lifted %d%s%s", f.key, st.note, n, m, #st.lifted,
+			st.applied and Drifted(st) and " | MOVED BY THE GAME since" or "",
 			not root and " | frame not found" or (#missing > 0 and (" | MISSING " .. table.concat(missing, ", ")) or "")))
 	end
 end
@@ -672,22 +836,33 @@ function KUI:PlayerFrameDump(which)
 end
 
 local FOR_EVENT = { PLAYER_TARGET_CHANGED = "target", PLAYER_FOCUS_CHANGED = "focus" }
+local UNIT_EVENT = { UNIT_HEALTH = true, UNIT_MAXHEALTH = true, UNIT_POWER_UPDATE = true, UNIT_POWER_FREQUENT = true,
+	UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true, UNIT_CONNECTION = true, UNIT_FACTION = true }
 local eventFrame = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED",
 		"PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "GROUP_ROSTER_UPDATE" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
-eventFrame:SetScript("OnEvent", function(_, event)
+for event in pairs(UNIT_EVENT) do pcall(eventFrame.RegisterEvent, eventFrame, event) end
+eventFrame:SetScript("OnEvent", function(_, event, unit)
+	if UNIT_EVENT[event] then
+		for _, f in ipairs(FRAMES) do
+			local st = states[f.key]
+			if st and st.applied and st.unit == unit then RefreshBars(st) end
+		end
+		return
+	end
 	if event == "PLAYER_REGEN_ENABLED" then
 		if pending then KUI:ApplyClassicFrameArt() end
 		return
 	end
 	if not Enabled() then return end
-	if InCombatLockdown() then pending = true return end
 	if FOR_EVENT[event] then
-		KUI:ApplyClassicFrameArt(FOR_EVENT[event])
+		Relaid(FOR_EVENT[event])
 	elseif event == "GROUP_ROSTER_UPDATE" then
-		for i = 1, 4 do KUI:ApplyClassicFrameArt("party" .. i) end
+		for i = 1, 4 do Relaid("party" .. i) end
+	elseif InCombatLockdown() then
+		pending = true
 	else
 		KUI:ApplyClassicFrameArt()
 	end
