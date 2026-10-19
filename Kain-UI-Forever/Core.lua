@@ -16,6 +16,7 @@ KUI.defaults = {
 	xpBarHideDefault = false,
 	classicFrameArt = false,
 	kainedFrames = false,
+	kainedPositions = {},
 	framePositions = {},
 	autoSellGreys = false,
 	autoRepair = false,
@@ -678,6 +679,7 @@ KUI.USER_COMMANDS = {
 	resetdrag = true, resetlootroll = true, zonebarreset = true, xpreset = true,
 	installmacros = true, weaponswap = true, linksoff = true, clearerrors = true,
 	enabledev = true, disabledev = true, gcdw = true,
+	unlock = true, lock = true, reset = true,
 }
 
 function KUI:IsDevMode()
@@ -711,6 +713,11 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 	end
 	if not KUI.USER_COMMANDS[command] and not KUI:IsDevMode() then
 		print("|cff33ff99Kain-UI Forever|r unknown command. Type |cffffff00/kui help|r for the list of commands.")
+		return
+	end
+
+	if (command == "unlock" or command == "lock" or command == "reset") and SlashCmdList["KAINUIKUF"] then
+		SlashCmdList["KAINUIKUF"](command)
 		return
 	end
 

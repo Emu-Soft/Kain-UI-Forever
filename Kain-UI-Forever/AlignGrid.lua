@@ -102,6 +102,8 @@ local function ElementBounds(frame)
 	for _, name in ipairs(ELEMENT_NAMES) do
 		if _G[name] then frames[#frames + 1] = _G[name] end
 	end
+
+	for _, f in ipairs(KUI.AlignElements or {}) do frames[#frames + 1] = f end
 	for _, f in ipairs(frames) do
 		if f:IsVisible() and not IsPartOf(f, frame) and not IsPartOf(frame, f) then
 			local l, r, b, t = Bounds(f)

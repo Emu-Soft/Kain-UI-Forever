@@ -1019,19 +1019,36 @@ local function TakeBlizzardFrames()
 	tookBlizzard = true
 end
 
-local function Place(f, spec, anchor)
+local function SavedSpot(key)
+	local all = KUI.db and KUI.db.kainedPositions
+	local p = type(all) == "table" and all[key]
+	if type(p) == "table" and PlainNumber(p.x) and PlainNumber(p.y) then return p end
+	return nil
+end
+
+local function UIScale()
 	local uiScale = UIParent:GetScale()
 	if not PlainNumber(uiScale) or uiScale <= 0 then uiScale = 1 end
-	local scale = (spec.scale or 1) * uiScale
-	local p = spec.point
+	return uiScale
+end
+
+local function Place(f, spec, key)
+	local scale = spec.scale or 1
 	f:ClearAllPoints()
-	f:SetPoint(p[1], anchor or UIParent, p[2], p[3] / scale, p[4] / scale)
+	local saved = SavedSpot(key)
+	if saved then
+		f:SetPoint("CENTER", UIParent, "CENTER", saved.x / scale, saved.y / scale)
+		return
+	end
+	local p = spec.point
+	scale = scale * UIScale()
+	f:SetPoint(p[1], UIParent, p[2], p[3] / scale, p[4] / scale)
 end
 
 local function BuildAll()
 	holder = CreateFrame("Frame", "KainUIForeverKainedParty", UIParent, "SecureHandlerStateTemplate")
 	holder:SetSize(PARTY.width, 4 * PARTY.height + 3 * PARTY.spacing)
-	Place(holder, PARTY)
+	Place(holder, PARTY, "party")
 	if RegisterStateDriver then RegisterStateDriver(holder, "visibility", "[group:raid] hide; show") end
 	for _, spec in ipairs(UNITS) do
 		local f = Build(spec, spec.party and holder or UIParent)
@@ -1039,7 +1056,7 @@ local function BuildAll()
 			f:ClearAllPoints()
 			f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(spec.party - 1) * (PARTY.height + PARTY.spacing))
 		else
-			Place(f, spec)
+			Place(f, spec, spec.key)
 		end
 		RegisterUnitEvents(f)
 		frames[spec.key] = f
@@ -1146,6 +1163,164 @@ function KUI:SetUnitFrameStyle(style)
 	if style ~= "kained" and KUI.ApplyClassicFrameArt then KUI:ApplyClassicFrameArt() end
 end
 
+local movers = {}
+local unlocked = false
+local placePending = false
+
+local function Movable()
+	local list = {}
+	for _, spec in ipairs(UNITS) do
+		if not spec.party then
+			list[#list + 1] = { key = spec.key, spec = spec, label = spec.label or TitleCase(spec.key) }
+		end
+	end
+	list[#list + 1] = { key = "party", spec = PARTY, label = "Party", height = 4 * PARTY.height + 3 * PARTY.spacing }
+	return list
+end
+local LABELS = { player = "Player", pet = "Pet", target = "Target", targettarget = "Target of target",
+	focus = "Focus", focustarget = "Focus target", party = "Party" }
+
+local function PlaceFrames()
+	if InCombatLockdown() then placePending = true return end
+	placePending = false
+	for _, m in ipairs(Movable()) do
+		local f = m.key == "party" and holder or frames[m.key]
+		if f then Place(f, m.spec, m.key) end
+	end
+end
+
+local function PlaceMover(box)
+	local m = box.item
+	local scale = m.spec.scale or 1
+	box:SetSize(m.spec.width * scale, (m.height or m.spec.height) * scale)
+	box:ClearAllPoints()
+	local saved = SavedSpot(m.key)
+	if saved then
+		box:SetPoint("CENTER", UIParent, "CENTER", saved.x, saved.y)
+	else
+		local p, uiScale = m.spec.point, UIScale()
+		box:SetPoint(p[1], UIParent, p[2], p[3] / uiScale, p[4] / uiScale)
+	end
+end
+
+local function SaveMover(box)
+	local cx, cy = box:GetCenter()
+	local ux, uy = UIParent:GetCenter()
+	if not (PlainNumber(cx) and PlainNumber(cy) and PlainNumber(ux) and PlainNumber(uy)) then return end
+	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
+	KUI.db.kainedPositions[box.item.key] = { x = math.floor((cx - ux) * 10 + 0.5) / 10, y = math.floor((cy - uy) * 10 + 0.5) / 10 }
+	PlaceMover(box)
+	PlaceFrames()
+end
+
+local function NewMover(m)
+	local box = CreateFrame("Frame", "KainUIForeverKainedMover" .. TitleCase(m.key), UIParent)
+	box.item = m
+	box:SetFrameStrata("DIALOG")
+	box:SetMovable(true)
+	box:SetClampedToScreen(true)
+	box:EnableMouse(true)
+	box:RegisterForDrag("LeftButton")
+	local bg = box:CreateTexture(nil, "BACKGROUND")
+	bg:SetAllPoints(box)
+	bg:SetColorTexture(0.1, 0.7, 0.2, 0.35)
+	for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+		local t = box:CreateTexture(nil, "BORDER")
+		t:SetColorTexture(0.3, 1, 0.4, 0.9)
+		t:SetPoint(side[1], box, side[1])
+		t:SetPoint(side[2], box, side[2])
+		if i <= 2 then t:SetHeight(1) else t:SetWidth(1) end
+	end
+	local label = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	label:SetPoint("CENTER", box, "CENTER")
+	label:SetText(LABELS[m.key] or m.label)
+	box:SetScript("OnDragStart", function(self)
+		self:StartMoving()
+		if KUI.BeginAlignDrag then pcall(KUI.BeginAlignDrag, KUI, self) end
+	end)
+	box:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		if KUI.EndAlignDrag then pcall(KUI.EndAlignDrag, KUI, self) end
+		SaveMover(self)
+		if InCombatLockdown() then
+			print("|cff33ff99Kain-UI Forever|r the frame moves there once you're out of combat.")
+		end
+	end)
+	box:SetScript("OnMouseUp", function(self, button)
+		if button ~= "RightButton" then return end
+		if type(KUI.db.kainedPositions) == "table" then KUI.db.kainedPositions[self.item.key] = nil end
+		PlaceMover(self)
+		PlaceFrames()
+	end)
+	box:SetScript("OnEnter", function(self)
+		if not GameTooltip then return end
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(LABELS[self.item.key] or self.item.label, 1, 1, 1)
+		GameTooltip:AddLine("Drag to move. Right-click: back to the starting spot. /kuf lock when done.", 1, 0.82, 0, true)
+		GameTooltip:Show()
+	end)
+	box:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+	box:Hide()
+	return box
+end
+
+local function SnapElements(on)
+	KUI.AlignElements = KUI.AlignElements or {}
+	for i = #KUI.AlignElements, 1, -1 do
+		if KUI.AlignElements[i].item then table.remove(KUI.AlignElements, i) end
+	end
+	if on then
+		for _, box in pairs(movers) do KUI.AlignElements[#KUI.AlignElements + 1] = box end
+	end
+end
+
+function KUI:SetKainedUnlocked(on)
+	on = on and true or false
+	if on and not Showing() then
+		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames aren't on. Pick them under Style in /kui (Unit Frames).")
+		return false
+	end
+	unlocked = on
+	for _, m in ipairs(Movable()) do
+		local box = movers[m.key]
+		if on and not box then
+			box = NewMover(m)
+			movers[m.key] = box
+		end
+		if box then
+			if on then PlaceMover(box); box:Show() else box:Hide() end
+		end
+	end
+	SnapElements(on)
+	return true
+end
+
+function KUI:ResetKainedPositions()
+	if KUI.db then KUI.db.kainedPositions = {} end
+	for _, box in pairs(movers) do PlaceMover(box) end
+	PlaceFrames()
+end
+
+function KUI:IsKainedUnlocked() return unlocked end
+
+SLASH_KAINUIKUF1 = "/kuf"
+SlashCmdList["KAINUIKUF"] = function(msg)
+	local command = (type(msg) == "string" and msg:match("^%s*(%S*)") or ""):lower()
+	if command == "unlock" then
+		if KUI:SetKainedUnlocked(true) then
+			print("|cff33ff99Kain-UI Forever|r Kained Unit Frames unlocked: drag the green boxes, right-click one to put it back. |cffffff00/kuf lock|r when done.")
+		end
+	elseif command == "lock" then
+		KUI:SetKainedUnlocked(false)
+		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames locked.")
+	elseif command == "reset" then
+		KUI:ResetKainedPositions()
+		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames are back in their starting spots" .. (InCombatLockdown() and " (once you're out of combat)." or "."))
+	else
+		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames: |cffffff00/kuf unlock|r to move them, |cffffff00/kuf lock|r when done, |cffffff00/kuf reset|r to put them all back.")
+	end
+end
+
 function KUI:KainedScanReport()
 	local state = Enabled() and "picked" or (tookBlizzard and "not picked (still showing until /reload)" or "not picked")
 	print("|cff33ff99Kain-UI Forever|r Kained Unit Frames: " .. state .. (pending and " (waiting for combat to end)" or "")
@@ -1176,6 +1351,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		KUI:ApplyKainedFrames()
 		KUI:KainedXPChanged()
 	end
+	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
 	if not Showing() then return end
 	local player = frames.player
 	if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_UPDATE_RESTING" then

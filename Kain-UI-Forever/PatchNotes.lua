@@ -2,11 +2,12 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.327",
+		version = "1.0.328",
 		sections = {
 			{ title = "New", items = {
 				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",
 				"Kained: a lite take on Shadowed Unit (SUF), set up the way it's used in the recommended setup. Compact dark bars with class-coloured health (others by whether they're friendly, neutral or hostile), portraits for you, your target and your party, health and power numbers with percentages, buffs and debuffs, raid marks, leader, PvP and ready-check icons, combo points for rogues and cat-form druids, and a druid's mana while shapeshifted. Your own bars fade away out of combat at full health and power and come back when you fight, cast, get hurt or pick a target. It covers you, your pet, your target and its target, your focus and its target, and your party (hidden in raids, where Blizzard's raid view stays). It has no options of its own.",
+				"/kuf unlock lets you drag the Kained pieces (you, your pet, target, focus and party) anywhere, with the same grid and snapping as the other movable parts. Right-click one to put it back, /kuf lock when done, /kuf reset to put them all back. /kui unlock, /kui lock and /kui reset work too.",
 				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait sits under your own bars.",
 			} },
 		},
@@ -767,6 +768,7 @@ local HELP_COMMANDS = {
 	{ "/kui factoryreset confirm", "Erase all of this addon's settings and start fresh. Can't be undone." },
 	{ "/kainuiemoji on", "Show emoji in chat. /kainuiemoji off hides them." },
 	{ "/kainuiemoji list", "List every emoji code you can type, like :smile:." },
+	{ "/kuf unlock", "Kained style: drag your portrait, target, focus, pet and party where you want them. /kuf lock when done, /kuf reset puts them all back. /kui unlock, /kui lock and /kui reset do the same." },
 	{ "/kkey", "K-Key options: talking to NPCs with the keyboard." },
 	{ "/kt", "K-Targeter options: the macro that targets what your quest needs." },
 	{ "/rl", "Reload your interface." },
