@@ -2,7 +2,9 @@ local addonName, KUI = ...
 
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\UnitFrames\\"
 local OLD_ART = MEDIA .. "PlayerFrameOld"
-local BAR_TEXTURE = "Interface\\TargetingFrame\\UI-StatusBar"
+
+local FILL = MEDIA .. "Fill"
+local POWER_FILL = { MANA = "Mana", RAGE = "Rage", ENERGY = "Energy", FOCUS = "Focus", RUNIC_POWER = "RunicPower" }
 local TEX_W, TEX_H = 512, 128
 local LIFT = 3
 
@@ -409,39 +411,31 @@ local function PowerColour(unit)
 	return c.r, c.g, c.b
 end
 
+local function SetFill(bar, kind, r, g, b, grey)
+	if bar.kuiFill ~= kind then
+		bar:SetStatusBarTexture(FILL .. kind)
+		bar.kuiFill = kind
+	end
+	bar:SetStatusBarColor(r, g, b)
+	local fill = BarFill(bar)
+	if fill and fill.SetDesaturated then fill:SetDesaturated(grey and true or false) end
+end
+
 local function RefreshBars(st)
 	local u = st.unit
 	if not (st.applied and st.bar and u) then return end
 	local health, mana = st.bar.health, st.bar.mana
 	Fill(health, UnitHealthMax, UnitHealth, u)
 	Fill(mana, UnitPowerMax, UnitPower, u)
-
-	if st.ownColour.health then
-		if (u ~= "player" and Flag(UnitIsTapDenied, u)) or (Flag(UnitIsConnected, u) == false and Flag(UnitExists, u)) then
-			health:SetStatusBarColor(0.5, 0.5, 0.5)
-		else
-			health:SetStatusBarColor(0, 1, 0)
-		end
-	end
-	if st.ownColour.mana then mana:SetStatusBarColor(PowerColour(u)) end
-end
-
-local function CopyFill(st, which, blizzard)
-	local ours = st.bar[which]
-	local atlas = Ask(BarFill(blizzard), "GetAtlas")
-	if type(atlas) == "string" and atlas ~= "" and pcall(ours.SetStatusBarTexture, ours, atlas) and Ask(BarFill(ours), "GetAtlas") == atlas then
-		st.ownColour[which] = false
-		local colour = { pcall(blizzard.GetStatusBarColor, blizzard) }
-		if table.remove(colour, 1) and colour[1] ~= nil then
-			pcall(ours.SetStatusBarColor, ours, unpack(colour))
-		else
-			ours:SetStatusBarColor(1, 1, 1)
-		end
-		local grey = { pcall(blizzard.GetStatusBarDesaturated or function() end, blizzard) }
-		if grey[1] and grey[2] ~= nil and ours.SetStatusBarDesaturated then pcall(ours.SetStatusBarDesaturated, ours, grey[2]) end
+	local grey = (u ~= "player" and Flag(UnitIsTapDenied, u)) or (Flag(UnitIsConnected, u) == false and Flag(UnitExists, u))
+	if grey then SetFill(health, "Health", 0.6, 0.6, 0.6, true) else SetFill(health, "Health", 1, 1, 1) end
+	local ok, _, token = pcall(UnitPowerType or function() end, u)
+	local kind = ok and type(token) == "string" and not IsSecret(token) and POWER_FILL[token]
+	if kind then
+		SetFill(mana, kind, 1, 1, 1)
 	else
-		ours:SetStatusBarTexture(BAR_TEXTURE)
-		st.ownColour[which] = true
+		local r, g, b = PowerColour(u)
+		SetFill(mana, "Grey", r, g, b)
 	end
 end
 
@@ -468,9 +462,6 @@ local function MakeLayer(st, root)
 	st.bar = {}
 	for _, which in ipairs({ "health", "mana" }) do
 		local bar = CreateFrame("StatusBar", nil, st.layer)
-		bar:SetStatusBarTexture(BAR_TEXTURE)
-		st.ownColour = st.ownColour or {}
-		st.ownColour[which] = true
 		bar:SetMinMaxValues(0, 1)
 		bar:SetValue(1)
 		st.bar[which] = bar
@@ -499,18 +490,9 @@ local function Follow(st, blizzard, ours, kind, which, also)
 			local b = barOf[self]
 			if b and b.st.applied then
 				HideRegion(b.st, BarFill(self))
-				CopyFill(b.st, b.which, self)
 				RefreshBars(b.st)
 			end
 		end)
-		for _, method in ipairs({ "SetStatusBarColor", "SetStatusBarDesaturated" }) do
-			if type(blizzard[method]) == "function" then
-				hooksecurefunc(blizzard, method, function(self, ...)
-					local b = barOf[self]
-					if b and b.st.applied and not b.st.ownColour[b.which] and type(b.ours[method]) == "function" then pcall(b.ours[method], b.ours, ...) end
-				end)
-			end
-		end
 	elseif kind == "band" and type(blizzard.SetVertexColor) == "function" then
 		hooksecurefunc(blizzard, "SetVertexColor", function(self, ...)
 			local b = barOf[self]
@@ -643,8 +625,6 @@ local function ApplyFrame(f)
 	HideRegion(st, BarFill(p.mana))
 	Follow(st, p.health, st.bar.health, "bar", "health")
 	Follow(st, p.mana, st.bar.mana, "bar", "mana")
-	CopyFill(st, "health", p.health)
-	CopyFill(st, "mana", p.mana)
 	Unmask(st, p.health, p.healthMask)
 	Unmask(st, p.mana, p.manaMask)
 	st.bar.health:SetShown(Ask(p.health, "IsShown") ~= false)
@@ -662,11 +642,10 @@ local function ApplyFrame(f)
 		if not band then
 			band = st.layer:CreateTexture(nil, "BACKGROUND", nil, 0)
 			band:SetColorTexture(1, 1, 1, 1)
-			band:SetAlpha(0.7)
 			shade = st.layer:CreateTexture(nil, "BACKGROUND", nil, 1)
 			shade:SetColorTexture(1, 1, 1, 1)
-			if not (CreateColor and pcall(shade.SetGradient, shade, "VERTICAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.5))) then
-				shade:SetColorTexture(0, 0, 0, 0.2)
+			if not (CreateColor and pcall(shade.SetGradient, shade, "VERTICAL", CreateColor(0, 0, 0, 0.3), CreateColor(0, 0, 0, 0.8))) then
+				shade:SetColorTexture(0, 0, 0, 0.5)
 			end
 			st.tex.band, st.tex.bandShade = band, shade
 		end
