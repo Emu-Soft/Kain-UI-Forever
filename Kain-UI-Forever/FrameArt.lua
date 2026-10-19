@@ -99,6 +99,20 @@ local function PartyParts(member)
 	}
 end
 
+local function TotParts(tot)
+	local health = Dig(tot, "healthbar")
+	return {
+		holder = tot,
+		portrait = Dig(tot, "portrait"),
+		frameTexture = Dig(tot, "FrameTexture"),
+		hide = { Dig(tot, "FrameTexture") },
+		liftChildren = tot,
+		health = health, healthContainer = health, healthMask = Dig(health, "HealthBarMask"),
+		mana = Dig(tot, "manabar"), manaMask = Dig(tot, "manabar", "ManaBarMask"),
+		name = Dig(tot, "name"),
+	}
+end
+
 local TARGET_LAYOUT = {
 	piece = "target", portrait = 58, cap = true,
 	name = { -150.2, 15.43 },
@@ -127,6 +141,11 @@ for i = 1, 4 do
 	FRAMES[#FRAMES + 1] = { key = "party" .. i, unit = "party" .. i, root = function() return Dig(_G.PartyFrame, "MemberFrame" .. i) end,
 		parts = PartyParts, layout = PARTY_LAYOUT }
 end
+
+FRAMES[#FRAMES + 1] = { key = "tot", unit = "targettarget", root = function() return Dig(_G.TargetFrame, "totFrame") end,
+	parts = TotParts, layout = PARTY_LAYOUT, poll = true }
+FRAMES[#FRAMES + 1] = { key = "focustot", unit = "focustarget", root = function() return Dig(_G.FocusFrame, "totFrame") end,
+	parts = TotParts, layout = PARTY_LAYOUT, poll = true }
 local FRAME_BY_KEY = {}
 for _, f in ipairs(FRAMES) do FRAME_BY_KEY[f.key] = f end
 
@@ -659,6 +678,17 @@ local function ApplyFrame(f)
 	for key, t in pairs(st.tex) do
 		if key ~= "ringFill" and key ~= "ring" and key ~= "crest" and key ~= "band" then t:Show() end
 	end
+	if f.poll and not st.polling then
+
+		st.polling = true
+		local wait = 0
+		st.layer:SetScript("OnUpdate", function(_, elapsed)
+			wait = wait - (elapsed or 0)
+			if wait > 0 then return end
+			wait = 0.2
+			RefreshBars(st)
+		end)
+	end
 	st.layer:Show()
 	st.capFrame:Show()
 	st.unit = UnitOf(f, root)
@@ -712,6 +742,13 @@ local function InstallHooks()
 			for _, method in ipairs({ "CheckClassification", "Update", "CheckFaction" }) do
 				HookMethod(frame, method, function() Relaid(key) end)
 			end
+		end
+	end
+	for _, key in ipairs({ "tot", "focustot" }) do
+		local tot = FRAME_BY_KEY[key].root()
+		if tot and not hooked[key] and type(tot.HookScript) == "function" then
+			hooked[key] = true
+			pcall(tot.HookScript, tot, "OnShow", function() Relaid(key) end)
 		end
 	end
 	local party = _G.PartyFrame
