@@ -874,12 +874,12 @@ function KUI:FrameArtScanReport()
 end
 
 local DUMP_ROOTS = { [""] = "PlayerFrame", player = "PlayerFrame", target = "TargetFrame", focus = "FocusFrame",
-	party = "PartyFrame", tot = "TargetFrameToT", boss = "Boss1TargetFrame" }
+	party = "PartyFrame", tot = "TargetFrameToT", boss = "Boss1TargetFrame", minimap = "MinimapCluster" }
 function KUI:PlayerFrameDump(which)
 	which = type(which) == "string" and which:lower() or ""
 	local rootName = DUMP_ROOTS[which]
 	if not rootName then
-		print("|cffff6060Kain-UI Forever:|r usage: /kainui portraitdump [player|target|focus|party|tot|boss]")
+		print("|cffff6060Kain-UI Forever:|r usage: /kainui portraitdump [player|target|focus|party|tot|boss|minimap]")
 		return
 	end
 	local root = _G[rootName]

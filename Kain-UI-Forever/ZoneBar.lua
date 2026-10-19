@@ -1,109 +1,10 @@
 local _, KUI = ...
 
-local PILL_WIDTH = 200
-local MIN_PILL_WIDTH = 100
-local WIDTH_ADJUST = 0
-local PILL_HEIGHT = 20
-local SIDE_GAP = 3
-local SHADOW = 2
-local PILL_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
-
-local PILL_TOP = { 0.05, 0.11, 0.13, 0.92 }
-local PILL_BOTTOM = { 0.01, 0.04, 0.05, 0.92 }
-local SHADOW_COLOR = { 0, 0, 0, 0.35 }
-
 local DEFAULT_POSITION = { from = "TOP", dy = -6 }
+local ROW_SLACK = 8
 
 local bar
 local active = false
-local FitToMinimap
-
-local function Tint(tex, top, bottom)
-	tex:SetTexture("Interface\\Buttons\\WHITE8x8")
-	local ok = false
-	if tex.SetGradient and CreateColor then
-		ok = pcall(tex.SetGradient, tex, "VERTICAL",
-			CreateColor(bottom[1], bottom[2], bottom[3], bottom[4]),
-			CreateColor(top[1], top[2], top[3], top[4]))
-	end
-	if not ok then
-		tex:SetVertexColor((top[1] + bottom[1]) / 2, (top[2] + bottom[2]) / 2,
-			(top[3] + bottom[3]) / 2, top[4])
-	end
-end
-
-local function MakePill(parent, width, height, level, top, bottom)
-	local r = math.floor(height / 2 + 0.5)
-	local holder = CreateFrame("Frame", nil, parent)
-	holder:SetSize(width, height)
-	holder:SetPoint("CENTER")
-	holder:SetFrameLevel(parent:GetFrameLevel() + level)
-	local layer, sublevel = "BACKGROUND", 0
-
-	local canRound = holder.CreateMaskTexture ~= nil
-	local left = holder:CreateTexture(nil, layer, nil, sublevel)
-	local right = holder:CreateTexture(nil, layer, nil, sublevel)
-	local mid = holder:CreateTexture(nil, layer, nil, sublevel)
-	for _, t in ipairs({ left, right, mid }) do Tint(t, top, bottom) end
-
-	if canRound then
-		left:SetPoint("TOPLEFT")
-		left:SetPoint("BOTTOMLEFT")
-		left:SetWidth(r)
-		right:SetPoint("TOPRIGHT")
-		right:SetPoint("BOTTOMRIGHT")
-		right:SetWidth(r)
-		for _, pair in ipairs({ { left, "LEFT" }, { right, "RIGHT" } }) do
-			local mask = holder:CreateMaskTexture()
-			mask:SetTexture(PILL_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-			mask:SetPoint(pair[2], pair[1], pair[2])
-			mask:SetSize(height, height)
-			pair[1]:AddMaskTexture(mask)
-		end
-		mid:SetPoint("TOPLEFT", left, "TOPRIGHT")
-		mid:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT")
-	else
-		left:Hide()
-		right:Hide()
-		mid:SetAllPoints()
-	end
-	return holder
-end
-
-local function ZonePvPType()
-	if C_PvP and C_PvP.GetZonePVPInfo then return C_PvP.GetZonePVPInfo() end
-	if GetZonePVPInfo then return GetZonePVPInfo() end
-end
-
-local function ZoneColor(pvpType)
-	if pvpType == "sanctuary" then return 0.41, 0.8, 0.94 end
-	if pvpType == "arena" or pvpType == "hostile" or pvpType == "combat" then return 1, 0.1, 0.1 end
-	if pvpType == "friendly" then return 0.1, 1, 0.1 end
-	if pvpType == "contested" then return 1, 0.7, 0 end
-	return 1, 0.82, 0
-end
-
-local function UpdateZone()
-	if not bar then return end
-	local text = (GetMinimapZoneText and GetMinimapZoneText()) or ""
-	bar.zoneText:SetText(text)
-	bar.zoneText:SetTextColor(ZoneColor(ZonePvPType()))
-end
-
-local function ClockString()
-	if GameTime_GetTime then
-		local ok, t = pcall(GameTime_GetTime, false)
-		if ok and t then return t end
-	end
-	return date("%H:%M")
-end
-
-local function UpdateClock()
-	if bar then bar.clockText:SetText(ClockString()) end
-end
-
-local hider = CreateFrame("Frame")
-hider:Hide()
 
 local originals = {}
 
@@ -112,7 +13,7 @@ local vanilla = {}
 local function Capture(frame)
 	local points = {}
 	for i = 1, frame:GetNumPoints() do points[i] = { frame:GetPoint(i) } end
-	return { parent = frame:GetParent(), points = points, alpha = frame:GetAlpha(),
+	return { parent = frame:GetParent(), points = points, alpha = frame:GetAlpha(), level = frame:GetFrameLevel(),
 		mouse = frame.IsMouseEnabled and frame:IsMouseEnabled(), shown = frame:IsShown() }
 end
 
@@ -131,6 +32,7 @@ local function Restore(frame)
 		frame:ClearAllPoints()
 		for _, p in ipairs(o.points) do frame:SetPoint(unpack(p)) end
 	end
+	if o.level and frame.SetFrameLevel then frame:SetFrameLevel(o.level) end
 	frame:SetAlpha(o.alpha or 1)
 	if o.shown then frame:Show() end
 	if o.mouse ~= nil and frame.EnableMouse then frame:EnableMouse(o.mouse) end
@@ -163,7 +65,7 @@ local function PlaceMail(f)
 		local ratio = ScreenRatio(f)
 		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left / ratio, top / ratio)
 	else
-		f:SetPoint("TOPLEFT", bar.pill, "BOTTOMLEFT", MailOffset())
+		f:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", MailOffset())
 	end
 end
 
@@ -179,20 +81,57 @@ end
 
 local ScheduleMailConversion
 
+local layout = {}
+local origin
+local skipped = {}
+
+local function Num(v) return type(v) == "number" and not (issecretvalue and issecretvalue(v)) end
+
+local function BoxInCluster(f)
+	local cluster = MinimapCluster
+	local cl, ct = cluster:GetLeft(), cluster:GetTop()
+	local l, t, r, b = f:GetLeft(), f:GetTop(), f:GetRight(), f:GetBottom()
+	if not (Num(cl) and Num(ct) and Num(l) and Num(t) and Num(r) and Num(b)) then return nil end
+	local k = f:GetEffectiveScale() / cluster:GetEffectiveScale()
+	return { l * k - cl, t * k - ct, r * k - cl, b * k - ct }
+end
+
+local function Learn(f)
+	if not f or layout[f] or (bar and f:GetParent() == bar) then return end
+
+	if f:GetNumPoints() == 0 then skipped[f] = "no anchors (not drawn)"; return end
+	local box = BoxInCluster(f)
+	if not box then skipped[f] = "no position yet"; return end
+	local header = Cluster("ZoneTextButton")
+	if f ~= header then
+		local hb = header and layout[header]
+		if not hb then skipped[f] = "header button not learned yet"; return end
+		local mid = (box[2] + box[4]) / 2
+		if not f:IsShown() or (box[3] - box[1]) <= 0 then skipped[f] = "not shown"; return end
+		if mid > hb[2] + ROW_SLACK or mid < hb[4] - ROW_SLACK then skipped[f] = "not on the header's row"; return end
+	end
+	box[5] = f:GetFrameLevel() - MinimapCluster:GetFrameLevel()
+	layout[f] = box
+	skipped[f] = nil
+	if origin then
+		origin = { math.min(origin[1], box[1]), math.max(origin[2], box[2]), math.max(origin[3], box[3]), math.min(origin[4], box[4]) }
+	else
+		origin = { box[1], box[2], box[3], box[4] }
+	end
+end
+
 local PIECES = {
-	{ get = function() return Cluster("BorderTop") end, mode = "hide" },
-	{ get = function() return Cluster("ZoneTextButton") end, mode = "hide" },
-	{ get = function() return _G.TimeManagerClockButton end, mode = "invisible" },
-	{ get = function() return Cluster("Tracking") end, mode = "move",
-		place = function(f) f:SetPoint("RIGHT", bar.pill, "LEFT", -SIDE_GAP, 0) end },
-	{ get = function() return _G.GameTimeFrame end, mode = "move",
-		place = function(f) f:SetPoint("LEFT", bar.pill, "RIGHT", SIDE_GAP, 0) end },
+	{ get = function() return Cluster("ZoneTextButton") end, mode = "carry" },
+	{ get = function() return Cluster("BorderTop") end, mode = "carry" },
+	{ get = function() return _G.TimeManagerClockButton end, mode = "carry" },
+	{ get = function() return Cluster("Tracking") end, mode = "carry" },
+	{ get = function() return _G.GameTimeFrame end, mode = "carry" },
 	{ get = function() return Cluster("IndicatorFrame") end, mode = "move",
 		place = function(f) PlaceMail(f) end },
 	{ get = function() return Cluster("InstanceDifficulty") end, mode = "move",
 
 		skip = function() return KUI.db and KUI.db.guildDifficultyForced ~= false end,
-		place = function(f) f:SetPoint("TOPRIGHT", bar.pill, "BOTTOMLEFT", -2, -3) end },
+		place = function(f) f:SetPoint("TOPRIGHT", bar, "BOTTOMLEFT", -2, -3) end },
 }
 
 local function SnapshotVanilla(onlyMissing)
@@ -216,19 +155,43 @@ end
 
 local placing = false
 
+local function SizeBar()
+	if not (bar and origin and MinimapCluster) then return end
+	local scale = MinimapCluster:GetEffectiveScale() / UIParent:GetEffectiveScale()
+	if Num(scale) and scale > 0 and math.abs(bar:GetScale() - scale) > 0.001 then bar:SetScale(scale) end
+	local w, h = origin[3] - origin[1], origin[2] - origin[4]
+	if math.abs(bar:GetWidth() - w) > 0.01 or math.abs(bar:GetHeight() - h) > 0.01 then bar:SetSize(w, h) end
+end
+
+local ApplyPosition
+
 local function PlacePieces()
 	if not active or not bar then return end
 	placing = true
+	local before = origin and { origin[1], origin[2], origin[3], origin[4] }
+	for _, piece in ipairs(PIECES) do
+		local f = piece.get()
+		if f and piece.mode == "carry" then Learn(f) end
+	end
+	if origin and (not before or before[1] ~= origin[1] or before[2] ~= origin[2] or before[3] ~= origin[3] or before[4] ~= origin[4]) then
+		SizeBar()
+		if ApplyPosition then ApplyPosition() end
+	end
 	for _, piece in ipairs(PIECES) do
 		local f = piece.get()
 		if f and not (piece.skip and piece.skip()) then
-			Remember(f)
-			if piece.mode == "hide" then
-				if f:GetParent() ~= hider then f:SetParent(hider) end
-			elseif piece.mode == "invisible" then
-				f:SetAlpha(0)
-				if f.EnableMouse then f:EnableMouse(false) end
+			if piece.mode == "carry" then
+				local box = layout[f]
+				if box and origin then
+					Remember(f)
+					if f:GetParent() ~= bar then f:SetParent(bar) end
+					f:ClearAllPoints()
+					f:SetPoint("TOPLEFT", bar, "TOPLEFT", box[1] - origin[1], box[2] - origin[2])
+					f:SetPoint("BOTTOMRIGHT", bar, "TOPLEFT", box[3] - origin[1], box[4] - origin[2])
+					f:SetFrameLevel(bar:GetFrameLevel() + math.max(1, box[5] or 1))
+				end
 			elseif piece.mode == "move" then
+				Remember(f)
 				if f:GetParent() ~= bar then f:SetParent(bar) end
 				f:ClearAllPoints()
 				piece.place(f)
@@ -266,7 +229,6 @@ local function WatchPieces()
 			watched[f] = true
 			hooksecurefunc(f, "SetPoint", ScheduleFix)
 			hooksecurefunc(f, "SetParent", ScheduleFix)
-			if piece.mode == "invisible" then hooksecurefunc(f, "SetAlpha", ScheduleFix) end
 		end
 	end
 end
@@ -284,7 +246,7 @@ local function SavePosition()
 	KUI.db.framePositions.zonebar = { cx = (left + bar:GetWidth() / 2) * ratio, y = top * ratio }
 end
 
-local function ApplyPosition()
+function ApplyPosition()
 	local ratio = bar:GetEffectiveScale() / UIParent:GetEffectiveScale()
 	local pos = KUI.db and KUI.db.framePositions and KUI.db.framePositions.zonebar
 
@@ -315,116 +277,47 @@ local function StopDrag()
 	ApplyPosition()
 end
 
-local function BarButton(parent)
-	local b = CreateFrame("Button", nil, parent)
-	b:SetFrameLevel(parent:GetFrameLevel() + 5)
-	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	b:RegisterForDrag("LeftButton")
-	b:SetScript("OnDragStart", StartDrag)
-	b:SetScript("OnDragStop", StopDrag)
-	return b
-end
-
 local function BuildBar()
 	bar = CreateFrame("Frame", "KainUIForeverZoneBar", UIParent)
-	bar:SetSize(PILL_WIDTH, PILL_HEIGHT)
+	bar:SetSize(200, 20)
 	bar:SetFrameStrata("MEDIUM")
 	bar:SetFrameLevel(20)
 	bar:SetMovable(true)
 	bar:SetClampedToScreen(false)
-	bar:EnableMouse(true)
-	bar:RegisterForDrag("LeftButton")
-	bar:SetScript("OnDragStart", StartDrag)
-	bar:SetScript("OnDragStop", StopDrag)
 
-	bar.unlockTint = MakePill(bar, PILL_WIDTH + 6, PILL_HEIGHT + 6, 0,
-		{ 0.2, 0.85, 0.3, 0.35 }, { 0.2, 0.85, 0.3, 0.35 })
-	bar.shadow = MakePill(bar, PILL_WIDTH + SHADOW * 2, PILL_HEIGHT + SHADOW * 2, 1,
-		SHADOW_COLOR, SHADOW_COLOR)
-
-	bar.pill = MakePill(bar, PILL_WIDTH, PILL_HEIGHT, 2, PILL_TOP, PILL_BOTTOM)
-
-	local clock = BarButton(bar)
-	clock:SetPoint("TOPRIGHT", bar.pill, "TOPRIGHT", -8, 0)
-	clock:SetPoint("BOTTOMRIGHT", bar.pill, "BOTTOMRIGHT", -8, 0)
-	clock:SetWidth(44)
-	local clockText = clock:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	clockText:SetPoint("RIGHT")
-	clockText:SetJustifyH("RIGHT")
-	bar.clockText = clockText
-	clock:SetScript("OnClick", function()
-		if not _G.TimeManager_Toggle and C_AddOns and C_AddOns.LoadAddOn then
-			pcall(C_AddOns.LoadAddOn, "Blizzard_TimeManager")
-		end
-		if _G.TimeManager_Toggle then TimeManager_Toggle() end
-	end)
-	clock:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-		GameTooltip:AddLine(TIMEMANAGER_TITLE or "Clock")
-		if GameTime_GetLocalTime and GameTime_GetGameTime then
-			GameTooltip:AddDoubleLine(TIMEMANAGER_TOOLTIP_LOCALTIME or "Local time:", GameTime_GetLocalTime(true), 1, 0.82, 0, 1, 1, 1)
-			GameTooltip:AddDoubleLine(TIMEMANAGER_TOOLTIP_REALMTIME or "Realm time:", GameTime_GetGameTime(true), 1, 0.82, 0, 1, 1, 1)
-		end
-		GameTooltip:AddLine("Click to show the clock options.", 0.7, 0.7, 0.7)
+	local grip = CreateFrame("Frame", nil, bar)
+	grip:SetAllPoints()
+	grip:SetFrameLevel(bar:GetFrameLevel() + 50)
+	grip:EnableMouse(true)
+	grip:RegisterForDrag("LeftButton")
+	grip:SetScript("OnDragStart", StartDrag)
+	grip:SetScript("OnDragStop", StopDrag)
+	local tint = grip:CreateTexture(nil, "OVERLAY")
+	tint:SetAllPoints()
+	tint:SetColorTexture(0.2, 0.85, 0.3, 0.35)
+	grip:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine("Zone bar", 1, 1, 1)
+		GameTooltip:AddLine("Drag to move. Lock the minimap elements to use it again.", 0.8, 0.8, 0.8)
 		GameTooltip:Show()
 	end)
-	clock:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-	local zone = BarButton(bar)
-	zone:SetPoint("TOPLEFT", bar.pill, "TOPLEFT", 10, 0)
-	zone:SetPoint("BOTTOMRIGHT", clock, "BOTTOMLEFT", -6, 0)
-	local zoneText = zone:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	zoneText:SetPoint("LEFT")
-	zoneText:SetPoint("RIGHT")
-	zoneText:SetJustifyH("LEFT")
-	zoneText:SetWordWrap(false)
-	bar.zoneText = zoneText
-	zone:SetScript("OnClick", function()
-		if ToggleWorldMap then ToggleWorldMap() end
-	end)
-	zone:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-		if Minimap_SetTooltip then
-			pcall(Minimap_SetTooltip, ZonePvPType())
-		else
-
-			local real = GetRealZoneText and GetRealZoneText()
-			if type(real) ~= "nil" then GameTooltip:AddLine(real, 1, 1, 1) end
-			local sub = GetSubZoneText and GetSubZoneText()
-			if issecretvalue and issecretvalue(sub) then
-				GameTooltip:AddLine(sub, 1, 0.82, 0)
-			elseif type(sub) == "string" and sub ~= "" then
-				GameTooltip:AddLine(sub, 1, 0.82, 0)
-			end
-		end
-		GameTooltip:Show()
-	end)
-	zone:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-	local elapsed = 0
-	bar:SetScript("OnUpdate", function(_, dt)
-		elapsed = elapsed + dt
-		if elapsed >= 1 then
-			elapsed = 0
-			UpdateClock()
-		end
-	end)
+	grip:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	grip:Hide()
+	bar.grip = grip
 
 	local events = CreateFrame("Frame")
-	for _, e in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA",
-		"PLAYER_ENTERING_WORLD", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED",
+	for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED",
 		"DISPLAY_SIZE_CHANGED", "ADDON_LOADED" }) do
 		KUI:SafeRegisterEvent(events, e)
 	end
 	events:SetScript("OnEvent", function(_, event)
 		if not active then return end
-		UpdateZone()
-		if event ~= "ZONE_CHANGED" and event ~= "ZONE_CHANGED_INDOORS" then
 
-			WatchPieces()
-			ScheduleFix()
-			if event ~= "ADDON_LOADED" then ApplyPosition() end
-			C_Timer.After(0, FitToMinimap)
+		WatchPieces()
+		ScheduleFix()
+		if event ~= "ADDON_LOADED" then
+			SizeBar()
+			ApplyPosition()
 		end
 	end)
 
@@ -433,47 +326,23 @@ local function BuildBar()
 	end
 end
 
-local function MinimapVisibleWidth()
-	if not Minimap then return nil end
-
-	local square = KUI.SquareMinimapBorder
-	if square and square:IsShown() and square:GetWidth() > 0 then
-		return square:GetWidth() * square:GetEffectiveScale() / bar:GetEffectiveScale()
-	end
-	local ring = _G.MinimapCompassTexture or _G.MinimapBorder
-	local source = ring and ring.GetWidth and ring:GetWidth() > 0 and ring or Minimap
-	local width = source:GetWidth()
-	if not width or width <= 0 then return nil end
-	local scale = source:GetEffectiveScale() / bar:GetEffectiveScale()
-	return width * scale
-end
-
-local function SideWidth(getPiece)
-	local f = getPiece()
-	if f and f:GetParent() == bar and f:IsShown() then return f:GetWidth() + SIDE_GAP end
-	return 0
-end
-
-local function SetPillWidth(width)
-	bar:SetWidth(width)
-	bar.pill:SetWidth(width)
-	bar.shadow:SetWidth(width + SHADOW * 2)
-	bar.unlockTint:SetWidth(width + 6)
-end
-
 function KUI:RefitZoneBar()
-	if FitToMinimap then pcall(FitToMinimap) end
+	if active then pcall(SizeBar) end
 end
 
-function FitToMinimap()
-	if not active or not bar then return end
-	local total = MinimapVisibleWidth()
-	if not total then return end
-	local sides = SideWidth(function() return Cluster("Tracking") end)
-		+ SideWidth(function() return _G.GameTimeFrame end)
-	local width = math.max(MIN_PILL_WIDTH, math.floor(total + WIDTH_ADJUST - sides + 0.5))
-	if math.abs(bar:GetWidth() - width) < 0.5 then return end
-	SetPillWidth(width)
+local tries = 0
+local function Activate()
+	if not active then return end
+	PlacePieces()
+	local header = Cluster("ZoneTextButton")
+	if header and not layout[header] and tries < 50 then
+		tries = tries + 1
+		C_Timer.After(0.2, Activate)
+		return
+	end
+	SizeBar()
+	ApplyPosition()
+	PlacePieces()
 end
 
 function KUI:ApplyZoneBar(enabled)
@@ -482,18 +351,14 @@ function KUI:ApplyZoneBar(enabled)
 		if not bar then BuildBar() end
 		active = true
 		bar:Show()
-		ApplyPosition()
-		UpdateZone()
-		UpdateClock()
 		WatchPieces()
-		PlacePieces()
+		tries = 0
+		Activate()
 		ScheduleMailConversion()
-		FitToMinimap()
 		KUI:SetZoneBarUnlocked(Unlocked())
-
-		if Minimap and not bar.minimapSizeHooked then
-			bar.minimapSizeHooked = true
-			Minimap:HookScript("OnSizeChanged", function() if active then FitToMinimap() end end)
+		if MinimapCluster.HookScript and not bar.clusterHooked then
+			bar.clusterHooked = true
+			MinimapCluster:HookScript("OnSizeChanged", function() if active then pcall(SizeBar) end end)
 		end
 	else
 		if not active then return end
@@ -504,17 +369,19 @@ function KUI:ApplyZoneBar(enabled)
 end
 
 function KUI:ZoneBarScanReport()
-	print("|cff33ff99Kain-UI Forever|r zone bar: " .. (active and "ACTIVE (header pieces taken over)" or "off (Blizzard's header)"))
+	print("|cff33ff99Kain-UI Forever|r zone bar: " .. (active and "ACTIVE (carrying Blizzard's header)" or "off (Blizzard's header)")
+		.. (origin and string.format(" | bar %.0f x %.0f", origin[3] - origin[1], origin[2] - origin[4]) or " | header not learned yet"))
 	for index, piece in ipairs(PIECES) do
 		local ok, f = pcall(piece.get)
 		if ok and f then
 			local name = (f.GetName and f:GetName()) or ("piece " .. index)
 			local parent = f:GetParent()
 			local pname = parent and ((parent == bar and "zone bar") or (parent.GetName and parent:GetName()) or "unnamed") or "none"
-			local v = vanilla[f]
-			print(string.format("  %s (%s): parent %s, anchors %d, alpha %.2f, shown %s, visible %s | recorded anchors %s",
-				name, piece.mode, pname, f:GetNumPoints(), f:GetAlpha(), tostring(f:IsShown()), tostring(f:IsVisible()),
-				v and tostring(#v.points) or "none"))
+			local box = layout[f]
+			local learned = box and string.format("at %.1f, %.1f size %.1f x %.1f", box[1] - (origin and origin[1] or 0), box[2] - (origin and origin[2] or 0), box[3] - box[1], box[2] - box[4])
+				or (piece.mode == "carry" and ("NOT CARRIED: " .. (skipped[f] or "not seen yet")) or "")
+			print(string.format("  %s (%s): parent %s, anchors %d, alpha %.2f, shown %s, visible %s | %s",
+				name, piece.mode, pname, f:GetNumPoints(), f:GetAlpha(), tostring(f:IsShown()), tostring(f:IsVisible()), learned))
 		else
 			print("  piece " .. index .. ": not found on this client")
 		end
@@ -608,7 +475,7 @@ end
 
 function KUI:SetZoneBarUnlocked(unlocked)
 	if not bar then return end
-	bar.unlockTint:SetShown(unlocked and true or false)
+	bar.grip:SetShown(unlocked and true or false)
 	UpdateMailHandle()
 end
 
