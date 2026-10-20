@@ -72,7 +72,8 @@ local UNITS = {
 		health = 1.2, power = 0.7, petColor = true,
 		texts = { hl = "name", hr = "curmaxhp", pl = "perpp", pr = "curmaxpp" },
 		indicators = { "raid", "happy" } },
-	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01,
+
+	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01, matchXP = true,
 		point = { "CENTER", "CENTER", 133.05492569986, -98.583207440859 },
 		portrait = "RIGHT", health = 1.2, power = 1.0,
 		texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelClassPerpp", pr = "curmaxpp" },
@@ -436,7 +437,7 @@ end
 
 local function Layout(f)
 	local spec = f.spec
-	local W, H = spec.width, spec.height
+	local W, H = spec.width, spec.height + (f.extra or 0)
 	local bars = {
 		{ bar = f.health, weight = spec.health, order = ORDER.health },
 		{ bar = f.power, weight = spec.power, order = ORDER.power },
@@ -1156,15 +1157,16 @@ end
 
 local function Place(f, spec, key)
 	local scale = spec.scale or 1
+	local down = (f.extra or 0) / 2
 	f:ClearAllPoints()
 	local saved = SavedSpot(key)
 	if saved then
-		f:SetPoint("CENTER", UIParent, "CENTER", saved.x / scale, saved.y / scale)
+		f:SetPoint("CENTER", UIParent, "CENTER", saved.x / scale, saved.y / scale - down)
 		return
 	end
 	local p = spec.point
 	scale = scale * UIScale()
-	f:SetPoint(p[1], UIParent, p[2], p[3] / scale, p[4] / scale)
+	f:SetPoint(p[1], UIParent, p[2], p[3] / scale, p[4] / scale - (p[1] == "CENTER" and down or 0))
 end
 
 local function BuildAll()
@@ -1251,6 +1253,7 @@ function KUI:KainedXPShown(shown)
 	f.xpShown = shown
 	pcall(PlacePanel, f)
 	KUI:KainedXPChanged()
+	if KUI.KainedMatchTarget then KUI:KainedMatchTarget() end
 end
 function KUI:KainedXPChanged()
 	local f = frames.player
@@ -1335,17 +1338,23 @@ local function PlaceFrames()
 	end
 end
 
+local function Extra(key)
+	local f = frames[key]
+	return f and f.extra or 0
+end
+
 local function PlaceMover(box)
 	local m = box.item
 	local scale = m.spec.scale or 1
-	box:SetSize(m.spec.width * scale, (m.height or m.spec.height) * scale)
+	local extra = Extra(m.key) * scale
+	box:SetSize(m.spec.width * scale, (m.height or m.spec.height) * scale + extra)
 	box:ClearAllPoints()
 	local saved = SavedSpot(m.key)
 	if saved then
-		box:SetPoint("CENTER", UIParent, "CENTER", saved.x, saved.y)
+		box:SetPoint("CENTER", UIParent, "CENTER", saved.x, saved.y - extra / 2)
 	else
 		local p, uiScale = m.spec.point, UIScale()
-		box:SetPoint(p[1], UIParent, p[2], p[3] / uiScale, p[4] / uiScale)
+		box:SetPoint(p[1], UIParent, p[2], p[3] / uiScale, p[4] / uiScale - (p[1] == "CENTER" and extra / 2 or 0))
 	end
 end
 
@@ -1354,7 +1363,9 @@ local function SaveMover(box)
 	local ux, uy = UIParent:GetCenter()
 	if not (PlainNumber(cx) and PlainNumber(cy) and PlainNumber(ux) and PlainNumber(uy)) then return end
 	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
-	KUI.db.kainedPositions[box.item.key] = { x = math.floor((cx - ux) * 10 + 0.5) / 10, y = math.floor((cy - uy) * 10 + 0.5) / 10 }
+
+	local up = Extra(box.item.key) * (box.item.spec.scale or 1) / 2
+	KUI.db.kainedPositions[box.item.key] = { x = math.floor((cx - ux) * 10 + 0.5) / 10, y = math.floor((cy - uy + up) * 10 + 0.5) / 10 }
 	PlaceMover(box)
 	PlaceFrames()
 end
@@ -1487,6 +1498,24 @@ end
 
 function KUI:IsKainedUnlocked() return unlocked end
 
+local matchPending = false
+function KUI:KainedMatchTarget()
+	local want = (frames.player and frames.player.xpShown) and (LOOK.gap + LOOK.xpHeight) or 0
+	if InCombatLockdown() then matchPending = true return end
+	matchPending = false
+	for _, spec in ipairs(UNITS) do
+		local f = frames[spec.key]
+		if f and spec.matchXP and (f.extra or 0) ~= want then
+			f.extra = want
+			f:SetHeight(spec.height + want)
+			Layout(f)
+			pcall(PlacePanel, f)
+			Place(f, spec, spec.key)
+			if movers[spec.key] then PlaceMover(movers[spec.key]) end
+		end
+	end
+end
+
 SLASH_KAINUIKUF1 = "/kuf"
 SlashCmdList["KAINUIKUF"] = function(msg)
 	local command = (type(msg) == "string" and msg:match("^%s*(%S*)") or ""):lower()
@@ -1537,6 +1566,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		KUI:KainedXPChanged()
 	end
 	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
+	if event == "PLAYER_REGEN_ENABLED" and matchPending then KUI:KainedMatchTarget() end
 	if event == "PLAYER_REGEN_DISABLED" and previewing then StopPreview() end
 	if event == "PLAYER_REGEN_ENABLED" then
 
