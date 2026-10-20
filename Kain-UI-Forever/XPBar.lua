@@ -239,6 +239,9 @@ local function Render()
 	if not bar then return end
 	local pixel = UnitsPerPixel(bar)
 	local width = bar:GetWidth()
+
+	local slot = bar.kained and bar.kainedLook and bar.kainedLook.slot
+	if slot and slot.layoutWidth then width = slot.layoutWidth end
 	if not width or width <= 0 then return end
 	if bar.kained then
 		bar.kainedWidth = width
@@ -300,10 +303,8 @@ local function Layout()
 	if kained then
 
 		bar.ringCut = false
-		local x, y = look.clip, look.clip - look.gap
-		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", x, y)
-		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -x, y)
-		bar:SetHeight(look.height)
+		bar:SetPoint("TOPLEFT", look.slot, "TOPLEFT", 0, 0)
+		bar:SetPoint("BOTTOMRIGHT", look.slot, "BOTTOMRIGHT", 0, 0)
 		anchorNote = "inside Kained Unit Frames' player frame"
 		Render()
 		return
@@ -634,6 +635,8 @@ local function Update(relayout)
 
 	if not bar then CreateBar() end
 
+	if KUI.KainedXPShown then KUI:KainedXPShown(true) end
+
 	if relayout or not bar.laidOut or UnitsPerPixel(bar) ~= bar.pixel then
 		Layout()
 		bar.laidOut = true
@@ -652,8 +655,6 @@ local function Update(relayout)
 	bar:Show()
 	barShowing = true
 	ApplyDefaultBar(db.xpBarHideDefault and true or false)
-
-	if KUI.KainedXPShown then KUI:KainedXPShown(true) end
 end
 
 local function SafeUpdate(relayout)

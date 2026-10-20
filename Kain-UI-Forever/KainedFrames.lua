@@ -58,7 +58,7 @@ local IND = {
 
 local UNITS = {
 
-	{ key = "player", unit = "player", width = 205, height = 45, scale = 1.01,
+	{ key = "player", unit = "player", width = 205, height = 45, scale = 1.01, xpRoom = true, xpSlot = true,
 		point = { "CENTER", "CENTER", -132.72284444348, -97.872558822901 },
 		portrait = "LEFT", health = 1.2, power = 1.0,
 		texts = { hl = "nameGroup", hr = "curmaxhpPerhp", pl = "perpp", pr = "curmaxpp" },
@@ -74,7 +74,7 @@ local UNITS = {
 		texts = { hl = "name", hr = "curmaxhp", pl = "perpp", pr = "curmaxpp" },
 		indicators = { "raid", "happy" } },
 
-	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01, matchXP = true,
+	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01, xpRoom = true,
 		point = { "CENTER", "CENTER", 133.05492569986, -98.583207440859 },
 		portrait = "RIGHT", health = 1.2, power = 1.0, incHeal = true,
 		texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelClassPerpp", pr = "curmaxpp" },
@@ -119,7 +119,7 @@ for i = 1, 4 do
 	UNITS[#UNITS + 1] = spec
 end
 
-local ORDER = { health = 10, power = 20, combo = 60, druid = 70 }
+local ORDER = { health = 10, power = 20, xp = 30, combo = 60, druid = 70 }
 local EXTRA_WEIGHT = 0.4
 local POLL = 0.2
 local POWER = { MANA = 0, RAGE = 1, FOCUS = 2, ENERGY = 3, COMBO = 4 }
@@ -525,24 +525,29 @@ local function Layout(f)
 	}
 	if f.combo and f.combo.wanted then bars[#bars + 1] = { bar = f.combo, weight = EXTRA_WEIGHT, order = ORDER.combo } end
 	if f.druid and f.druid.wanted then bars[#bars + 1] = { bar = f.druid, weight = EXTRA_WEIGHT, order = ORDER.druid } end
+
+	if f.xpSlot and f.xpShown then bars[#bars + 1] = { bar = f.xpSlot, fixed = LOOK.xpHeight, order = ORDER.xp } end
 	if f.combo then f.combo:SetShown(f.combo.wanted and true or false) end
 	if f.druid then f.druid:SetShown(f.druid.wanted and true or false) end
 
 	local portraitW = spec.portrait and (math.floor(W * LOOK.portraitWidth) - LOOK.inset) or 0
 	local besideX = spec.portrait == "LEFT" and (LOOK.clip + portraitW) or LOOK.clip
 	local total = 0
-	for _, b in ipairs(bars) do total = total + b.weight end
 	local available = H - 2 * LOOK.clip - LOOK.gap * (#bars - 1)
-	local y, besideH, hasFull = -LOOK.clip, 0, false
 	for _, b in ipairs(bars) do
-		local h = available * b.weight / total
+		if b.fixed then available = available - b.fixed else total = total + b.weight end
+	end
+	table.sort(bars, function(a, b) return a.order < b.order end)
+	local y, besideBottom, hasFull = -LOOK.clip, -LOOK.clip, false
+	for _, b in ipairs(bars) do
+		local h = b.fixed or available * b.weight / total
 		local full = spec.portrait == nil or b.order > LOOK.portraitCutoff
 		local x, width
 		if full then
 			x, width, hasFull = LOOK.clip, W - 2 * LOOK.clip, true
 		else
 			x, width = besideX, W - portraitW - 2 * LOOK.clip
-			besideH = besideH + h
+			besideBottom = y - h
 		end
 		b.bar:ClearAllPoints()
 		b.bar:SetPoint("TOPLEFT", f, "TOPLEFT", x, y)
@@ -553,7 +558,8 @@ local function Layout(f)
 	end
 
 	if f.portrait then
-		local ph = hasFull and besideH or (H - 2 * LOOK.clip)
+
+		local ph = hasFull and (-LOOK.clip - besideBottom) or (H - 2 * LOOK.clip)
 		local pw = portraitW - (spec.portrait == "RIGHT" and 1 or 0.5)
 		f.portrait:ClearAllPoints()
 		if spec.portrait == "LEFT" then
@@ -817,7 +823,6 @@ local function PlaceAuraRow(f, row)
 		return
 	end
 	local drop = 1
-	if f.xpShown then drop = 1 - (LOOK.gap + LOOK.xpHeight) end
 	local v = def.below and "TOP" or "BOTTOM"
 	local rv = def.below and "BOTTOM" or "TOP"
 	local point, rel = v .. def.side, rv .. def.side
@@ -932,10 +937,9 @@ end
 
 PlacePanel = function(f)
 	local edge = LOOK.clip - OnePixel(f)
-	local bottom = edge - (f.xpShown and (LOOK.gap + LOOK.xpHeight) or 0)
 	f.panel:ClearAllPoints()
 	f.panel:SetPoint("TOPLEFT", f, "TOPLEFT", edge, -edge)
-	f.panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -edge, bottom)
+	f.panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -edge, edge)
 end
 
 local function NewBar(parent, level)
@@ -990,7 +994,8 @@ local function Build(spec, parent)
 	f:SetAttribute("*type1", "target")
 	f:SetAttribute("*type2", "togglemenu")
 	f:RegisterForClicks("AnyUp")
-	f:SetSize(spec.width, spec.height)
+	f.extra = spec.xpRoom and (LOOK.gap + LOOK.xpHeight) or nil
+	f:SetSize(spec.width, spec.height + (f.extra or 0))
 	f:SetScale(spec.scale or 1)
 	f:SetHitRectInsets(LOOK.inset, LOOK.inset, LOOK.inset, LOOK.inset)
 	f:SetScript("OnEnter", ShowTooltip)
@@ -1012,6 +1017,8 @@ local function Build(spec, parent)
 		f.incHeal.bar:GetStatusBarTexture():SetVertexColor(COLORS.health.inc[1], COLORS.health.inc[2], COLORS.health.inc[3], 1)
 	end
 	if spec.costPrediction then f.cost = NewPrediction(f.power, true) end
+
+	if spec.xpSlot then f.xpSlot = CreateFrame("Frame", nil, f) end
 	if spec.portrait then
 		f.portrait = f:CreateTexture(nil, "ARTWORK")
 	end
@@ -1333,10 +1340,10 @@ function KUI:KainedHoldsBlizzardFrames()
 	return tookBlizzard
 end
 
-local XP_LOOK = { clip = LOOK.clip, gap = LOOK.gap, height = LOOK.xpHeight, texture = BAR_TEXTURE,
-	bgAlpha = LOOK.bgAlpha, restedAlpha = LOOK.xpRestedAlpha }
+local XP_LOOK = { texture = BAR_TEXTURE, bgAlpha = LOOK.bgAlpha, restedAlpha = LOOK.xpRestedAlpha }
 function KUI:KainedXPAnchor()
-	if not Showing() then return nil end
+	if not Showing() or not frames.player then return nil end
+	XP_LOOK.slot = frames.player.xpSlot
 	return frames.player, XP_LOOK
 end
 
@@ -1346,15 +1353,7 @@ function KUI:KainedXPShown(shown)
 	shown = shown and Showing() and true or false
 	if f.xpShown == shown then return end
 	f.xpShown = shown
-	pcall(PlacePanel, f)
-	KUI:KainedXPChanged()
-	if KUI.KainedMatchTarget then KUI:KainedMatchTarget() end
-end
-function KUI:KainedXPChanged()
-	local f = frames.player
-	if not f then return end
-	if InCombatLockdown() then pending = true return end
-	for _, row in ipairs(f.auraRows) do pcall(PlaceAuraRow, f, row) end
+	Safe(Layout, f)
 end
 
 KUI.UNIT_FRAME_STYLES = {
@@ -1593,24 +1592,6 @@ end
 
 function KUI:IsKainedUnlocked() return unlocked end
 
-local matchPending = false
-function KUI:KainedMatchTarget()
-	local want = (frames.player and frames.player.xpShown) and (LOOK.gap + LOOK.xpHeight) or 0
-	if InCombatLockdown() then matchPending = true return end
-	matchPending = false
-	for _, spec in ipairs(UNITS) do
-		local f = frames[spec.key]
-		if f and spec.matchXP and (f.extra or 0) ~= want then
-			f.extra = want
-			f:SetHeight(spec.height + want)
-			Layout(f)
-			pcall(PlacePanel, f)
-			Place(f, spec, spec.key)
-			if movers[spec.key] then PlaceMover(movers[spec.key]) end
-		end
-	end
-end
-
 SLASH_KAINUIKUF1 = "/kuf"
 SlashCmdList["KAINUIKUF"] = function(msg)
 	local command = (type(msg) == "string" and msg:match("^%s*(%S*)") or ""):lower()
@@ -1659,10 +1640,8 @@ end
 eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 	if event == "PLAYER_REGEN_ENABLED" and pending then
 		KUI:ApplyKainedFrames()
-		KUI:KainedXPChanged()
 	end
 	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
-	if event == "PLAYER_REGEN_ENABLED" and matchPending then KUI:KainedMatchTarget() end
 	if event == "PLAYER_REGEN_DISABLED" and previewing then StopPreview() end
 	if event == "PLAYER_REGEN_ENABLED" then
 
