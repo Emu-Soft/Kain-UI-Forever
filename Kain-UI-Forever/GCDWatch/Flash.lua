@@ -41,6 +41,15 @@ function ns.Hostile(unit)
     return not Public(hostile) or hostile == true
 end
 
+function ns.Watched(unit)
+    if not ns.Hostile(unit) then return false end
+    if ns.Get("playersOnly") ~= true then return true end
+    local isPlayer = UnitIsPlayer(unit)
+    if Public(isPlayer) then return isPlayer == true end
+    local _, kind = IsInInstance()
+    return Public(kind) and (kind == "pvp" or kind == "arena")
+end
+
 function ns.Opponent(unit)
     if not unit or not Yes(UnitExists(unit)) or not Yes(UnitIsPlayer(unit)) then return false end
     if not Yes(UnitCanAttack("player", unit)) then return false end
@@ -306,7 +315,7 @@ function Spot:Style(size)
 end
 
 function Spot:Follow(unit, opponent, fresh)
-    local enemy = unit ~= nil and ns.Hostile(unit)
+    local enemy = unit ~= nil and ns.Watched(unit)
     local castUnit = (enemy and ns.Get("casts") == true) and unit or nil
     if castUnit ~= self.castUnit then
         self.events:UnregisterAllEvents()

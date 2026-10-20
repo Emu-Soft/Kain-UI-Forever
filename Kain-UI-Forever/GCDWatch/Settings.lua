@@ -1083,6 +1083,7 @@ local function Build()
         if ns.Get("casts") then on[#on + 1] = "casts" end
         if ns.Get("buffs") then on[#on + 1] = "buffs" end
         if ns.Get("debuffs") then on[#on + 1] = "duel debuffs" end
+        if #on > 0 and ns.Get("playersOnly") == true then on[#on + 1] = "players only" end
         return #on > 0 and table.concat(on, " · ") or "nothing"
     end, "The three routes to what an enemy did. Each flash has its own edge colour: gold for a cast, green for their new buff, red for your new debuff.")
     page.Row("Their casts", "An enemy's finished casts and instants, when the game tells addons about them. The spell is hidden from the addon, but its name and icon still show. Most enemy instants send nothing; the next two rows cover many of those. Gold edge.")
@@ -1091,6 +1092,9 @@ local function Build()
         :Toggle(C1, "buffs", SINGLE)
     page.Row("Your new debuffs", "In a duel, a debuff new to you (Shadow Word: Pain, Concussive Shot) shows on your opponent's plate, and on the target bar while they are your target. In a duel only they can have put it there; outside duels nothing is guessed. Red edge.")
         :Toggle(C1, "debuffs", SINGLE)
+
+    page.Row("Players only", "Only enemy players flash: NPCs and pets don't. In dungeons and raids, where every enemy is an NPC, nothing flashes. Untick to watch everything you can attack, as Forever GCD does.")
+        :Toggle(C1, "playersOnly", SINGLE)
 
     page.Group("Nameplates", true, function()
         if ns.Get("plates") ~= true then return "off" end

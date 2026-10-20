@@ -21,6 +21,8 @@ local defaults = {
 
     casts = true, buffs = true, debuffs = true,
 
+    playersOnly = true,
+
     plates = true, position = "left", size = 45, offset = 4,
 
     name = true, nameSize = 10, tenths = 15,

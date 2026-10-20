@@ -91,7 +91,7 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - **Contrast**: recommended contrast and brightness, with a button to restore yours.
 - **Weather intensity** and **max zoom distance** sliders.
 - **Plater style** nameplates. Untick to get your own settings back.
-- **GCDWatch**: see what an enemy just did as an icon with its name beside their nameplate: their spells (gold edge), buffs they just gained (green), and in duels the debuffs they just put on you (red). Optional bar for your target, anywhere on screen. Its **Settings** button (or `/kui gcdw`) opens all its options. Based on Forever GCD by Tarolg, used under its MIT license (included in the `GCDWatch` folder). If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off.
+- **GCDWatch**: see what an enemy just did as an icon with its name beside their nameplate: their spells (gold edge), buffs they just gained (green), and in duels the debuffs they just put on you (red). Optional bar for your target, anywhere on screen. Its **Settings** button (or `/kui gcdw`) opens all its options. Based on Forever GCD by Tarolg, used under its MIT license (included in the `GCDWatch` folder). It watches enemy players only (untick Players only in its settings to watch NPCs too). If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off.
 
 ### Macros
 - **Weapon Swap Macro Helper**: drag your weapons into the slots at the top of the settings for a one-click swap macro.

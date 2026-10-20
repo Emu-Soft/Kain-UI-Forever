@@ -59,7 +59,7 @@ end
 
 local function Attach(unit)
     if records[unit] then Detach(unit) end
-    if ns.Get("plates") ~= true or not (ns.Hostile(unit) or Previewing()) then return end
+    if ns.Get("plates") ~= true or not (ns.Watched(unit) or Previewing()) then return end
     local plate = C_NamePlate.GetNamePlateForUnit(unit)
     if not plate then return end
     local record = table.remove(pool)
@@ -96,7 +96,7 @@ end
 
 local function Recheck(unit)
     if not present[unit] then return end
-    local wanted = ns.Get("plates") == true and (ns.Hostile(unit) or Previewing())
+    local wanted = ns.Get("plates") == true and (ns.Watched(unit) or Previewing())
     if wanted and not records[unit] then
         Attach(unit)
     elseif not wanted and records[unit] then
@@ -205,6 +205,8 @@ function ns.PlatesApply(keys)
     for _, key in ipairs(keys) do
         if key == "plates" then
             Enable(ns.Active() and ns.Get("plates") == true)
+        elseif key == "playersOnly" then
+            RecheckAll()
         elseif FOLLOW_KEYS[key] then
             for unit, record in pairs(records) do record.spot:Follow(unit, unit == opponent, false) end
         elseif PLACE_KEYS[key] then

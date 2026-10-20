@@ -323,7 +323,7 @@ end
 
 function ns.Bar() return bar end
 
-local BAR_KEYS = { bar = true, barLocked = true, barSize = true, barX = true, barY = true, name = true, nameSize = true, tenths = true,
+local BAR_KEYS = { playersOnly = true, bar = true, barLocked = true, barSize = true, barX = true, barY = true, name = true, nameSize = true, tenths = true,
     casts = true, buffs = true, debuffs = true }
 function ns.BarApply(keys)
     for _, key in ipairs(keys) do

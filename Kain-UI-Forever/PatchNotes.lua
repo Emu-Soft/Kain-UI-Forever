@@ -2,7 +2,7 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.336",
+		version = "1.0.337",
 		sections = {
 			{ title = "New", items = {
 				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",
@@ -18,6 +18,7 @@ local PATCH_NOTES = {
 		sections = {
 			{ title = "New", items = {
 				"GCDWatch (in Settings, under Nameplates): see what an enemy just did as an icon with its name beside their nameplate. Their spells show with a gold edge, buffs they just gained with a green edge, and in duels the debuffs they just put on you with a red edge, while a sweep counts down over the icon. There's also an optional bar for your target that you can place anywhere. The Settings button beside it opens all its options, and /kui gcdw lists its commands. Off unless you tick it; the recommended preset turns it on.",
+				"GCDWatch watches enemy players only: NPCs and pets don't flash, and in dungeons and raids nothing does. Untick Players only in its settings to watch everything you can attack.",
 				"GCDWatch is based on Forever GCD by Tarolg, used under its MIT license. If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off, so nothing shows twice.",
 			} },
 		},
