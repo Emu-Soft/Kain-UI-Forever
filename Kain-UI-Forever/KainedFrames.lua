@@ -5,9 +5,11 @@ local BAR_TEXTURE = MEDIA .. "KainedBar"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 local LOOK = {
-	font = "Fonts\\ARIALN.TTF",
+
+	font = "Interface\\AddOns\\" .. addonName .. "\\Media\\Fonts\\PTSansNarrow-Bold.ttf",
+	fontFlags = "OUTLINE",
 	fontSize = 12,
-	shadow = 1.5,
+	shadow = 1,
 	inset = 3,
 	clip = 4,
 	gap = 1.25,
@@ -479,14 +481,14 @@ local function Layout(f)
 
 	local function Place(fs, bar, side)
 		if not fs or not bar then return end
-		local width = bar.layoutWidth or 0
+		local usable = math.max(0, (bar.layoutWidth or 0) - 8)
 		fs:ClearAllPoints()
 		if side == "LEFT" then
 			fs:SetPoint("LEFT", bar, "LEFT", 3, 0)
-			fs:SetWidth(width * 0.5)
+			fs:SetWidth(usable * 0.44)
 		else
 			fs:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
-			fs:SetWidth(width * 0.6)
+			fs:SetWidth(usable * 0.56)
 		end
 	end
 	Place(f.texts.hl, f.health, "LEFT")
@@ -792,7 +794,7 @@ local textFont
 local function TextFont()
 	if not textFont then
 		textFont = CreateFont("KainUIForeverKainedFont")
-		textFont:SetFont(LOOK.font, LOOK.fontSize, "")
+		textFont:SetFont(LOOK.font, LOOK.fontSize, LOOK.fontFlags)
 		textFont:SetShadowColor(0, 0, 0, 1)
 		textFont:SetShadowOffset(LOOK.shadow, -LOOK.shadow)
 		textFont:SetTextColor(1, 1, 1, 1)

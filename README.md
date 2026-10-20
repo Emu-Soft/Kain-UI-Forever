@@ -66,6 +66,9 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - **Detach and unlock minimap elements**: split off the zone bar, and move the mail icon, day/night indicator and difficulty badge.
 - Let the minimap sit partly off the edge of the screen.
 
+### Unit frames
+- **Style** (under Unit Frames in the settings): Forever Launch (Blizzard's look), Forever Beta (the earlier look with thin bronze rings) or **Kained Unit Frames**, a lite recreation of Shadowed Unit Frames: compact dark bars for you, your pet, target, target of target, focus, focus target and party, with portraits, auras, combo points and your frame fading out of combat. `/kuf unlock` (or `/kui unlock`) to move them, `/kuf lock` when done, `/kuf reset` to put them back. Its text is PT Sans Narrow by ParaType, used under the SIL Open Font License (included in `Media/Fonts`).
+
 ### XP bar
 - **XP bar under your portrait**, with a gold marker where rested XP starts, and the option to hide Blizzard's.
 - **XP per hour**: hover the bar and hold **Shift** to see XP per hour (killing, with travel, from quests), an estimate, and time to level.
