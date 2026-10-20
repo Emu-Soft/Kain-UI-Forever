@@ -2,7 +2,7 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.333",
+		version = "1.0.334",
 		sections = {
 			{ title = "New", items = {
 				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",

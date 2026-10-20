@@ -56,7 +56,8 @@ local IND = {
 }
 
 local UNITS = {
-	{ key = "player", unit = "player", width = 190, height = 45, scale = 1.01,
+
+	{ key = "player", unit = "player", width = 205, height = 45, scale = 1.01,
 		point = { "CENTER", "CENTER", -132.72284444348, -97.872558822901 },
 		portrait = "LEFT", health = 1.2, power = 1.0,
 		texts = { hl = "nameGroup", hr = "curmaxhpPerhp", pl = "perpp", pr = "curmaxpp" },
@@ -71,7 +72,7 @@ local UNITS = {
 		health = 1.2, power = 0.7, petColor = true,
 		texts = { hl = "name", hr = "curmaxhp", pl = "perpp", pr = "curmaxpp" },
 		indicators = { "raid", "happy" } },
-	{ key = "target", unit = "target", width = 190, height = 45, scale = 1.01,
+	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01,
 		point = { "CENTER", "CENTER", 133.05492569986, -98.583207440859 },
 		portrait = "RIGHT", health = 1.2, power = 1.0,
 		texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelClassPerpp", pr = "curmaxpp" },
