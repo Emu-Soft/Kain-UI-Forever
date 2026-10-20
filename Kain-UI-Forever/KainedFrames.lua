@@ -6,7 +6,8 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 local LOOK = {
 	font = "Fonts\\ARIALN.TTF",
-	fontSize = 11,
+	fontSize = 12,
+	shadow = 1.5,
 	inset = 3,
 	clip = 4,
 	gap = 1.25,
@@ -17,7 +18,8 @@ local LOOK = {
 	portraitCutoff = 50,
 	auraSize = 16,
 	auraSpacing = 2,
-	xpRoom = 7,
+	xpHeight = 5,
+	xpRestedAlpha = 0.45,
 }
 
 local function RGB(r, g, b) return { r, g, b } end
@@ -708,7 +710,7 @@ local function PlaceAuraRow(f, row)
 	local def = row.def
 	local inset = LOOK.inset
 	local drop = 1
-	if f.spec.key == "player" and KUI.db and KUI.db.xpBarUnderPortrait then drop = 1 - LOOK.xpRoom end
+	if f.xpShown then drop = 1 - (LOOK.gap + LOOK.xpHeight) end
 	local v = def.below and "TOP" or "BOTTOM"
 	local rv = def.below and "BOTTOM" or "TOP"
 	local point, rel = v .. def.side, rv .. def.side
@@ -765,9 +767,10 @@ end
 
 PlacePanel = function(f)
 	local edge = LOOK.clip - OnePixel(f)
+	local bottom = edge - (f.xpShown and (LOOK.gap + LOOK.xpHeight) or 0)
 	f.panel:ClearAllPoints()
 	f.panel:SetPoint("TOPLEFT", f, "TOPLEFT", edge, -edge)
-	f.panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -edge, edge)
+	f.panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -edge, bottom)
 end
 
 local function NewBar(parent, level)
@@ -791,7 +794,7 @@ local function TextFont()
 		textFont = CreateFont("KainUIForeverKainedFont")
 		textFont:SetFont(LOOK.font, LOOK.fontSize, "")
 		textFont:SetShadowColor(0, 0, 0, 1)
-		textFont:SetShadowOffset(1, -1)
+		textFont:SetShadowOffset(LOOK.shadow, -LOOK.shadow)
 		textFont:SetTextColor(1, 1, 1, 1)
 	end
 	return textFont
@@ -801,7 +804,7 @@ local function NewText(layer)
 	local fs = layer:CreateFontString(nil, "OVERLAY")
 	fs:SetFontObject(TextFont())
 	fs:SetShadowColor(0, 0, 0, 1)
-	fs:SetShadowOffset(1, -1)
+	fs:SetShadowOffset(LOOK.shadow, -LOOK.shadow)
 	fs:SetWordWrap(false)
 	return fs
 end
@@ -1144,11 +1147,22 @@ function KUI:KainedHoldsBlizzardFrames()
 	return tookBlizzard
 end
 
+local XP_LOOK = { clip = LOOK.clip, gap = LOOK.gap, height = LOOK.xpHeight, texture = BAR_TEXTURE,
+	bgAlpha = LOOK.bgAlpha, restedAlpha = LOOK.xpRestedAlpha }
 function KUI:KainedXPAnchor()
 	if not Showing() then return nil end
-	return frames.player, LOOK.inset, LOOK.clip, frames.player.spec.scale or 1
+	return frames.player, XP_LOOK
 end
 
+function KUI:KainedXPShown(shown)
+	local f = frames.player
+	if not f then return end
+	shown = shown and Showing() and true or false
+	if f.xpShown == shown then return end
+	f.xpShown = shown
+	pcall(PlacePanel, f)
+	KUI:KainedXPChanged()
+end
 function KUI:KainedXPChanged()
 	local f = frames.player
 	if not f then return end

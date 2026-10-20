@@ -122,10 +122,56 @@ local function RingLeft(y)
 	return math.floor(cx + math.sqrt(span) + 0.5)
 end
 
-local NO_INSETS = setmetatable({}, { __index = function() return 0 end })
-local KAINED_EDGE = { 0.6, 0.6, 0.6, 1 }
-local function Insets(layer)
-	return bar.square and NO_INSETS or layer.insets
+local function KainedTexture(layer, sublevel)
+	local t = bar:CreateTexture(nil, layer, nil, sublevel)
+	t:SetTexture(bar.kainedLook.texture)
+	if t.SetHorizTile then t:SetHorizTile(false) end
+	return t
+end
+
+local function KainedParts()
+	if bar.kainedParts then return bar.kainedParts end
+	local p = {
+		empty = KainedTexture("BACKGROUND", 0),
+		rested = KainedTexture("ARTWORK", 0),
+		fill = KainedTexture("ARTWORK", 1),
+	}
+	p.empty:SetAllPoints(bar)
+	for _, key in ipairs({ "rested", "fill" }) do
+		p[key]:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+		p[key]:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+	end
+	bar.kainedParts = p
+	return p
+end
+
+local function KainedStretch(t, fraction)
+	local width = (bar.kainedWidth or 0) * (fraction or 0)
+	if width < 0.5 then t:Hide() return end
+	t:SetWidth(width)
+	t:Show()
+end
+
+local function KainedFill()
+	local p, look = KainedParts(), bar.kainedLook
+	local c = bar.hasRested and XP_COLOR_RESTED or XP_COLOR
+	p.empty:SetVertexColor(c[1], c[2], c[3], look.bgAlpha)
+	p.rested:SetVertexColor(XP_COLOR_RESTED[1], XP_COLOR_RESTED[2], XP_COLOR_RESTED[3], look.restedAlpha)
+	p.fill:SetVertexColor(c[1], c[2], c[3], 1)
+	KainedStretch(p.rested, bar.hasRested and bar.restedFraction or 0)
+	KainedStretch(p.fill, bar.fillFraction)
+end
+
+local function ShowRows(on)
+	for _, layer in ipairs(bar.layers) do
+		for _, row in ipairs(layer.rows) do row:SetShown(on) end
+	end
+	for _, rows in ipairs({ bar.restedRows, bar.fillRows, bar.dividerRows }) do
+		if not on then for _, row in ipairs(rows) do row:Hide() end end
+	end
+	if bar.kainedParts then
+		for _, t in pairs(bar.kainedParts) do t:SetShown(not on) end
+	end
 end
 
 local function RowStart(i, insets)
@@ -158,7 +204,7 @@ end
 
 local function DrawDivider()
 	local rows = bar.dividerRows
-	local insets = Insets(bar.layers[#bar.layers])
+	local insets = bar.layers[#bar.layers].insets
 	local widthPx, pixel = bar.widthPx, bar.pixel
 	local filled = FillEnd(bar.fillFraction or 0)
 	local restedEnd = FillEnd(bar.restedFraction)
@@ -181,8 +227,9 @@ local function DrawDivider()
 end
 
 local function RenderFill()
+	if bar and bar.kained then KainedFill() return end
 	if not (bar and bar.widthPx) then return end
-	local insets = Insets(bar.layers[#bar.layers])
+	local insets = bar.layers[#bar.layers].insets
 	DrawFill(bar.restedRows, insets, bar.widthPx, bar.pixel, bar.restedFraction)
 	DrawFill(bar.fillRows, insets, bar.widthPx, bar.pixel, bar.fillFraction)
 	DrawDivider()
@@ -193,6 +240,15 @@ local function Render()
 	local pixel = UnitsPerPixel(bar)
 	local width = bar:GetWidth()
 	if not width or width <= 0 then return end
+	if bar.kained then
+		bar.kainedWidth = width
+		bar:SetHitRectInsets(-HOVER_PAD_X, -HOVER_PAD_X, -HOVER_PAD_Y, -HOVER_PAD_Y)
+		KainedParts()
+		ShowRows(false)
+		KainedFill()
+		return
+	end
+	ShowRows(true)
 	local widthPx = math.max(1, math.floor(width / pixel + 0.5))
 	bar.pixel, bar.widthPx = pixel, widthPx
 
@@ -210,11 +266,8 @@ local function Render()
 	bar:SetHitRectInsets(-HOVER_PAD_X + bar.fillStart * pixel, -HOVER_PAD_X, -HOVER_PAD_Y, -HOVER_PAD_Y)
 
 	bar:SetHeight(BAR_HEIGHT_PX * pixel)
-	for index, layer in ipairs(bar.layers) do
-		local insets = Insets(layer)
-
-		local hidden = bar.square and index == 1
-		local color = (bar.square and index == 2) and KAINED_EDGE or layer.color
+	for _, layer in ipairs(bar.layers) do
+		local insets = layer.insets
 		for i, row in ipairs(layer.rows) do
 
 			local left = bar.ringCut and RingLeft(i - 0.5 - layer.grow)
@@ -223,8 +276,6 @@ local function Render()
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", bar, "TOPLEFT", left * pixel, -(i - 1 - layer.grow) * pixel)
 			row:SetSize((right - left) * pixel, pixel)
-			if color then row:SetColorTexture(color[1], color[2], color[3], color[4] or 1) end
-			row:SetShown(not hidden)
 		end
 	end
 	RenderFill()
@@ -233,26 +284,27 @@ end
 local function Layout()
 	bar:ClearAllPoints()
 
-	local kained, kainedClip, kainedScale = nil, 0, 1
-	if KUI.KainedXPAnchor then kained, _, kainedClip, kainedScale = KUI:KainedXPAnchor() end
-	local parent = kained and UIParent or _G.PlayerFrame
+	local kained, look
+	if KUI.KainedXPAnchor then kained, look = KUI:KainedXPAnchor() end
+
+	local parent = kained or _G.PlayerFrame
 	if bar:GetParent() ~= parent then
 		bar:SetParent(parent)
-		bar:SetFrameStrata((kained or parent):GetFrameStrata())
-		bar:SetFrameLevel((kained or parent):GetFrameLevel() + (kained and 10 or 1))
+		bar:SetFrameStrata(parent:GetFrameStrata())
+		bar:SetFrameLevel(parent:GetFrameLevel() + (kained and 3 or 1))
 	end
 	local pixel = UnitsPerPixel(bar)
 	local drop = (BAR_GAP_PX + FRAME_PX) * pixel
-	bar.square = kained ~= nil
+	bar.kained = kained ~= nil
+	bar.kainedLook = look
 	if kained then
 
 		bar.ringCut = false
-
-		local x, y = (kainedClip or 0) * (kainedScale or 1), (kainedClip or 0) * (kainedScale or 1) - 2 * pixel
+		local x, y = look.clip, look.clip - look.gap
 		bar:SetPoint("TOPLEFT", kained, "BOTTOMLEFT", x, y)
 		bar:SetPoint("TOPRIGHT", kained, "BOTTOMRIGHT", -x, y)
-		anchorNote = "under Kained Unit Frames' player frame"
-		bar:SetHeight(BAR_HEIGHT_PX * pixel)
+		bar:SetHeight(look.height)
+		anchorNote = "inside Kained Unit Frames' player frame"
 		Render()
 		return
 	end
@@ -576,6 +628,7 @@ local function Update(relayout)
 		barShowing = false
 		if bar then bar:Hide() end
 		ApplyDefaultBar(false)
+		if KUI.KainedXPShown then KUI:KainedXPShown(false) end
 		return
 	end
 
@@ -599,6 +652,8 @@ local function Update(relayout)
 	bar:Show()
 	barShowing = true
 	ApplyDefaultBar(db.xpBarHideDefault and true or false)
+
+	if KUI.KainedXPShown then KUI:KainedXPShown(true) end
 end
 
 local function SafeUpdate(relayout)
@@ -617,8 +672,6 @@ function KUI:SetXPBarUnderPortrait(enabled)
 	if not KUI.db then return end
 	KUI.db.xpBarUnderPortrait = enabled and true or false
 	KUI:ApplyXPBar()
-
-	if KUI.KainedXPChanged then KUI:KainedXPChanged() end
 end
 
 function KUI:SetHideDefaultXPBar(enabled)
