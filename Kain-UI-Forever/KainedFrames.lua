@@ -30,6 +30,7 @@ local COLORS = {
 	health = {
 		friendly = RGB(0.2, 0.9, 0.2), neutral = RGB(0.93, 0.93, 0), hostile = RGB(0.9, 0, 0),
 		tapped = RGB(0.5, 0.5, 0.5), offline = RGB(0.5, 0.5, 0.5), enemyUnattack = RGB(0.6, 0.2, 0.2),
+		inc = RGB(0, 0.35, 0.23),
 	},
 	class = {
 		DEATHKNIGHT = RGB(0.77, 0.12, 0.23), DEMONHUNTER = RGB(0.64, 0.19, 0.79), DRUID = RGB(1, 0.49, 0.04),
@@ -61,7 +62,7 @@ local UNITS = {
 		point = { "CENTER", "CENTER", -132.72284444348, -97.872558822901 },
 		portrait = "LEFT", health = 1.2, power = 1.0,
 		texts = { hl = "nameGroup", hr = "curmaxhpPerhp", pl = "perpp", pr = "curmaxpp" },
-		fader = true, combo = true, druidMana = true,
+		fader = true, combo = true, druidMana = true, incHeal = true, costPrediction = true,
 		indicators = { "raid", "leader", "pvp", "status", "ready" },
 		auras = {
 			{ filter = "HELPFUL", side = "LEFT", below = true, max = 5, cancel = true },
@@ -69,13 +70,13 @@ local UNITS = {
 		} },
 	{ key = "pet", unit = "pet", width = 173, height = 30, scale = 1,
 		point = { "BOTTOM", "BOTTOM", 282.56642928212, -1.5329070877259 },
-		health = 1.2, power = 0.7, petColor = true,
+		health = 1.2, power = 0.7, petColor = true, incHeal = true,
 		texts = { hl = "name", hr = "curmaxhp", pl = "perpp", pr = "curmaxpp" },
 		indicators = { "raid", "happy" } },
 
 	{ key = "target", unit = "target", width = 205, height = 45, scale = 1.01, matchXP = true,
 		point = { "CENTER", "CENTER", 133.05492569986, -98.583207440859 },
-		portrait = "RIGHT", health = 1.2, power = 1.0,
+		portrait = "RIGHT", health = 1.2, power = 1.0, incHeal = true,
 		texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelClassPerpp", pr = "curmaxpp" },
 		indicators = { "raid", "leader", "pvp" },
 		auras = {
@@ -89,7 +90,7 @@ local UNITS = {
 		indicators = { "raid" } },
 	{ key = "focus", unit = "focus", width = 120, height = 28, scale = 1,
 		point = { "CENTER", "CENTER", -268.38925985789, -106.27775978836 },
-		health = 1.2, power = 0.6,
+		health = 1.2, power = 0.6, incHeal = true,
 		texts = { hl = "name", hr = "curhp", pl = "perpp", pr = "curpp" },
 		indicators = { "raid", "leader", "pvp" } },
 	{ key = "focustarget", unit = "focustarget", width = 120, height = 25, scale = 1,
@@ -101,7 +102,7 @@ local UNITS = {
 
 local PARTY = { width = 190, height = 45, scale = 1, spacing = 23,
 	point = { "TOPLEFT", "BOTTOMLEFT", 2.2222807057094, 477.80001175668 },
-	portrait = "LEFT", health = 1.2, power = 1.0,
+	portrait = "LEFT", health = 1.2, power = 1.0, incHeal = true,
 	texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelPerpp", pr = "curmaxpp" },
 	indicators = { "raid", "leader", "pvp", "ready" },
 	auras = {
@@ -407,6 +408,86 @@ local function UpdatePower(f)
 	if DeadText(unit) then bar:SetValue(0) else bar:SetValue(UnitPower(unit, ptype)) end
 end
 
+local function NewPrediction(bar, filled)
+	local fill = bar:GetStatusBarTexture()
+	local clip = CreateFrame("Frame", nil, bar)
+	clip:SetClipsChildren(true)
+	clip:SetFrameLevel(bar:GetFrameLevel() + 1)
+	if filled then
+		clip:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+		clip:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+	else
+		clip:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+		clip:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+	end
+	local inner = CreateFrame("StatusBar", nil, clip)
+	inner:SetStatusBarTexture(BAR_TEXTURE)
+	inner:SetStatusBarColor(1, 1, 1, 1)
+	if filled then
+		inner:SetReverseFill(true)
+		inner:SetPoint("TOPRIGHT", clip, "TOPRIGHT", 0, 0)
+		inner:SetPoint("BOTTOMRIGHT", clip, "BOTTOMRIGHT", 0, 0)
+	else
+		inner:SetPoint("TOPLEFT", clip, "TOPLEFT", 0, 0)
+		inner:SetPoint("BOTTOMLEFT", clip, "BOTTOMLEFT", 0, 0)
+	end
+	inner:SetMinMaxValues(0, 1)
+	inner:SetValue(0)
+	clip:Hide()
+	return { clip = clip, bar = inner, owner = bar }
+end
+
+local function UpdateIncHeal(f)
+	local p = f.incHeal
+	if not p then return end
+	local unit = f.unit
+	if DeadText(unit) then p.clip:Hide() return end
+	local amount, max
+	if type(CreateUnitHealPredictionCalculator) == "function" and type(UnitGetDetailedHealPrediction) == "function" then
+		if not p.calc then
+			local ok, calc = pcall(CreateUnitHealPredictionCalculator)
+			if ok and calc then
+				p.calc = calc
+				if calc.SetHealAbsorbMode then pcall(calc.SetHealAbsorbMode, calc, 1) end
+			end
+		end
+		if p.calc and pcall(UnitGetDetailedHealPrediction, unit, "player", p.calc) then
+			local okA, a = pcall(p.calc.GetTotalIncomingHeals, p.calc)
+			local okM, m = pcall(p.calc.GetMaximumHealth, p.calc)
+			if okA and okM then amount, max = a, m end
+		end
+	end
+	if type(amount) == "nil" and type(UnitGetIncomingHeals) == "function" then
+		local ok, a = pcall(UnitGetIncomingHeals, unit)
+		if ok then amount, max = a, UnitHealthMax(unit) end
+	end
+	if type(amount) == "nil" or (PlainNumber(amount) and amount < 1) then p.clip:Hide() return end
+	p.bar:SetMinMaxValues(0, max)
+	p.bar:SetValue(amount)
+	p.clip:Show()
+end
+
+local function UpdateCost(f, spellID)
+	local p = f.cost
+	if not p then return end
+	if not spellID or not (C_Spell and C_Spell.GetSpellPowerCost) then p.clip:Hide() return end
+	local ptype, token = PowerType("player")
+	local ok, costs = pcall(C_Spell.GetSpellPowerCost, spellID)
+	local amount
+	if ok and type(costs) == "table" and Plain(ptype) then
+		for _, entry in ipairs(costs) do
+			if type(entry) == "table" and Plain(entry.type) and entry.type == ptype and PlainNumber(entry.cost) then amount = entry.cost end
+		end
+	end
+	if not amount or amount <= 0 then p.clip:Hide() return end
+	local c = Plain(token) and type(token) == "string" and COLORS.power[token] or COLORS.power.MANA
+
+	p.bar:GetStatusBarTexture():SetVertexColor((c[1] + 1) / 2, (c[2] + 1) / 2, (c[3] + 1) / 2, 1)
+	p.bar:SetMinMaxValues(0, UnitPowerMax("player", ptype))
+	p.bar:SetValue(amount)
+	p.clip:Show()
+end
+
 local function UpdateTexts(f)
 	for slot, fs in pairs(f.texts) do
 		local fn = TEXT[f.spec.texts[slot]]
@@ -497,6 +578,10 @@ local function Layout(f)
 			fs:SetWidth(usable * 0.58)
 		end
 	end
+
+	if f.incHeal then f.incHeal.bar:SetWidth(f.health.layoutWidth or 1) end
+	if f.cost then f.cost.bar:SetWidth(f.power.layoutWidth or 1) end
+
 	Place(f.texts.hl, f.health, "LEFT")
 	Place(f.texts.hr, f.health, "RIGHT")
 	Place(f.texts.pl, f.power, "LEFT")
@@ -922,6 +1007,11 @@ local function Build(spec, parent)
 	local level = f:GetFrameLevel()
 	f.health = NewBar(f, level + 1)
 	f.power = NewBar(f, level + 1)
+	if spec.incHeal then
+		f.incHeal = NewPrediction(f.health, false)
+		f.incHeal.bar:GetStatusBarTexture():SetVertexColor(COLORS.health.inc[1], COLORS.health.inc[2], COLORS.health.inc[3], 1)
+	end
+	if spec.costPrediction then f.cost = NewPrediction(f.power, true) end
 	if spec.portrait then
 		f.portrait = f:CreateTexture(nil, "ARTWORK")
 	end
@@ -1017,6 +1107,7 @@ FullUpdate = function(f)
 	Safe(function()
 		UpdateHealthColor(f)
 		UpdateHealth(f)
+		UpdateIncHeal(f)
 		UpdatePowerColor(f)
 		UpdatePower(f)
 		if f.combo or f.druid then UpdateExtras(f) end
@@ -1033,14 +1124,18 @@ local UNIT_EVENTS = {
 	UNIT_NAME_UPDATE = "texts", UNIT_LEVEL = "texts", UNIT_CLASSIFICATION_CHANGED = "texts", PLAYER_FLAGS_CHANGED = "texts",
 	UNIT_FACTION = "color", UNIT_PORTRAIT_UPDATE = "portrait", UNIT_MODEL_CHANGED = "portrait",
 	UNIT_HAPPINESS = "happy",
+	UNIT_HEAL_PREDICTION = "heal",
 }
 
 local function OnUnitEvent(f, event, unit)
 	if not built or not f:IsVisible() then return end
 	local what = UNIT_EVENTS[event]
-	if what == "health" then
+	if what == "heal" then
+		Safe(UpdateIncHeal, f)
+	elseif what == "health" then
 		Safe(function()
 			UpdateHealth(f)
+			UpdateIncHeal(f)
 			UpdateTexts(f)
 			if f.fade then UpdateFade(f) end
 		end)
@@ -1557,10 +1652,11 @@ for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "PLAYE
 		"GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "RAID_TARGET_UPDATE", "PLAYER_UPDATE_RESTING",
 		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "UNIT_PET", "PLAYER_ENTERING_WORLD",
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
+		"UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_SUCCEEDED",
 		"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
-eventFrame:SetScript("OnEvent", function(_, event, unit)
+eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 	if event == "PLAYER_REGEN_ENABLED" and pending then
 		KUI:ApplyKainedFrames()
 		KUI:KainedXPChanged()
@@ -1631,9 +1727,18 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		end
 	elseif event == "UNIT_PET" then
 		if unit == "player" and frames.pet and frames.pet:IsVisible() then FullUpdate(frames.pet) end
-	elseif unit == "player" and player and player.fade then
+	elseif unit == "player" and player and event:find("^UNIT_SPELLCAST_") then
 
-		player.fade.casting = (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START") or nil
-		pcall(UpdateFade, player)
+		if event == "UNIT_SPELLCAST_START" then
+			Safe(UpdateCost, player, spellID)
+		elseif event ~= "UNIT_SPELLCAST_CHANNEL_START" then
+			Safe(UpdateCost, player, nil)
+		end
+
+		if player.fade and (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP"
+				or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_STOP") then
+			player.fade.casting = (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START") or nil
+			pcall(UpdateFade, player)
+		end
 	end
 end)
