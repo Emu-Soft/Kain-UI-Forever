@@ -2,17 +2,19 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.340",
+		version = "1.0.341",
 		sections = {
 			{ title = "New", items = {
 				"Kained party: members out of reach of your heals fade, and a debuff your class can remove shows big beside that member, edged in its colour (poison green, magic blue and so on), so it's easy to spot and cleanse.",
 				"Kained shows what a cast will do, like Blizzard's own bars: while you cast, the mana the spell will cost shows as a lighter stretch at the end of your mana bar, and heals on their way to you, your pet, your target, your focus or your party show as a green stretch past their health.",
 				"GCDWatch watches enemy players only: NPCs and pets don't flash, and in dungeons and raids nothing does. Untick Players only in its settings to watch everything you can attack.",
+				"Kills to level and quests to level: hold Shift over the XP bar under your portrait to see roughly how many more kills, or quest hand-ins, it takes to level, going by what your recent ones gave.",
 				"Three new ready-made macros: Clamaclysm opens every kind of clam in your bags, one click at a time. MSO Template 1 and MSO Template 2 cast on whoever your mouse is over, then your target, then yourself: put your damage spell (1) or heal (2) where it says, and delete the /stopcasting line in the first if you don't want it.",
 			} },
 			{ title = "Changed", items = {
 				"The preset button under the logo is now called Quick Preset. It sets every option to the author's settings in one click, now including the Kained style and where its pieces sit, where moved windows open, and the screenshot on level up. Its minimap, mail icon and day/night spots are updated too.",
 				"The profile import button (under User Interface) now sets up the updated layout.",
+				"Time to level is more accurate, most of all while questing: quest XP no longer makes it run long, it looks at your last 45 minutes instead of 30, and a break counts as 3 minutes at most, so coming back from one barely moves it.",
 				"Kained: the XP bar under the portrait is now a third bar of your own, beside your portrait below health and power and drawn the same way (rested shows as a lighter stretch), and it fades with them. Your portrait runs the full height beside all three; with the XP bar off, health and power fill its room. You and your target are always the same height, so both sides stay even.",
 				"Kained text is PT Sans Narrow Bold with a crisp shadow, sharp at small sizes (by ParaType, free under the SIL Open Font License, included in the Media\\Fonts folder). Names never run into the numbers beside them: anything too long ends in ... You and your target are a little wider to fit them.",
 			} },

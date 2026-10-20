@@ -331,12 +331,14 @@ local XP_RATE_MIN_SECONDS = 60
 local XP_LABEL_COLOR = { 1, 0.82, 0 }
 local lastXP, lastXPMax
 
-local WINDOW_SECONDS = 1800
-local BREAK_MAX = 300
+local WINDOW_SECONDS = 2700
+local BREAK_MAX = 180
 local GAP_CAP = 45
 local GRIND_WEIGHT = 0.25
 
-local QUEST_AVG_SECONDS = 1800
+local QUEST_AVG_SECONDS = 900
+local KILLS_AVERAGED = 20
+local QUESTS_AVERAGED = 10
 local MATCH_SECONDS = 3
 local MAX_EVENTS = 400
 local pendingLump
@@ -352,7 +354,7 @@ local function ReadXP()
 end
 
 local function NewSession()
-	return { start = time(), gained = 0, questXP = 0, events = {} }
+	return { start = time(), gained = 0, questXP = 0, events = {}, quests = {} }
 end
 
 local function XPSession()
@@ -365,6 +367,7 @@ local function XPSession()
 	end
 	if type(session.events) ~= "table" then session.events = {} end
 	if type(session.questXP) ~= "number" then session.questXP = 0 end
+	if type(session.quests) ~= "table" then session.quests = {} end
 	return session
 end
 
@@ -418,6 +421,10 @@ local function OnQuestTurnedIn(xpReward)
 	if not xpReward or xpReward <= 0 then return end
 	local session = XPSession()
 	if not session then return end
+
+	local quests = session.quests
+	quests[#quests + 1] = xpReward
+	while #quests > QUESTS_AVERAGED do table.remove(quests, 1) end
 	local events = session.events
 	local last = events[#events]
 	if type(last) == "table" and type(last.t) == "number" and type(last.kill) == "number"
@@ -491,6 +498,27 @@ local function XPRate()
 	return blended + questRate, elapsed, session.gained, grindRate, killRate, questRate
 end
 
+local function ToLevel(remaining)
+	local session = KUI.db and KUI.db.xpSession
+	if type(session) ~= "table" or remaining <= 0 then return nil, nil end
+	local killSum, killN = 0, 0
+	local events = type(session.events) == "table" and session.events or {}
+	for i = #events, 1, -1 do
+		local e = events[i]
+		if type(e) == "table" and type(e.kill) == "number" and e.kill > 0 then
+			killSum, killN = killSum + e.kill, killN + 1
+			if killN >= KILLS_AVERAGED then break end
+		end
+	end
+	local questSum, questN = 0, 0
+	for _, q in ipairs(type(session.quests) == "table" and session.quests or {}) do
+		if type(q) == "number" and q > 0 then questSum, questN = questSum + q, questN + 1 end
+	end
+	local kills = killN > 0 and math.ceil(remaining / (killSum / killN)) or nil
+	local quests = questN > 0 and math.ceil(remaining / (questSum / questN)) or nil
+	return kills, quests
+end
+
 local function AddRateLine(label, value)
 	GameTooltip:AddDoubleLine(label, value, XP_LABEL_COLOR[1], XP_LABEL_COLOR[2], XP_LABEL_COLOR[3], 1, 1, 1)
 end
@@ -521,6 +549,9 @@ local function ShowTooltip(self)
 		AddRateLine("Quest XP/hr (smoothed)", FormatNumber(math.floor(questRate + 0.5)) .. " XP")
 		AddRateLine("Estimated XP/hr", FormatNumber(math.floor(rate + 0.5)) .. " XP")
 		AddRateLine("Time to level", FormatHoursMinutes((xpMax - xp) / rate * 3600, true))
+		local kills, quests = ToLevel(xpMax - xp)
+		if kills then AddRateLine("Kills to level", "~" .. FormatNumber(kills)) end
+		if quests then AddRateLine("Quests to level", "~" .. FormatNumber(quests)) end
 	else
 		AddRateLine("Estimated XP/hr", "gathering data...")
 		AddRateLine("Time to level", "...")
@@ -698,6 +729,11 @@ function KUI:XPBarScanReport()
 		grind and FormatNumber(math.floor(grind + 0.5)) or "n/a",
 		questRate and FormatNumber(math.floor(questRate + 0.5)) or "n/a",
 		tostring(lastXP), tostring(lastXPMax)))
+	local plainXP, plainMax = PlainNumber(xp), PlainNumber(xpMax)
+	if plainXP and plainMax then
+		local kills, quests = ToLevel(plainMax - plainXP)
+		print(string.format("  to level: %s kills, %s quests (recent averages)", kills and FormatNumber(kills) or "n/a", quests and FormatNumber(quests) or "n/a"))
+	end
 	print("  fill: " .. ((rested and rested > 0) and "BLUE (rested XP banked)" or "purple (no rested XP)"))
 	print("  player frame: " .. (IsFrame(_G.PlayerFrame) and "found" or "NOT FOUND"))
 	print("  our bar: " .. (bar and (bar:IsShown() and "showing" or "created, hidden") or "not created") .. " -- " .. anchorNote)
