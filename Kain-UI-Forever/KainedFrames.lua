@@ -7,7 +7,8 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local LOOK = {
 
 	font = "Interface\\AddOns\\" .. addonName .. "\\Media\\Fonts\\PTSansNarrow-Bold.ttf",
-	fontFlags = "OUTLINE",
+
+	fontFlags = "",
 	fontSize = 12,
 	shadow = 1,
 	inset = 3,
@@ -485,10 +486,10 @@ local function Layout(f)
 		fs:ClearAllPoints()
 		if side == "LEFT" then
 			fs:SetPoint("LEFT", bar, "LEFT", 3, 0)
-			fs:SetWidth(usable * 0.44)
+			fs:SetWidth(usable * 0.42)
 		else
 			fs:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
-			fs:SetWidth(usable * 0.56)
+			fs:SetWidth(usable * 0.58)
 		end
 	end
 	Place(f.texts.hl, f.health, "LEFT")

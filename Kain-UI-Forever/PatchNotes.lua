@@ -2,13 +2,13 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.332",
+		version = "1.0.333",
 		sections = {
 			{ title = "New", items = {
 				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",
 				"Kained: a lite take on Shadowed Unit (SUF), set up the way it's used in the recommended setup. Compact dark bars with class-coloured health (others by whether they're friendly, neutral or hostile), portraits for you, your target and your party, health and power numbers with percentages, buffs and debuffs, raid marks, leader, PvP and ready-check icons, combo points for rogues and cat-form druids, and a druid's mana while shapeshifted. Your own bars fade away out of combat at full health and power and come back when you fight, cast, get hurt or pick a target. It covers you, your pet, your target and its target, your focus and its target, and your party (hidden in raids, where Blizzard's raid view stays). It has no options of its own.",
 				"/kuf unlock lets you drag the Kained pieces (you, your pet, target, focus and party) anywhere, with the same grid and snapping as the other movable parts. The bars themselves show under the boxes while you arrange them, with you standing in for anyone who isn't there. Right-click one to put it back, /kuf lock when done, /kuf reset to put them all back. /kui unlock, /kui lock and /kui reset work too.",
-				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait becomes a third bar of your own, below health and power and drawn the same way (rested shows as a lighter stretch), and it fades with them. Names show in full, surnames included. The text is PT Sans Narrow Bold with an outline, sharp at small sizes (by ParaType, free under the SIL Open Font License, included in the Media\\Fonts folder), and names never run into the numbers beside them: anything too long ends in ...",
+				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait becomes a third bar of your own, below health and power and drawn the same way (rested shows as a lighter stretch), and it fades with them. Names show in full, surnames included. The text is PT Sans Narrow Bold with a crisp shadow, sharp at small sizes (by ParaType, free under the SIL Open Font License, included in the Media\\Fonts folder), and names never run into the numbers beside them: anything too long ends in ...",
 			} },
 		},
 	},
