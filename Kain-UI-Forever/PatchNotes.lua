@@ -2,15 +2,33 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.339",
+		version = "1.0.340",
+		sections = {
+			{ title = "New", items = {
+				"Kained party: members out of reach of your heals fade, and a debuff your class can remove shows big beside that member, edged in its colour (poison green, magic blue and so on), so it's easy to spot and cleanse.",
+				"Kained shows what a cast will do, like Blizzard's own bars: while you cast, the mana the spell will cost shows as a lighter stretch at the end of your mana bar, and heals on their way to you, your pet, your target, your focus or your party show as a green stretch past their health.",
+				"GCDWatch watches enemy players only: NPCs and pets don't flash, and in dungeons and raids nothing does. Untick Players only in its settings to watch everything you can attack.",
+				"Three new ready-made macros: Clamaclysm opens every kind of clam in your bags, one click at a time. MSO Template 1 and MSO Template 2 cast on whoever your mouse is over, then your target, then yourself: put your damage spell (1) or heal (2) where it says, and delete the /stopcasting line in the first if you don't want it.",
+			} },
+			{ title = "Changed", items = {
+				"The preset button under the logo is now called Quick Preset. It sets every option to the author's settings in one click, now including the Kained style and where its pieces sit, where moved windows open, and the screenshot on level up. Its minimap, mail icon and day/night spots are updated too.",
+				"The profile import button (under User Interface) now sets up the updated layout.",
+				"Kained: the XP bar under the portrait is now a third bar of your own, beside your portrait below health and power and drawn the same way (rested shows as a lighter stretch), and it fades with them. Your portrait runs the full height beside all three; with the XP bar off, health and power fill its room. You and your target are always the same height, so both sides stay even.",
+				"Kained text is PT Sans Narrow Bold with a crisp shadow, sharp at small sizes (by ParaType, free under the SIL Open Font License, included in the Media\\Fonts folder). Names never run into the numbers beside them: anything too long ends in ... You and your target are a little wider to fit them.",
+			} },
+			{ title = "Fixed", items = {
+				"Kained no longer sets off a stream of blocked-action warnings in combat (seen in BugSack). The game doesn't let addons rearrange these bars mid-fight, so a change to their layout (the XP bar switched on or off, a druid changing form) now waits until the fight ends, while the values keep updating live. Rogues and cat-form druids get their combo point row at the start of every fight, ready for the points.",
+			} },
+		},
+	},
+	{
+		version = "1.0.330",
 		sections = {
 			{ title = "New", items = {
 				"Style menu (in Settings, under the XP bar option): it picks the look of your portrait, pet, target, focus and party. Forever Launch is Blizzard's look, Forever Beta is the earlier look with thin bronze rings (it replaces the Restore old portrait art tick box), and Kained is new.",
 				"Kained: a lite take on Shadowed Unit (SUF), set up the way it's used in the recommended setup. Compact dark bars with class-coloured health (others by whether they're friendly, neutral or hostile), portraits for you, your target and your party, health and power numbers with percentages, buffs and debuffs, raid marks, leader, PvP and ready-check icons, combo points for rogues and cat-form druids, and a druid's mana while shapeshifted. Your own bars fade away out of combat at full health and power and come back when you fight, cast, get hurt or pick a target. It covers you, your pet, your target and its target, your focus and its target, and your party (hidden in raids, where Blizzard's raid view stays). It has no options of its own.",
-				"Kained party: members out of reach of your heals fade, and a debuff your class can remove shows big beside that member, edged in its colour (poison green, magic blue and so on), so it's easy to spot and cleanse.",
 				"/kuf unlock lets you drag the Kained pieces (you, your pet, target, focus and party) anywhere, with the same grid and snapping as the other movable parts. The bars themselves show under the boxes while you arrange them, with you standing in for anyone who isn't there. Right-click one to put it back, /kuf lock when done, /kuf reset to put them all back. /kui unlock, /kui lock and /kui reset work too.",
-				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait becomes a third bar of your own, beside your portrait below health and power and drawn the same way (rested shows as a lighter stretch), and it fades with them. Your portrait runs the full height beside all three; with the XP bar off, health and power fill its room. You and your target are always the same height, so both sides stay even. Names show in full, surnames included. The text is PT Sans Narrow Bold with a crisp shadow, sharp at small sizes (by ParaType, free under the SIL Open Font License, included in the Media\\Fonts folder), and names never run into the numbers beside them: anything too long ends in ...",
-				"Kained shows what a cast will do, like Blizzard's own bars: while you cast, the mana the spell will cost shows as a lighter stretch at the end of your mana bar, and heals on their way to you, your pet, your target, your focus or your party show as a green stretch past their health.",
+				"Picking Kained works straight away (or once you're out of combat). Going back to Forever Launch or Beta asks for a /reload, and Kained stays until then. With Kained on, the XP bar under the portrait becomes a square strip right under your own bars, lined up with the portrait, in a thin grey edge so it still reads as a bar when it's empty. Names show in full, surnames included, with a soft shadow behind the text.",
 			} },
 		},
 	},
@@ -19,7 +37,6 @@ local PATCH_NOTES = {
 		sections = {
 			{ title = "New", items = {
 				"GCDWatch (in Settings, under Nameplates): see what an enemy just did as an icon with its name beside their nameplate. Their spells show with a gold edge, buffs they just gained with a green edge, and in duels the debuffs they just put on you with a red edge, while a sweep counts down over the icon. There's also an optional bar for your target that you can place anywhere. The Settings button beside it opens all its options, and /kui gcdw lists its commands. Off unless you tick it; the recommended preset turns it on.",
-				"GCDWatch watches enemy players only: NPCs and pets don't flash, and in dungeons and raids nothing does. Untick Players only in its settings to watch everything you can attack.",
 				"GCDWatch is based on Forever GCD by Tarolg, used under its MIT license. If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off, so nothing shows twice.",
 			} },
 		},

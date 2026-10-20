@@ -516,7 +516,10 @@ local function UpdatePortrait(f)
 	if f.portraitRatio then Cover(f.portrait, f.portraitRatio) end
 end
 
+local layoutPending = false
+
 local function Layout(f)
+	if InCombatLockdown() then layoutPending = true return end
 	local spec = f.spec
 	local W, H = spec.width, spec.height + (f.extra or 0)
 	local bars = {
@@ -607,20 +610,25 @@ local function ComboWanted()
 	return false
 end
 
+local fighting = false
+
 local function UpdateCombo(f)
 	local combo = f.combo
 	if not combo then return false end
 	local wanted = ComboWanted()
 	local points = UnitPower("player", POWER.COMBO)
-	if wanted and PlainNumber(points) and points <= 0 then wanted = false end
+	if wanted and not fighting and PlainNumber(points) and points <= 0 then wanted = false end
 	local max = UnitPowerMax("player", POWER.COMBO)
 	if not PlainNumber(max) or max < 1 then max = 5 end
 	if max > MAX_COMBO then max = MAX_COMBO end
 	local changed = (combo.wanted and true or false) ~= wanted or combo.count ~= max
 	combo.wanted, combo.count = wanted, max
+
+	local showSegs = combo.shownCount ~= max and not InCombatLockdown()
+	if showSegs then combo.shownCount = max end
 	for i = 1, MAX_COMBO do
 		local seg = combo.segs[i]
-		seg:SetShown(i <= max)
+		if showSegs then seg:SetShown(i <= max) end
 
 		seg:SetMinMaxValues(i - 1, i)
 		seg:SetValue(points)
@@ -646,7 +654,7 @@ end
 local function UpdateExtras(f)
 	local a = UpdateCombo(f)
 	local b = UpdateDruid(f)
-	if a or b then Layout(f) end
+	if (a or b) or (f.combo and f.combo.shownCount ~= f.combo.count) then Layout(f) end
 end
 
 local function SetIcon(icon, shown, texture, l, r, t, b)
@@ -1590,6 +1598,19 @@ function KUI:ResetKainedPositions()
 	PlaceFrames()
 end
 
+function KUI:SetKainedPositions(positions)
+	if not KUI.db then return end
+	local copy = {}
+	if type(positions) == "table" then
+		for key, p in pairs(positions) do
+			if type(p) == "table" and type(p.x) == "number" and type(p.y) == "number" then copy[key] = { x = p.x, y = p.y } end
+		end
+	end
+	KUI.db.kainedPositions = copy
+	for _, box in pairs(movers) do PlaceMover(box) end
+	PlaceFrames()
+end
+
 function KUI:IsKainedUnlocked() return unlocked end
 
 SLASH_KAINUIKUF1 = "/kuf"
@@ -1642,6 +1663,16 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 		KUI:ApplyKainedFrames()
 	end
 	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
+
+	if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+		fighting = event == "PLAYER_REGEN_DISABLED"
+		local relayout = layoutPending and not fighting
+		layoutPending = false
+		Each(function(f)
+			if f.combo or f.druid then pcall(UpdateExtras, f) end
+			if relayout then pcall(Layout, f) end
+		end)
+	end
 	if event == "PLAYER_REGEN_DISABLED" and previewing then StopPreview() end
 	if event == "PLAYER_REGEN_ENABLED" then
 

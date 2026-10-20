@@ -12,7 +12,7 @@ function KUI:ResolveScreenPosition(spec)
 	return { x = baseX + (spec.dx or 0), y = baseY + (spec.dy or 0) }
 end
 
-local DEFAULT_MINIMAP_POSITION = { from = "TOPRIGHT", dx = -204.8, dy = -26.0 }
+local DEFAULT_MINIMAP_POSITION = { from = "TOPRIGHT", dx = -204.8, dy = -24.7 }
 local DEFAULT_MINIMAPCLUSTER_POSITION = { from = "TOP", dx = -150.7, dy = 271.7 }
 
 local MINIMAP_STRATA = "MEDIUM"

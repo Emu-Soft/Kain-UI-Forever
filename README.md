@@ -42,7 +42,7 @@ To update, replace the `Kain-UI-Forever` folder with the one from the newest rel
 
 Every option starts switched off on a new character, so you only get the changes you choose.
 
-- **Kain's preset** sets every option the recommended way in one click.
+- **Quick Preset** sets every option to the author's settings in one click.
 - **Import Kain-UI Profile** sets up the recommended screen layout and switches on the extra action bars.
 
 Hover the small **i** icons in the settings to read what an option does. The blue gem in the bottom-left corner opens the patch notes, and the version you're running is shown in the bottom-right corner.
@@ -96,7 +96,7 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 ### Macros
 - **Weapon Swap Macro Helper**: drag your weapons into the slots at the top of the settings for a one-click swap macro.
 - **Macro icon names**: hover any macro icon to see its name, or search icons by name.
-- **Starter macros**: coin flip, skull and cross raid markers, and a guild inviter.
+- **Starter macros**: coin flip, skull and cross raid markers, a guild inviter, Clamaclysm (opens every kind of clam) and two mouseover templates (MSO Template 1 for a damage spell, MSO Template 2 for a heal).
 
 ### Layout
 - **Snap to elements**: things you move snap into line, with an alignment grid while you arrange.

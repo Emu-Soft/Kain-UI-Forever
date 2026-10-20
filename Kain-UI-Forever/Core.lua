@@ -46,9 +46,9 @@ KUI.KAIN_PRESET = {
 	minimapDetached = true,
 
 	minimapPositions = {
-		minimap = { from = "TOPRIGHT", dx = -204.8, dy = -25.8 },
+		minimap = { from = "TOPRIGHT", dx = -204.8, dy = -24.7 },
 		minimapcluster = { from = "TOP", dx = -150.7, dy = 271.7 },
-		zonebar = { from = "TOPRIGHT", dx = -105.8, dy = -1.7 },
+		zonebar = { from = "TOPRIGHT", dx = -104.1, dy = -3.4 },
 
 		guilddifficulty = { from = "TOPRIGHT", dx = -33.8, dy = 0 },
 
@@ -79,6 +79,23 @@ KUI.KAIN_PRESET = {
 	xpBarHideDefault = true,
 	classicFrameArt = true,
 
+	unitFrameStyle = "kained",
+	kainedPositions = {
+		focus = { x = -371.7, y = -143.6 },
+		focustarget = { x = -371.3, y = -170.5 },
+		party = { x = -960.8, y = -65.1 },
+		targettarget = { x = 367.8, y = -168 },
+	},
+
+	windowPositions = {
+		character = { from = "TOPLEFT", dx = 18.5, dy = -148.5 },
+		spellbook = { from = "TOPLEFT", dx = 202.5, dy = -146.8 },
+		macro = { from = "TOPLEFT", dx = 41.8, dy = -193.5 },
+		npc = { from = "TOPLEFT", dx = 11.8, dy = -156.8 },
+		professions = { from = "TOPLEFT", dx = 219.3, dy = -307.7 },
+		bags = { from = "BOTTOMRIGHT", dx = -430.8, dy = 443.7 },
+	},
+
 	minimapElementsUnlocked = false,
 	platerStyle = true,
 	tooltipAnchorMode = "growRight",
@@ -87,18 +104,19 @@ KUI.KAIN_PRESET = {
 	tooltipAnchorPos = { point = "BOTTOM", relPoint = "BOTTOM", x = 289.2, y = 1.7 },
 	snapToElements = true,
 
-	mailIconScreenPos = { left = 2106, top = 995.2 },
+	mailIconScreenPos = { left = 2094.4, top = 1004.4 },
 
 	squareMinimap = true,
 	emojiChat = true,
 	lootRollTarget = { left = 927.3, top = 343.5 },
-	dielPos = { x = 2.8, y = 0 },
+	dielPos = { x = 1.1, y = -2.5 },
 
 	emojiButtonOffset = { x = 0, y = 6 },
 
 	socialButtonPos = { x = 0, y = 219 },
 	socialButtonUnlocked = false,
 	gcdWatch = true,
+	levelUpScreenshot = true,
 }
 
 local function CopyDefaults(dst, src)

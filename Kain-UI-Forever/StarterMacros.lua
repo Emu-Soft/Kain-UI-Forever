@@ -25,6 +25,25 @@ local STARTER_MACROS = {
 		icon = "INV_Letter_18",
 		body = [[/run local u="mouseover"; if not(UnitExists(u) and UnitIsPlayer(u)) then u="target" end; if UnitExists(u) and UnitIsPlayer(u) then local n,r=UnitFullName(u); C_GuildInfo.Invite(r and n.."-"..r or n) end]],
 	},
+
+	{
+		key = "clamaclysm",
+		name = "Clamaclysm",
+		icon = "INV_Misc_QuestionMark",
+		body = "#showtooltip item:7973\n/use small barnacled clam\n/use thick-shelled clam\n/use soft-shelled clam\n/use big-mouth clam\n/use jaggal clam\n/use darkwater clam\n/use brooding darkwater clam\n/use giant darkwater clam",
+	},
+	{
+		key = "msotemplate1",
+		name = "MSO Template 1",
+		icon = "INV_Misc_QuestionMark",
+		body = "#showtooltip\n/stopcasting <- REMOVE THIS IF YOU DON'T NEED IT\n/cast [@mouseover,harm,nodead][harm,nodead][] <DAMAGE SPELL>",
+	},
+	{
+		key = "msotemplate2",
+		name = "MSO Template 2",
+		icon = "INV_Misc_QuestionMark",
+		body = "#showtooltip\n/cast [@mouseover,help,nodead][help,nodead][] <HEALING SPELL>",
+	},
 }
 
 local scanLines = { "starter macros haven't been installed yet this session -- run /kainui installmacros." }

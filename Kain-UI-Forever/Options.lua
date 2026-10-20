@@ -239,9 +239,19 @@ function KUI:ApplyKainPreset()
 	Set("SetLootRollDragging", p.lootRollDragging)
 	Set("SetLootRollAnchorLocked", p.lootRollAnchorLocked)
 	if p.lootRollTarget then Set("SetLootRollTarget", p.lootRollTarget.left, p.lootRollTarget.top) end
+
+	if p.windowPositions then
+		self.db.framePositions = self.db.framePositions or {}
+		for key, spec in pairs(p.windowPositions) do
+			local pos = self.ResolveScreenPosition and self:ResolveScreenPosition(spec)
+			if pos then self.db.framePositions[key] = { x = pos.x, y = pos.y } end
+		end
+	end
 	Set("SetGlobalDragging", p.globalDragging)
 	Set("SetXPBarUnderPortrait", p.xpBarUnderPortrait)
 	Set("SetHideDefaultXPBar", p.xpBarHideDefault)
+
+	if p.kainedPositions then Set("SetKainedPositions", p.kainedPositions) end
 
 	if KUI.SetUnitFrameStyle then
 		Set("SetUnitFrameStyle", p.unitFrameStyle or (p.classicFrameArt and "beta" or "launch"))
@@ -259,6 +269,7 @@ function KUI:ApplyKainPreset()
 	if p.platerStyle ~= nil then Set("SetPlaterStyle", p.platerStyle) end
 
 	if p.gcdWatch ~= nil then Set("SetGCDWatch", p.gcdWatch) end
+	if p.levelUpScreenshot ~= nil then Set("SetLevelUpScreenshot", p.levelUpScreenshot) end
 	if p.mailIconScreenPos then
 		Set("SetMailIconScreenPosition", p.mailIconScreenPos.left, p.mailIconScreenPos.top)
 	elseif p.mailIconPos then
@@ -279,14 +290,14 @@ function KUI:ApplyKainPreset()
 
 	RefreshPanel()
 	if #failed > 0 then
-		print("|cffff6060Kain-UI Forever:|r Kain's preset applied, except: " .. table.concat(failed, "; "))
+		print("|cffff6060Kain-UI Forever:|r Quick Preset applied, except: " .. table.concat(failed, "; "))
 	else
-		print("|cff33ff99Kain-UI Forever|r Kain's preset applied. If anything looks half-changed, /reload.")
+		print("|cff33ff99Kain-UI Forever|r Quick Preset applied. If anything looks half-changed, /reload.")
 	end
 end
 
 StaticPopupDialogs["KAINUIFOREVER_APPLY_PRESET"] = {
-	text = "Apply Kain's preset?\n\nEvery option on this panel will be switched to Kain's layout, replacing your current choices.",
+	text = "Apply the Quick Preset?\n\nEvery option on this panel will be switched to the author's settings, replacing your current choices.",
 	button1 = "Apply",
 	button2 = CANCEL or "Cancel",
 	OnAccept = function() KUI:ApplyKainPreset() end,
@@ -503,11 +514,11 @@ local function BuildPanel()
 	local presetButton = CreateFrame("Button", "KainUIForeverPresetButton", f, "UIPanelButtonTemplate")
 	presetButton:SetSize(150, 24)
 	presetButton:SetPoint("TOP", logo, "BOTTOM", 0, -2)
-	presetButton:SetText("Kain's preset")
+	presetButton:SetText("Quick Preset")
 	presetButton:SetScript("OnClick", function()
 		StaticPopup_Show("KAINUIFOREVER_APPLY_PRESET")
 	end)
-	AddInfoButton(f, presetButton, "Kain's preset", "Recommended settings for this mod.")
+	AddInfoButton(f, presetButton, "Quick Preset", "Pre-configured settings by the author.")
 
 	f:SetScript("OnShow", RefreshPanel)
 
