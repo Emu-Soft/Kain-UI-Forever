@@ -106,7 +106,10 @@ local PARTY = { width = 190, height = 45, scale = 1, spacing = 23,
 	auras = {
 		{ filter = "HELPFUL", side = "LEFT", below = true, max = 5 },
 		{ filter = "HARMFUL", side = "RIGHT", below = true, max = 5 },
-	} }
+
+		{ filter = "HARMFUL|RAID_PLAYER_DISPELLABLE", side = "OUTSIDE", max = 2, size = 26, edge = 2 },
+	},
+	range = true }
 for i = 1, 4 do
 	local spec = {}
 	for k, v in pairs(PARTY) do spec[k] = v end
@@ -678,12 +681,12 @@ local function AurasAvailable()
 	return aurasAvailable
 end
 
-local function InitAuraButton(button, harmful, cancel)
-	local size = LOOK.auraSize
+local function InitAuraButton(button, harmful, cancel, size, thickness)
+	size, thickness = size or LOOK.auraSize, thickness or 1
 	button:SetSize(size, size)
 	local edge = button:CreateTexture(nil, "BACKGROUND")
-	edge:SetPoint("TOPLEFT", button, "TOPLEFT", -1, 1)
-	edge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, -1)
+	edge:SetPoint("TOPLEFT", button, "TOPLEFT", -thickness, thickness)
+	edge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", thickness, -thickness)
 	edge:SetTexture(WHITE)
 	if harmful then edge:SetVertexColor(0.8, 0, 0) else edge:SetVertexColor(0.6, 0.6, 0.6) end
 	local icon = button:CreateTexture(nil, "ARTWORK")
@@ -701,7 +704,7 @@ local function InitAuraButton(button, harmful, cancel)
 	if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
 	if button.SetDurationCooldown then pcall(button.SetDurationCooldown, button, cooldown) end
 	local stack = button:CreateFontString(nil, "OVERLAY")
-	stack:SetFont(LOOK.font, 10, "OUTLINE")
+	stack:SetFont(LOOK.font, size > LOOK.auraSize and 12 or 10, "OUTLINE")
 	stack:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -1)
 	stack:SetJustifyH("RIGHT")
 	if button.SetApplicationCount then pcall(button.SetApplicationCount, button, stack, {}) end
@@ -713,6 +716,20 @@ end
 local function PlaceAuraRow(f, row)
 	local def = row.def
 	local inset = LOOK.inset
+	local size = def.size or LOOK.auraSize
+	if def.side == "OUTSIDE" then
+
+		row.container:ClearAllPoints()
+		row.container:SetPoint("LEFT", f, "RIGHT", (def.edge or 1) + 1 - inset, 0)
+		if row.container.SetFlowLayoutAnchorPoint then pcall(row.container.SetFlowLayoutAnchorPoint, row.container, "LEFT") end
+		if row.container.SetFlowLayoutGrowthDirection then
+			pcall(row.container.SetFlowLayoutGrowthDirection, row.container, AnchorUtil.FlowDirection.Right, AnchorUtil.FlowDirection.Down)
+		end
+		if row.container.SetFlowLayoutMaximumLineSize then
+			pcall(row.container.SetFlowLayoutMaximumLineSize, row.container, def.max * (size + 2 * (def.edge or 1) + LOOK.auraSpacing) + 2)
+		end
+		return
+	end
 	local drop = 1
 	if f.xpShown then drop = 1 - (LOOK.gap + LOOK.xpHeight) end
 	local v = def.below and "TOP" or "BOTTOM"
@@ -739,11 +756,12 @@ local function BuildAuraRow(f, def)
 	container:SetFrameLevel(f:GetFrameLevel() + 6)
 
 	container:SetEnabled(false)
-	local harmful = def.filter == "HARMFUL"
+	local harmful = def.filter:find("HARMFUL", 1, true) ~= nil
+	local spacing = LOOK.auraSpacing + 2 * ((def.edge or 1) - 1)
 	local added = pcall(container.AddAuraGroup, container, "auras", def.filter, {
 		maxFrameCount = def.max,
-		layout = { elementSpacing = LOOK.auraSpacing, lineSpacing = LOOK.auraSpacing },
-		initializeFrame = function(button) pcall(InitAuraButton, button, harmful, def.cancel) end,
+		layout = { elementSpacing = spacing, lineSpacing = spacing },
+		initializeFrame = function(button) pcall(InitAuraButton, button, harmful, def.cancel, def.size, def.edge) end,
 	})
 	if not added then return nil end
 	local row = { container = container, def = def }
@@ -757,6 +775,63 @@ local function RefreshAuras(f)
 	for _, row in ipairs(f.auraRows) do
 		if row.container.UpdateAllAuras then pcall(row.container.UpdateAllAuras, row.container) end
 	end
+end
+
+local RANGE_IN, RANGE_OUT, RANGE_EVERY = 1, 0.7, 0.5
+local HEAL_SPELLS = {
+	PRIEST = { 2050, 2054, 139, 17 },
+	DRUID = { 5185, 774 },
+	PALADIN = { 635, 19750 },
+	SHAMAN = { 331, 8004 },
+	WARLOCK = { 5697 },
+	MAGE = { 1459, 604 },
+}
+local rangeSpell
+local rangeTicker
+
+local function KnowsSpell(id)
+	if C_SpellBook and C_SpellBook.IsSpellInSpellBook then
+		local ok, known = pcall(C_SpellBook.IsSpellInSpellBook, id)
+		if ok and Plain(known) then return known == true end
+	end
+	if type(IsPlayerSpell) == "function" then
+		local ok, known = pcall(IsPlayerSpell, id)
+		if ok and Plain(known) then return known == true end
+	end
+	if type(IsSpellKnown) == "function" then
+		local ok, known = pcall(IsSpellKnown, id)
+		if ok and Plain(known) then return known == true end
+	end
+	return false
+end
+
+local function ResolveRangeSpell()
+	rangeSpell = nil
+	local _, class = UnitClass("player")
+	if not Plain(class) then return end
+	for _, id in ipairs(HEAL_SPELLS[class] or {}) do
+		if KnowsSpell(id) then rangeSpell = id return end
+	end
+end
+
+local function UpdateRange(f)
+	if f.preview then f:SetAlpha(RANGE_IN) return end
+	local unit = f.unit
+	local connected = UnitIsConnected(unit)
+	if Plain(connected) and connected == false then f:SetAlpha(RANGE_OUT) return end
+	if rangeSpell and C_Spell and C_Spell.IsSpellInRange then
+		local ok, inRange = pcall(C_Spell.IsSpellInRange, rangeSpell, unit)
+		if ok and Plain(inRange) and inRange ~= nil then
+			f:SetAlpha((inRange == true or inRange == 1) and RANGE_IN or RANGE_OUT)
+			return
+		end
+	end
+	if type(UnitInRange) == "function" then
+		local ok, inRange = pcall(UnitInRange, unit)
+		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, RANGE_OUT) then return end
+		if ok and Plain(inRange) then f:SetAlpha(inRange and RANGE_IN or RANGE_OUT) return end
+	end
+	f:SetAlpha(RANGE_IN)
 end
 
 local FullUpdate, PlacePanel
@@ -1111,6 +1186,14 @@ local function BuildAll()
 	built = true
 end
 
+local function RangeTick()
+	if not Showing() then return end
+	for _, spec in ipairs(UNITS) do
+		local f = frames[spec.key]
+		if f and spec.range and f:IsVisible() then pcall(UpdateRange, f) end
+	end
+end
+
 local function Activate()
 	for _, spec in ipairs(UNITS) do
 		local f = frames[spec.key]
@@ -1121,6 +1204,8 @@ local function Activate()
 		end
 	end
 	Each(FullUpdate)
+	ResolveRangeSpell()
+	if not rangeTicker and C_Timer and C_Timer.NewTicker then rangeTicker = C_Timer.NewTicker(RANGE_EVERY, RangeTick) end
 end
 
 function KUI:ApplyKainedFrames()
@@ -1443,7 +1528,7 @@ for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "PLAYE
 		"GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "RAID_TARGET_UPDATE", "PLAYER_UPDATE_RESTING",
 		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "UNIT_PET", "PLAYER_ENTERING_WORLD",
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
-		"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
+		"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB" }) do
 	pcall(eventFrame.RegisterEvent, eventFrame, event)
 end
 eventFrame:SetScript("OnEvent", function(_, event, unit)
@@ -1463,6 +1548,10 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 		end
 	end
 	if not Showing() then return end
+	if event == "SPELLS_CHANGED" or event == "LEARNED_SPELL_IN_TAB" then
+		ResolveRangeSpell()
+		return
+	end
 	if event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
 
 		Each(function(f) pcall(PlacePanel, f) end)

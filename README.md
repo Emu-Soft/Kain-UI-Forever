@@ -67,7 +67,7 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - Let the minimap sit partly off the edge of the screen.
 
 ### Unit frames
-- **Style** (under Unit Frames in the settings): Forever Launch (Blizzard's look), Forever Beta (the earlier look with thin bronze rings) or **Kained Unit Frames**, a lite recreation of Shadowed Unit Frames: compact dark bars for you, your pet, target, target of target, focus, focus target and party, with portraits, auras, combo points and your frame fading out of combat. `/kuf unlock` (or `/kui unlock`) to move them, `/kuf lock` when done, `/kuf reset` to put them back. Its text is PT Sans Narrow by ParaType, used under the SIL Open Font License (included in `Media/Fonts`).
+- **Style** (under Unit Frames in the settings): Forever Launch (Blizzard's look), Forever Beta (the earlier look with thin bronze rings) or **Kained Unit Frames**, a lite recreation of Shadowed Unit Frames: compact dark bars for you, your pet, target, target of target, focus, focus target and party, with portraits, auras, combo points and your frame fading out of combat. Party members out of reach of your heals fade, and debuffs your class can remove show big beside them. `/kuf unlock` (or `/kui unlock`) to move them, `/kuf lock` when done, `/kuf reset` to put them back. Its text is PT Sans Narrow by ParaType, used under the SIL Open Font License (included in `Media/Fonts`).
 
 ### XP bar
 - **XP bar under your portrait**, with a gold marker where rested XP starts, and the option to hide Blizzard's.
