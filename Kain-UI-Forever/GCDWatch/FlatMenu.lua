@@ -87,6 +87,7 @@ end
 function Description:SetScrollMode(height) self.scrollHeight = Number(height) end
 function Description:SetEnabled(enabled) self.enabled = enabled end
 function Description:SetTooltip(tooltip) self.tooltip = tooltip end
+function Description:SetFont(file, size, flags) self.font = { file, size, flags or "" } end
 function Description:SetOnEnter(onEnter) self.onEnter = onEnter end
 function Description:SetOnLeave(onLeave) self.onLeave = onLeave end
 function Description:GetData() return self.data end
@@ -623,6 +624,12 @@ local function Fill(row, entry)
     row.label:ClearAllPoints()
     row.label:SetPoint("LEFT", choice and 22 or 8, 0)
     row.label:SetPoint("RIGHT", submenu and -18 or -8, 0)
+    if entry.font then
+        row.customFont = row.label:SetFont(entry.font[1], entry.font[2], entry.font[3]) ~= false
+    elseif row.customFont then
+        row.label:SetFontObject("GameFontHighlightSmall")
+        row.customFont = nil
+    end
     row.label:SetText(entry.text or "")
 
     local color = TEXT
@@ -643,8 +650,10 @@ local function Wanted(panel, entry)
         return SLIDER_WIDTH + (panel.sliderLabel - 60) + (panel.sliderValue - 36) + (entry.default and 18 or 0)
     end
     if kind == "input" then return entry.options.width or INPUT_WIDTH end
+    if entry.font then panel.measure:SetFont(entry.font[1], entry.font[2], entry.font[3]) end
     panel.measure:SetText(entry.text or "")
     local text = Number(panel.measure:GetStringWidth()) or 0
+    if entry.font then panel.measure:SetFontObject("GameFontHighlightSmall") end
     if kind == "title" then return text + 12 end
     local left = (kind == "radio" or kind == "check") and 22 or 8
     return left + text + (entry:HasSubmenu() and 20 or 10)

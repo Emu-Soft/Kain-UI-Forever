@@ -4,6 +4,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local WIDTH = 600
 local ROW = 28
 local FADE_X, ALPHA_X, SCALE_X, SLIDER_W = 140, 172, 390, 140
+local PREVIEW_SIZE = 14
 
 local panel
 local refreshers = {}
@@ -85,7 +86,8 @@ local function Dropdown(parent, x, y, width, choices, get, set)
 		if flat and flat.Open then
 			flat.Open(self, function(_, root)
 				for _, c in ipairs(choices()) do
-					root:CreateRadio(c.label, function() return get() == c.key end, function() Pick(c.key) end)
+					local radio = root:CreateRadio(c.label, function() return get() == c.key end, function() Pick(c.key) end)
+					if c.font and radio.SetFont then radio:SetFont(c.font, PREVIEW_SIZE, c.flags) end
 				end
 			end)
 			return
@@ -177,7 +179,7 @@ local function Build()
 		function() return KUI:GetKainedPartyLook("range") end,
 		function(on) KUI:SetKainedPartyLook("range", on) end)
 	Info(f, rangeLook.label, "Out of range",
-		"A party member your heals can't reach, or who is offline, turns fully grey: health, power and portrait, still at full strength. Untick for just a light fade instead.")
+		"A party member your heals can't reach, or who is offline, fades with a grey wash over their bars; names and numbers stay readable on top. The red in-combat edge still shows at full strength. Untick for just a light fade instead.")
 	y = y - 26
 	local combatLook = Checkbox(f, 12, y, "Red edge on party members in combat",
 		function() return KUI:GetKainedPartyLook("combat") end,
@@ -189,21 +191,30 @@ local function Build()
 	Label(f, 16, y, "Text", "GameFontNormalSmall")
 	y = y - 20
 	local function FontPart(i) return select(i, KUI:GetKainedFont()) end
+	local function FamilyOf(key)
+		for _, family in ipairs(KUI.KAINED_FONTS) do
+			if family.key == key then return family end
+		end
+	end
 	Label(f, 16, y - 5, "Font")
 	Dropdown(f, FADE_X, y, 200,
-		function() return KUI.KAINED_FONTS end,
+		function()
+			local list, style = {}, FontPart(2)
+			for _, family in ipairs(KUI.KAINED_FONTS) do
+				list[#list + 1] = { key = family.key, label = family.label, font = family.styles[style] or family.styles.regular or select(2, next(family.styles)) }
+			end
+			return list
+		end,
 		function() return FontPart(1) end,
 		function(key) KUI:SetKainedFont(key) end)
 	y = y - ROW
 	Label(f, 16, y - 5, "Style")
 	Dropdown(f, FADE_X, y, 200,
 		function()
-			local list, current = {}, FontPart(1)
-			for _, family in ipairs(KUI.KAINED_FONTS) do
-				if family.key == current then
-					for _, style in ipairs(KUI.KAINED_FONT_STYLES) do
-						if family.styles[style.key] then list[#list + 1] = style end
-					end
+			local list, family = {}, FamilyOf(FontPart(1))
+			for _, style in ipairs(KUI.KAINED_FONT_STYLES) do
+				if family and family.styles[style.key] then
+					list[#list + 1] = { key = style.key, label = style.label, font = family.styles[style.key] }
 				end
 			end
 			return list
@@ -213,7 +224,14 @@ local function Build()
 	y = y - ROW
 	Label(f, 16, y - 5, "Outline")
 	Dropdown(f, FADE_X, y, 200,
-		function() return KUI.KAINED_FONT_OUTLINES end,
+		function()
+			local list, family = {}, FamilyOf(FontPart(1))
+			local file = family and family.styles[FontPart(2)]
+			for _, outline in ipairs(KUI.KAINED_FONT_OUTLINES) do
+				list[#list + 1] = { key = outline.key, label = outline.label, font = file, flags = outline.key }
+			end
+			return list
+		end,
 		function() return FontPart(3) end,
 		function(key) KUI:SetKainedFont(nil, nil, key) end)
 	y = y - 40
