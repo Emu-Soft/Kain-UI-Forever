@@ -68,6 +68,38 @@ local function Button(parent, x, y, width, text, onClick)
 	return button
 end
 
+local function Dropdown(parent, x, y, width, choices, get, set)
+	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	button:SetSize(width, 22)
+	button:SetPoint("TOPLEFT", x, y)
+	local function Sync()
+		local current = get()
+		for _, c in ipairs(choices()) do
+			if c.key == current then button:SetText(c.label) end
+		end
+	end
+	local function Pick(key) set(key); Refresh() end
+	local flat = KUI.GCDWatch and KUI.GCDWatch.FlatMenu
+	if flat and flat.DownArrow then flat.DownArrow(button) end
+	button:SetScript("OnClick", function(self)
+		if flat and flat.Open then
+			flat.Open(self, function(_, root)
+				for _, c in ipairs(choices()) do
+					root:CreateRadio(c.label, function() return get() == c.key end, function() Pick(c.key) end)
+				end
+			end)
+			return
+		end
+		local list, index = choices(), 1
+		for i, c in ipairs(list) do
+			if c.key == get() then index = i % #list + 1 end
+		end
+		Pick(list[index].key)
+	end)
+	refreshers[#refreshers + 1] = Sync
+	return button
+end
+
 local function Build()
 	local f = CreateFrame("Frame", "KainUIForeverKainedOptionsFrame", UIParent, "BackdropTemplate")
 	f:SetPoint("CENTER")
@@ -135,7 +167,39 @@ local function Build()
 		function(on) KUI:SetKainedPartyHorizontal(on) end)
 	Info(f, sideways.label, "Stack party frames side by side",
 		"Lines your party up in a row instead of a column. The top-left corner stays where it is; /kuf unlock to move the row.")
-	y = y - 36
+	y = y - 34
+
+	Label(f, 16, y, "Text", "GameFontNormalSmall")
+	y = y - 20
+	local function FontPart(i) return select(i, KUI:GetKainedFont()) end
+	Label(f, 16, y - 5, "Font")
+	Dropdown(f, FADE_X, y, 200,
+		function() return KUI.KAINED_FONTS end,
+		function() return FontPart(1) end,
+		function(key) KUI:SetKainedFont(key) end)
+	y = y - ROW
+	Label(f, 16, y - 5, "Style")
+	Dropdown(f, FADE_X, y, 200,
+		function()
+			local list, current = {}, FontPart(1)
+			for _, family in ipairs(KUI.KAINED_FONTS) do
+				if family.key == current then
+					for _, style in ipairs(KUI.KAINED_FONT_STYLES) do
+						if family.styles[style.key] then list[#list + 1] = style end
+					end
+				end
+			end
+			return list
+		end,
+		function() return FontPart(2) end,
+		function(key) KUI:SetKainedFont(nil, key) end)
+	y = y - ROW
+	Label(f, 16, y - 5, "Outline")
+	Dropdown(f, FADE_X, y, 200,
+		function() return KUI.KAINED_FONT_OUTLINES end,
+		function() return FontPart(3) end,
+		function(key) KUI:SetKainedFont(nil, nil, key) end)
+	y = y - 40
 
 	local lockButton = Button(f, 16, y, 120, "Unlock", function()
 		SlashCmdList["KAINUIKUF"](KUI:IsKainedUnlocked() and "lock" or "unlock")

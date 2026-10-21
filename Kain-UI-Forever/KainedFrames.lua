@@ -25,6 +25,29 @@ local LOOK = {
 	xpRestedAlpha = 0.45,
 }
 
+local FONT_DIR = "Interface\\AddOns\\" .. addonName .. "\\Media\\Fonts\\"
+local FONTS = {
+	{ key = "ptsansnarrow", label = "PT Sans Narrow", styles = {
+		regular = FONT_DIR .. "PTSansNarrow-Regular.ttf", bold = FONT_DIR .. "PTSansNarrow-Bold.ttf" } },
+	{ key = "ptsans", label = "PT Sans", styles = {
+		regular = FONT_DIR .. "PTSans-Regular.ttf", bold = FONT_DIR .. "PTSans-Bold.ttf",
+		italic = FONT_DIR .. "PTSans-Italic.ttf", bolditalic = FONT_DIR .. "PTSans-BoldItalic.ttf" } },
+	{ key = "robotocondensed", label = "Roboto Condensed", styles = {
+		regular = FONT_DIR .. "RobotoCondensed-Regular.ttf", bold = FONT_DIR .. "RobotoCondensed-Bold.ttf",
+		italic = FONT_DIR .. "RobotoCondensed-Italic.ttf", bolditalic = FONT_DIR .. "RobotoCondensed-BoldItalic.ttf" } },
+	{ key = "friz", label = "Friz Quadrata", styles = { regular = "Fonts\\FRIZQT__.TTF" } },
+	{ key = "arialnarrow", label = "Arial Narrow", styles = { regular = "Fonts\\ARIALN.TTF" } },
+	{ key = "morpheus", label = "Morpheus", styles = { regular = "Fonts\\MORPHEUS.TTF" } },
+	{ key = "skurri", label = "Skurri", styles = { regular = "Fonts\\SKURRI.TTF" } },
+}
+local FONT_STYLES = {
+	{ key = "regular", label = "Regular" }, { key = "bold", label = "Bold" },
+	{ key = "italic", label = "Italic" }, { key = "bolditalic", label = "Bold Italic" },
+}
+local STYLE_FALLBACK = { bolditalic = { "bolditalic", "bold", "italic", "regular" }, bold = { "bold", "regular" },
+	italic = { "italic", "regular" }, regular = { "regular", "bold" } }
+local FONT_OUTLINES = { { key = "", label = "None" }, { key = "OUTLINE", label = "Outline" }, { key = "THICKOUTLINE", label = "Thick outline" } }
+
 local function RGB(r, g, b) return { r, g, b } end
 local COLORS = {
 	health = {
@@ -1014,20 +1037,55 @@ local function NewBar(parent, level)
 	return bar
 end
 
+local function FontFamily()
+	local key = KUI.db and KUI.db.kainedFont
+	for _, family in ipairs(FONTS) do
+		if family.key == key then return family end
+	end
+	return FONTS[1]
+end
+
+local function FontStyle(family)
+	local wanted = KUI.db and KUI.db.kainedFontStyle
+	for _, style in ipairs(STYLE_FALLBACK[wanted] or STYLE_FALLBACK.bold) do
+		if family.styles[style] then return style end
+	end
+	return next(family.styles)
+end
+
+local function FontOutline()
+	local outline = KUI.db and KUI.db.kainedFontOutline
+	for _, o in ipairs(FONT_OUTLINES) do
+		if o.key == outline then return outline end
+	end
+	return LOOK.fontFlags
+end
+
 local textFont
+local textStrings = {}
+
+local function ApplyFont()
+	local family = FontFamily()
+	local flags = FontOutline()
+	local ok, set = pcall(textFont.SetFont, textFont, family.styles[FontStyle(family)], LOOK.fontSize, flags)
+	if not (ok and set) then textFont:SetFont(LOOK.font, LOOK.fontSize, flags) end
+	for _, fs in ipairs(textStrings) do fs:SetFontObject(textFont) end
+end
+
 local function TextFont()
 	if not textFont then
 		textFont = CreateFont("KainUIForeverKainedFont")
-		textFont:SetFont(LOOK.font, LOOK.fontSize, LOOK.fontFlags)
 		textFont:SetShadowColor(0, 0, 0, 1)
 		textFont:SetShadowOffset(LOOK.shadow, -LOOK.shadow)
 		textFont:SetTextColor(1, 1, 1, 1)
+		ApplyFont()
 	end
 	return textFont
 end
 
 local function NewText(layer)
 	local fs = layer:CreateFontString(nil, "OVERLAY")
+	textStrings[#textStrings + 1] = fs
 	fs:SetFontObject(TextFont())
 	fs:SetShadowColor(0, 0, 0, 1)
 	fs:SetShadowOffset(LOOK.shadow, -LOOK.shadow)
@@ -1729,6 +1787,21 @@ function KUI:ResetKainedScales()
 	if not KUI.db then return end
 	KUI.db.kainedScales = {}
 	ApplyLayoutOptions()
+end
+
+KUI.KAINED_FONTS, KUI.KAINED_FONT_STYLES, KUI.KAINED_FONT_OUTLINES = FONTS, FONT_STYLES, FONT_OUTLINES
+
+function KUI:GetKainedFont()
+	local family = FontFamily()
+	return family.key, FontStyle(family), FontOutline()
+end
+
+function KUI:SetKainedFont(fontKey, styleKey, outline)
+	if not KUI.db then return end
+	if fontKey ~= nil then KUI.db.kainedFont = fontKey end
+	if styleKey ~= nil then KUI.db.kainedFontStyle = styleKey end
+	if outline ~= nil then KUI.db.kainedFontOutline = outline end
+	if textFont then pcall(ApplyFont) end
 end
 
 function KUI:GetKainedPartyHorizontal() return Horizontal() and true or false end
