@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.344",
+		sections = {
+			{ title = "Changed", items = {
+				"The /kuf window wears the same art as the /kui settings: rounded corners, faded edges, the gold filigree in two corners, and the gem in the top-right to close it.",
+			} },
+		},
+	},
+	{
 		version = "1.0.343",
 		sections = {
 			{ title = "New", items = {

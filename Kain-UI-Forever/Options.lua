@@ -322,33 +322,20 @@ StaticPopupDialogs["KAINUIFOREVER_APPLY_LAYOUT"] = {
 	preferredIndex = 3,
 }
 
-local function BuildPanel()
-	local f = CreateFrame("Frame", "KainUIForeverOptionsFrame", UIParent, "BackdropTemplate")
-	f:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
-	f:SetPoint("CENTER")
-	f:SetMovable(true)
-	f:EnableMouse(true)
-	f:RegisterForDrag("LeftButton")
-	f:SetScript("OnDragStart", f.StartMoving)
-	f:SetScript("OnDragStop", f.StopMovingOrSizing)
-	f:SetFrameStrata("HIGH")
-	f:Hide()
+local PANEL_BG_ALPHA = 0.85
+local PANEL_CORNER_RADIUS = 14
+local MOTIF_BRIGHTNESS = 1
+local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
 
-	table.insert(UISpecialFrames, "KainUIForeverOptionsFrame")
+local MOTIF2_PIXELS, MOTIF2_CANVAS = 282, 512
+local BL_SPIKE_X, BL_SPIKE_Y = 19.0, 25.6
 
-	local PANEL_BG_ALPHA = 0.85
-	local PANEL_CORNER_RADIUS = 14
-	local MOTIF_BRIGHTNESS = 1
-	local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
+local MOTIF3_PIXELS, MOTIF3_CANVAS = 282, 512
+local TR_SPIKE_X, TR_SPIKE_Y = 17.4, 23.6
+local GEM_X, GEM_Y, GEM_SIZE = 35.0, 41.3, 22
+local M3 = MOTIF3_PIXELS / MOTIF3_CANVAS
 
-	local MOTIF2_PIXELS, MOTIF2_CANVAS = 282, 512
-	local BL_SPIKE_X, BL_SPIKE_Y = 19.0, 25.6
-
-	local MOTIF3_PIXELS, MOTIF3_CANVAS = 282, 512
-	local TR_SPIKE_X, TR_SPIKE_Y = 17.4, 23.6
-	local GEM_X, GEM_Y, GEM_SIZE = 35.0, 41.3, 22
-	local M3 = MOTIF3_PIXELS / MOTIF3_CANVAS
-
+local function DressPanel(f, closeName)
 	local unitsPerPixel = 213.3 / 256
 	if type(GetPhysicalScreenSize) == "function" then
 		local _, physH = GetPhysicalScreenSize()
@@ -437,7 +424,7 @@ local function BuildPanel()
 			gemGlow:AddMaskTexture(gemMask)
 		end
 	end
-	local closeGem = CreateFrame("Button", "KainUIForeverOptionsCloseGem", f)
+	local closeGem = CreateFrame("Button", closeName, f)
 	closeGem:SetSize(px(GEM_SIZE), px(GEM_SIZE))
 	closeGem:SetPoint("CENTER", motifTR, "TOPRIGHT", -px(GEM_X), -px(GEM_Y))
 	closeGem:SetFrameLevel(f:GetFrameLevel() + 50)
@@ -459,6 +446,25 @@ local function BuildPanel()
 		GameTooltip:Hide()
 		f:Hide()
 	end)
+	return motifBL, motifTR, px
+end
+KUI.DressOptionsPanel = DressPanel
+
+local function BuildPanel()
+	local f = CreateFrame("Frame", "KainUIForeverOptionsFrame", UIParent, "BackdropTemplate")
+	f:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
+	f:SetPoint("CENTER")
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", f.StartMoving)
+	f:SetScript("OnDragStop", f.StopMovingOrSizing)
+	f:SetFrameStrata("HIGH")
+	f:Hide()
+
+	table.insert(UISpecialFrames, "KainUIForeverOptionsFrame")
+
+	local motifBL, motifTR, px = DressPanel(f, "KainUIForeverOptionsCloseGem")
 
 	local BL_GEM_X, BL_GEM_Y, BL_GEM_SIZE = 31.7, 244.4, 17
 	local M3_GEM_X, M3_GEM_Y, M3_GLOW_HALF = 35.0, 240.7, 14

@@ -1,7 +1,7 @@
 local addonName, KUI = ...
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WIDTH = 730
+local WIDTH = 750
 local ROW = 28
 local FADE_X, SLIDER_W = 128, 90
 local ALPHA_X, SCALE_X, WIDTH_X, HEIGHT_X = 158, 296, 434, 572
@@ -117,20 +117,24 @@ local function Build()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", f.StartMoving)
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
-	if f.SetBackdrop then
-		f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-		f:SetBackdropColor(0, 0, 0, 0.85)
-		f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-	end
 	f:Hide()
 	table.insert(UISpecialFrames, "KainUIForeverKainedOptionsFrame")
 
-	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
+	if KUI.DressOptionsPanel then
+		KUI.DressOptionsPanel(f, "KainUIForeverKainedOptionsCloseGem")
+	else
+		if f.SetBackdrop then
+			f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+			f:SetBackdropColor(0, 0, 0, 0.85)
+			f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+		end
+		local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+		close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
+	end
 
-	Label(f, 16, -14, "Kained Unit Frames", "GameFontNormalLarge")
-	local status = Label(f, 16, -38, "")
-	status:SetWidth(WIDTH - 32)
+	Label(f, 24, -18, "Kained Unit Frames", "GameFontNormalLarge")
+	local status = Label(f, 24, -42, "")
+	status:SetWidth(WIDTH - 260)
 	status:SetJustifyH("LEFT")
 	refreshers[#refreshers + 1] = function()
 		if KUI:KainedFramesActive() then
@@ -142,7 +146,7 @@ local function Build()
 		end
 	end
 
-	local y = -66
+	local y = -70
 	Label(f, 16, y, "Frame", "GameFontNormalSmall")
 	local fadeHeader = Label(f, FADE_X, y, "Fade", "GameFontNormalSmall")
 	Info(f, fadeHeader, "Combat fader",
@@ -259,14 +263,15 @@ local function Build()
 
 	y = math.min(bottom, y - ROW) - 12
 
-	local lockButton = Button(f, 16, y, 120, "Unlock", function()
+	local buttonsX = math.floor((WIDTH - 420) / 2)
+	local lockButton = Button(f, buttonsX, y, 120, "Unlock", function()
 		SlashCmdList["KAINUIKUF"](KUI:IsKainedUnlocked() and "lock" or "unlock")
 	end)
 	refreshers[#refreshers + 1] = function() lockButton:SetText(KUI:IsKainedUnlocked() and "Lock" or "Unlock") end
-	Button(f, 146, y, 130, "Reset positions", function() SlashCmdList["KAINUIKUF"]("reset") end)
-	Button(f, 286, y, 150, "Reset sizes and scales", function() KUI:ResetKainedScales() end)
+	Button(f, buttonsX + 130, y, 130, "Reset positions", function() SlashCmdList["KAINUIKUF"]("reset") end)
+	Button(f, buttonsX + 270, y, 150, "Reset sizes and scales", function() KUI:ResetKainedScales() end)
 
-	f:SetSize(WIDTH, -y + 38)
+	f:SetSize(WIDTH, -y + 56)
 	f:SetScript("OnShow", Refresh)
 	panel = f
 	return f
