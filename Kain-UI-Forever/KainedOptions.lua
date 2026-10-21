@@ -172,6 +172,18 @@ local function Build()
 		function(on) KUI:SetKainedPartyHorizontal(on) end)
 	Info(f, sideways.label, "Stack party frames side by side",
 		"Lines your party up in a row instead of a column. The top-left corner stays where it is; /kuf unlock to move the row.")
+	y = y - 26
+	local rangeLook = Checkbox(f, 12, y, "Grey out party members out of range",
+		function() return KUI:GetKainedPartyLook("range") end,
+		function(on) KUI:SetKainedPartyLook("range", on) end)
+	Info(f, rangeLook.label, "Out of range",
+		"A party member your heals can't reach turns faint with a grey wash over their bars. Untick for just a light fade. Offline members show the same way.")
+	y = y - 26
+	local combatLook = Checkbox(f, 12, y, "Red edge on party members in combat",
+		function() return KUI:GetKainedPartyLook("combat") end,
+		function(on) KUI:SetKainedPartyLook("combat", on) end)
+	Info(f, combatLook.label, "In combat",
+		"A party member who is fighting gets a red edge and crossed swords in the corner. Members out of combat keep a plain frame, so you can tell at a glance who has pulled and who hasn't.")
 	y = y - 34
 
 	Label(f, 16, y, "Text", "GameFontNormalSmall")

@@ -962,7 +962,11 @@ local function RefreshAuras(f)
 	end
 end
 
-local RANGE_IN, RANGE_OUT, RANGE_EVERY = 1, 0.7, 0.5
+local RANGE_IN, RANGE_OUT, RANGE_DIM, RANGE_EVERY = 1, 0.7, 0.45, 0.5
+local IN_COMBAT_ICON = { 0.5, 1, 0, 0.49 }
+
+local function RangeLookOn() return not (KUI.db and KUI.db.kainedPartyRangeLook == false) end
+local function CombatLookOn() return not (KUI.db and KUI.db.kainedPartyCombatLook == false) end
 local HEAL_SPELLS = {
 	PRIEST = { 2050, 2054, 139, 17 },
 	DRUID = { 5185, 774 },
@@ -999,24 +1003,45 @@ local function ResolveRangeSpell()
 	end
 end
 
+local function ShowRange(f, inRange)
+	local look = RangeLookOn()
+	f:SetAlpha(inRange and RANGE_IN or (look and RANGE_DIM or RANGE_OUT))
+	if f.oor then f.oor:SetAlpha((look and not inRange) and 1 or 0) end
+end
+
 local function UpdateRange(f)
-	if f.preview then f:SetAlpha(RANGE_IN) return end
+	if f.preview then ShowRange(f, true) return end
 	local unit = f.unit
 	local connected = UnitIsConnected(unit)
-	if Plain(connected) and connected == false then f:SetAlpha(RANGE_OUT) return end
+	if Plain(connected) and connected == false then ShowRange(f, false) return end
 	if rangeSpell and C_Spell and C_Spell.IsSpellInRange then
 		local ok, inRange = pcall(C_Spell.IsSpellInRange, rangeSpell, unit)
 		if ok and Plain(inRange) and inRange ~= nil then
-			f:SetAlpha((inRange == true or inRange == 1) and RANGE_IN or RANGE_OUT)
+			ShowRange(f, inRange == true or inRange == 1)
 			return
 		end
 	end
 	if type(UnitInRange) == "function" then
 		local ok, inRange = pcall(UnitInRange, unit)
-		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, RANGE_OUT) then return end
-		if ok and Plain(inRange) then f:SetAlpha(inRange and RANGE_IN or RANGE_OUT) return end
+		if ok and Plain(inRange) then ShowRange(f, inRange and true or false) return end
+
+		local look = RangeLookOn()
+		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, look and RANGE_DIM or RANGE_OUT) then
+			if f.oor and not (look and pcall(f.oor.SetAlphaFromBoolean, f.oor, inRange, 0, 1)) then f.oor:SetAlpha(0) end
+			return
+		end
 	end
-	f:SetAlpha(RANGE_IN)
+	ShowRange(f, true)
+end
+
+local function UpdateCombatEdge(f)
+	local edge = f.combatEdge
+	if not edge then return end
+	if f.preview or not CombatLookOn() then edge:SetAlpha(0) return end
+	local ok, fighting = pcall(UnitAffectingCombat, f.unit)
+	if ok and Plain(fighting) then edge:SetAlpha(fighting and 1 or 0) return end
+	if ok and edge.SetAlphaFromBoolean and pcall(edge.SetAlphaFromBoolean, edge, fighting, 1, 0) then return end
+	edge:SetAlpha(0)
 end
 
 local FullUpdate, PlacePanel
@@ -1188,6 +1213,38 @@ local function Build(spec, parent)
 		local fs = NewText(layer)
 		fs:SetJustifyH((slot == "hl" or slot == "pl") and "LEFT" or "RIGHT")
 		f.texts[slot] = fs
+	end
+
+	if spec.range then
+
+		local oor = CreateFrame("Frame", nil, f)
+		oor:SetAllPoints(panel)
+		oor:SetFrameLevel(level + 3)
+		local wash = oor:CreateTexture(nil, "OVERLAY")
+		wash:SetAllPoints(oor)
+		wash:SetColorTexture(0.35, 0.35, 0.35, 0.6)
+		oor:SetAlpha(0)
+		f.oor = oor
+
+		local edge = CreateFrame("Frame", nil, f)
+		edge:SetFrameLevel(level + 5)
+		edge:SetPoint("TOPLEFT", panel, "TOPLEFT", -1, 1)
+		edge:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 1, -1)
+		for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+			local t = edge:CreateTexture(nil, "OVERLAY")
+			t:SetColorTexture(0.9, 0.1, 0.1, 1)
+			t:SetPoint(side[1], edge, side[1])
+			t:SetPoint(side[2], edge, side[2])
+			if i <= 2 then t:SetHeight(2) else t:SetWidth(2) end
+		end
+		local p = IND.status
+		local swords = edge:CreateTexture(nil, "OVERLAY")
+		swords:SetSize(p[5], p[5])
+		swords:SetPoint(p[1], f, p[2], p[3], p[4])
+		swords:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+		swords:SetTexCoord(IN_COMBAT_ICON[1], IN_COMBAT_ICON[2], IN_COMBAT_ICON[3], IN_COMBAT_ICON[4])
+		edge:SetAlpha(0)
+		f.combatEdge = edge
 	end
 
 	f.icons = {}
@@ -1428,7 +1485,10 @@ local function RangeTick()
 	if not Showing() then return end
 	for _, spec in ipairs(UNITS) do
 		local f = frames[spec.key]
-		if f and spec.range and f:IsVisible() then pcall(UpdateRange, f) end
+		if f and spec.range and f:IsVisible() then
+			pcall(UpdateRange, f)
+			pcall(UpdateCombatEdge, f)
+		end
 	end
 end
 
@@ -1832,6 +1892,18 @@ function KUI:SetKainedFont(fontKey, styleKey, outline)
 	if styleKey ~= nil then KUI.db.kainedFontStyle = styleKey end
 	if outline ~= nil then KUI.db.kainedFontOutline = outline end
 	if textFont then pcall(ApplyFont) end
+end
+
+function KUI:GetKainedPartyLook(which)
+	if which == "range" then return RangeLookOn() end
+	return CombatLookOn()
+end
+
+function KUI:SetKainedPartyLook(which, on)
+	if not KUI.db then return end
+	if which == "range" then KUI.db.kainedPartyRangeLook = on and true or false
+	else KUI.db.kainedPartyCombatLook = on and true or false end
+	RangeTick()
 end
 
 function KUI:GetKainedPartyHorizontal() return Horizontal() and true or false end
