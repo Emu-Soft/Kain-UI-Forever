@@ -139,7 +139,7 @@ local function Build()
 	Label(f, 16, y, "Frame", "GameFontNormalSmall")
 	local fadeHeader = Label(f, FADE_X, y, "Fade", "GameFontNormalSmall")
 	Info(f, fadeHeader, "Combat fader",
-		"Ticked frames fade out when you're out of combat, at full health and power and not casting, and come back as soon as any of that changes. Picking a target brings the others back too, while your target and its target fade on their own. The slider beside the tick is how much still shows when faded: 0% hides it.")
+		"Works like Shadowed Unit Frames' combat fader. A ticked frame fades out when you're out of combat and not casting, and its own unit is at full health and mana, energy or focus. It comes back as soon as any of that changes. Your own frame also stays while you have a target. The slider beside the tick is how much still shows when faded: 0% hides it.")
 	Label(f, ALPHA_X, y, "Faded alpha", "GameFontNormalSmall")
 	Label(f, SCALE_X, y, "Scale", "GameFontNormalSmall")
 	y = y - 18

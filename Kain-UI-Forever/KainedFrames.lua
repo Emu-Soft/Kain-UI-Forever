@@ -793,7 +793,6 @@ local function FadedAlpha(key)
 	return math.max(0, math.min(1, a))
 end
 
-local SHOWS_TARGET = { target = true, targettarget = true }
 
 local function FadeOnUpdate(fade, elapsed)
 	fade.elapsed = fade.elapsed + elapsed
@@ -825,27 +824,37 @@ local function FadeTo(owner, alpha, fast)
 	fade:Show()
 end
 
-local function PlayerActive()
-	if InCombatLockdown() or casting then return true end
-	local ptype = PowerType("player")
-	local power, powerMax = UnitPower("player"), UnitPowerMax("player")
-	local health, healthMax = UnitHealth("player"), UnitHealthMax("player")
-	if Plain(ptype) and DEPLETES[ptype] then
-		if not (PlainNumber(power) and PlainNumber(powerMax)) or power ~= powerMax then return true end
+local function Differs(a, b)
+	local ok, differs = pcall(function() return (a ~= b) == true end)
+	return ok and differs
+end
+
+local function UnitBusy(unit)
+	if not Yes(UnitExists(unit)) then return false end
+	local ok, ptype = pcall(UnitPowerType, unit)
+	if ok and Plain(ptype) and DEPLETES[ptype] and Differs(UnitPower(unit), UnitPowerMax(unit)) then return true end
+	return Differs(UnitHealth(unit), UnitHealthMax(unit))
+end
+
+local function PartyBusy()
+	for i = 1, 4 do
+		if UnitBusy("party" .. i) then return true end
 	end
-	if not (PlainNumber(health) and PlainNumber(healthMax)) or health ~= healthMax then return true end
 	return false
 end
 
 local previewingNow
 local function UpdateFade()
-	local active = (previewingNow and previewingNow()) or PlayerActive()
-	local targeting = Yes(UnitExists("target"))
+	local awakeAll = InCombatLockdown() or casting or (previewingNow and previewingNow())
 	for _, key in ipairs(FADE_KEYS) do
 		local owner = key == "party" and holder or frames[key]
 		if owner then
-			local awake = active or (targeting and not SHOWS_TARGET[key])
-			if awake or not FadeOn(key) then FadeTo(owner, 1, casting) else FadeTo(owner, FadedAlpha(key)) end
+			local awake = awakeAll or not FadeOn(key)
+			if not awake then
+				if key == "party" then awake = PartyBusy() else awake = UnitBusy(owner.unit) end
+			end
+			if not awake and key == "player" then awake = Yes(UnitExists("target")) end
+			if awake then FadeTo(owner, 1, casting) else FadeTo(owner, FadedAlpha(key)) end
 		end
 	end
 end
@@ -1233,7 +1242,7 @@ FullUpdate = function(f)
 		UpdatePortrait(f)
 		UpdateTexts(f)
 		UpdateIndicators(f)
-		if f == frames.player then UpdateFade() end
+		UpdateFade()
 	end)
 end
 
@@ -1256,14 +1265,14 @@ local function OnUnitEvent(f, event, unit)
 			UpdateHealth(f)
 			UpdateIncHeal(f)
 			UpdateTexts(f)
-			if f == frames.player then UpdateFade() end
+			UpdateFade()
 		end)
 	elseif what == "power" then
 		Safe(function()
 			UpdatePower(f)
 			UpdateTexts(f)
 			if f.combo or f.druid then UpdateExtras(f) end
-			if f == frames.player then UpdateFade() end
+			UpdateFade()
 			if f.icons.happy then UpdateIndicators(f, "happy") end
 		end)
 	elseif what == "texts" then

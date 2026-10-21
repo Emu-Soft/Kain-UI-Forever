@@ -8,7 +8,7 @@ local PATCH_NOTES = {
 				"Kained: each frame you tick to fade in /kuf gets its own Faded alpha slider, so your party can stay half-visible while your own frame disappears completely.",
 			} },
 			{ title = "Fixed", items = {
-				"Kained: ticking Target or Target of target to fade now works. Having a target used to count as a reason to stay fully shown, so those two never faded; now they fade on their own (out of combat, at full health and power, not casting), while picking a target still brings your other frames back.",
+				"Kained: the combat fader works. The game hides exact health and power numbers from addons, and the fader took that to mean you were hurt, so nothing ever faded. It now works like Shadowed Unit Frames' own fader: a ticked frame fades out of combat when you're not casting and its own unit (you, your pet, your target and so on) is at full health and mana, energy or focus. Your own frame also stays while you have a target.",
 				"/kuf says when the frames are unlocked, because they stay fully shown while you move them and only fade once locked.",
 			} },
 		},
