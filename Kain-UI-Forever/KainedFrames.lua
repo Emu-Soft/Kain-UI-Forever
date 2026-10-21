@@ -175,13 +175,26 @@ local function FrameScale(key, spec)
 	return (spec.scale or 1) * UserScale(key)
 end
 
+local WIDTH_MIN, WIDTH_MAX, HEIGHT_MIN, HEIGHT_MAX = 60, 400, 16, 100
+
+local function SizeKey(spec) return spec.party and "party" or spec.key end
+
+local function UserSize(key, spec)
+	local all = KUI.db and KUI.db.kainedSizes
+	local s = type(all) == "table" and all[key]
+	local w = type(s) == "table" and PlainNumber(s.w) and s.w or spec.width
+	local h = type(s) == "table" and PlainNumber(s.h) and s.h or spec.height
+	return math.max(WIDTH_MIN, math.min(WIDTH_MAX, w)), math.max(HEIGHT_MIN, math.min(HEIGHT_MAX, h))
+end
+
 local function Horizontal()
 	return KUI.db and KUI.db.kainedPartyHorizontal == true
 end
 
 local function PartySize()
-	if Horizontal() then return 4 * PARTY.width + 3 * PARTY.hspacing, PARTY.height end
-	return PARTY.width, 4 * PARTY.height + 3 * PARTY.spacing
+	local w, h = UserSize("party", PARTY)
+	if Horizontal() then return 4 * w + 3 * PARTY.hspacing, h end
+	return w, 4 * h + 3 * PARTY.spacing
 end
 
 local function Enabled()
@@ -423,6 +436,7 @@ local function UpdateHealthColor(f)
 end
 
 local function UpdatePowerColor(f)
+	if f.offline then TintColor(f.power, COLORS.health.offline) return end
 	local _, token = PowerType(f.unit)
 	local c = Plain(token) and type(token) == "string" and COLORS.power[token]
 	if not c and Plain(token) and type(token) == "string" and type(PowerBarColor) == "table" then
@@ -566,7 +580,8 @@ local layoutPending = false
 local function Layout(f)
 	if InCombatLockdown() then layoutPending = true return end
 	local spec = f.spec
-	local W, H = spec.width, spec.height + (f.extra or 0)
+	local W, H = UserSize(SizeKey(spec), spec)
+	H = H + (f.extra or 0)
 	local bars = {
 		{ bar = f.health, weight = spec.health, order = ORDER.health },
 		{ bar = f.power, weight = spec.power, order = ORDER.power },
@@ -1003,7 +1018,15 @@ local function ResolveRangeSpell()
 	end
 end
 
+local function SetOffline(f, offline)
+	if (f.offline or false) == offline then return end
+	f.offline = offline
+	UpdatePowerColor(f)
+	if f.portrait and f.portrait.SetDesaturated then f.portrait:SetDesaturated(offline) end
+end
+
 local function ShowRange(f, inRange)
+	SetOffline(f, false)
 	local look = RangeLookOn()
 	f:SetAlpha(inRange and RANGE_IN or (look and RANGE_DIM or RANGE_OUT))
 	if f.oor then f.oor:SetAlpha((look and not inRange) and 1 or 0) end
@@ -1013,7 +1036,12 @@ local function UpdateRange(f)
 	if f.preview then ShowRange(f, true) return end
 	local unit = f.unit
 	local connected = UnitIsConnected(unit)
-	if Plain(connected) and connected == false then ShowRange(f, false) return end
+	if Plain(connected) and connected == false then
+		f:SetAlpha(RANGE_IN)
+		if f.oor then f.oor:SetAlpha(0) end
+		SetOffline(f, true)
+		return
+	end
 	if rangeSpell and C_Spell and C_Spell.IsSpellInRange then
 		local ok, inRange = pcall(C_Spell.IsSpellInRange, rangeSpell, unit)
 		if ok and Plain(inRange) and inRange ~= nil then
@@ -1027,6 +1055,7 @@ local function UpdateRange(f)
 
 		local look = RangeLookOn()
 		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, look and RANGE_DIM or RANGE_OUT) then
+			SetOffline(f, false)
 			if f.oor and not (look and pcall(f.oor.SetAlphaFromBoolean, f.oor, inRange, 0, 1)) then f.oor:SetAlpha(0) end
 			return
 		end
@@ -1150,7 +1179,8 @@ local function Build(spec, parent)
 	f:SetAttribute("*type2", "togglemenu")
 	f:RegisterForClicks("AnyUp")
 	f.extra = spec.xpRoom and (LOOK.gap + LOOK.xpHeight) or nil
-	f:SetSize(spec.width, spec.height + (f.extra or 0))
+	local w, h = UserSize(SizeKey(spec), spec)
+	f:SetSize(w, h + (f.extra or 0))
 	f:SetScale(spec.party and (spec.scale or 1) or FrameScale(spec.key, spec))
 	f:SetHitRectInsets(LOOK.inset, LOOK.inset, LOOK.inset, LOOK.inset)
 	f:SetScript("OnEnter", ShowTooltip)
@@ -1455,14 +1485,15 @@ end
 local function LayoutParty()
 	holder:SetSize(PartySize())
 	local horizontal = Horizontal()
+	local w, h = UserSize("party", PARTY)
 	for i = 1, 4 do
 		local f = frames["party" .. i]
 		if f then
 			f:ClearAllPoints()
 			if horizontal then
-				f:SetPoint("TOPLEFT", holder, "TOPLEFT", (i - 1) * (PARTY.width + PARTY.hspacing), 0)
+				f:SetPoint("TOPLEFT", holder, "TOPLEFT", (i - 1) * (w + PARTY.hspacing), 0)
 			else
-				f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(i - 1) * (PARTY.height + PARTY.spacing))
+				f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(i - 1) * (h + PARTY.spacing))
 			end
 		end
 	end
@@ -1636,7 +1667,7 @@ end
 
 local function MoverSize(m)
 	if m.key == "party" then return PartySize() end
-	return m.spec.width, m.spec.height
+	return UserSize(m.key, m.spec)
 end
 
 local function PlaceMover(box)
@@ -1834,7 +1865,12 @@ local function ApplyLayoutOptions()
 	optionsPending, toldCombat = false, false
 	for _, spec in ipairs(UNITS) do
 		local f = frames[spec.key]
-		if f and not spec.party then f:SetScale(FrameScale(spec.key, spec)) end
+		if f then
+			if not spec.party then f:SetScale(FrameScale(spec.key, spec)) end
+			local w, h = UserSize(SizeKey(spec), spec)
+			f:SetSize(w, h + (f.extra or 0))
+			Layout(f)
+		end
 	end
 	holder:SetScale(FrameScale("party", PARTY))
 	LayoutParty()
@@ -1879,6 +1915,36 @@ end
 function KUI:ResetKainedScales()
 	if not KUI.db then return end
 	KUI.db.kainedScales = {}
+	KUI.db.kainedSizes = {}
+	ApplyLayoutOptions()
+end
+
+KUI.KAINED_WIDTH_MIN, KUI.KAINED_WIDTH_MAX, KUI.KAINED_HEIGHT_MIN, KUI.KAINED_HEIGHT_MAX = WIDTH_MIN, WIDTH_MAX, HEIGHT_MIN, HEIGHT_MAX
+
+local function SpecFor(key)
+	if key == "party" then return PARTY end
+	for _, spec in ipairs(UNITS) do
+		if spec.key == key then return spec end
+	end
+end
+
+function KUI:GetKainedSize(key)
+	local spec = SpecFor(key)
+	if not spec then return 0, 0 end
+	return UserSize(key, spec)
+end
+
+function KUI:SetKainedSize(key, width, height)
+	local spec = SpecFor(key)
+	if not KUI.db or not spec then return end
+	local w, h = UserSize(key, spec)
+	w = PlainNumber(width) and math.floor(width + 0.5) or w
+	h = PlainNumber(height) and math.floor(height + 0.5) or h
+	w = math.max(WIDTH_MIN, math.min(WIDTH_MAX, w))
+	h = math.max(HEIGHT_MIN, math.min(HEIGHT_MAX, h))
+	if w == select(1, UserSize(key, spec)) and h == select(2, UserSize(key, spec)) then return end
+	KUI.db.kainedSizes = type(KUI.db.kainedSizes) == "table" and KUI.db.kainedSizes or {}
+	KUI.db.kainedSizes[key] = { w = w, h = h }
 	ApplyLayoutOptions()
 end
 

@@ -21,6 +21,7 @@ KUI.defaults = {
 	kainedFadeAlpha = 0,
 	kainedFadeAlphas = {},
 	kainedScales = {},
+	kainedSizes = {},
 	kainedPartyHorizontal = false,
 	kainedPartyRangeLook = true,
 	kainedPartyCombatLook = true,

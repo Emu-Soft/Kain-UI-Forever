@@ -5,8 +5,9 @@ local PATCH_NOTES = {
 		version = "1.0.343",
 		sections = {
 			{ title = "New", items = {
+				"Kained: set the width and height of each frame in /kuf (party sets all four members at once). Bars, portrait and text fit themselves to the new size, and Reset sizes and scales puts everything back. The /kuf menu is laid out as one table, a row per frame, with Party and Text options side by side underneath.",
 				"Kained: each frame you tick to fade in /kuf gets its own Faded alpha slider, so your party can stay half-visible while your own frame disappears completely.",
-				"Kained party, for healers: a member your heals can't reach, or who is offline, fades with a grey wash over their bars (names and numbers stay readable on top), and a member who is fighting gets a red edge and crossed swords in the corner, at full strength even while faded, so it's clear at a glance who's out of reach and who has pulled. Both can be switched off in /kuf.",
+				"Kained party, for healers: a member your heals can't reach fades with a grey wash over their bars (names and numbers stay readable on top), an offline member shows fully grey at full strength, and a member who is fighting gets a red edge and crossed swords in the corner, at full strength even while faded, so it's clear at a glance who's out of reach and who has pulled. Both can be switched off in /kuf.",
 			} },
 			{ title = "Fixed", items = {
 				"Kained: the combat fader works. The game hides exact health and power numbers from addons, and the fader took that to mean you were hurt, so nothing ever faded. It now works like Shadowed Unit Frames' own fader: a ticked frame fades out of combat when you're not casting and its own unit (you, your pet, your target and so on) is at full health and mana, energy or focus. Your own frame also stays while you have a target.",

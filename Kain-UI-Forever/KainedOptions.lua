@@ -1,9 +1,11 @@
 local addonName, KUI = ...
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WIDTH = 600
+local WIDTH = 730
 local ROW = 28
-local FADE_X, ALPHA_X, SCALE_X, SLIDER_W = 140, 172, 390, 140
+local FADE_X, SLIDER_W = 128, 90
+local ALPHA_X, SCALE_X, WIDTH_X, HEIGHT_X = 158, 296, 434, 572
+local RIGHT_X = 380
 local PREVIEW_SIZE = 14
 
 local panel
@@ -14,6 +16,7 @@ local function Refresh()
 end
 
 local function Percent(v) return string.format("%d%%", math.floor(v * 100 + 0.5)) end
+local function Whole(v) return tostring(math.floor(v + 0.5)) end
 
 local function Checkbox(parent, x, y, label, get, set)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -30,20 +33,21 @@ local function Checkbox(parent, x, y, label, get, set)
 	return check
 end
 
-local function Slider(parent, x, y, lo, hi, step, get, set)
+local function Slider(parent, x, y, lo, hi, step, get, set, format)
+	format = format or Percent
 	local slider = KUI.CreateOptionsSlider(parent, x, y, SLIDER_W, lo, hi, step)
 	local value = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	value:SetPoint("LEFT", slider, "RIGHT", 8, 0)
 	local syncing = false
 	slider:SetScript("OnValueChanged", function(_, v)
 		v = math.floor(v / step + 0.5) * step
-		value:SetText(Percent(v))
+		value:SetText(format(v))
 		if not syncing then set(v) end
 	end)
 	refreshers[#refreshers + 1] = function()
 		syncing = true
 		slider:SetValue(get())
-		value:SetText(Percent(get()))
+		value:SetText(format(get()))
 		syncing = false
 	end
 	return slider, value
@@ -141,11 +145,17 @@ local function Build()
 	Label(f, 16, y, "Frame", "GameFontNormalSmall")
 	local fadeHeader = Label(f, FADE_X, y, "Fade", "GameFontNormalSmall")
 	Info(f, fadeHeader, "Combat fader",
-		"Works like Shadowed Unit Frames' combat fader. A ticked frame fades out when you're out of combat and not casting, and its own unit is at full health and mana, energy or focus. It comes back as soon as any of that changes. Your own frame also stays while you have a target. The slider beside the tick is how much still shows when faded: 0% hides it.")
+		"Works like Shadowed Unit Frames' combat fader. A ticked frame fades out when you're out of combat and not casting, and its own unit is at full health and mana, energy or focus. It comes back as soon as any of that changes. Your own frame also stays while you have a target. Faded alpha is how much still shows when faded: 0% hides it.")
 	Label(f, ALPHA_X, y, "Faded alpha", "GameFontNormalSmall")
 	Label(f, SCALE_X, y, "Scale", "GameFontNormalSmall")
+	Label(f, WIDTH_X, y, "Width", "GameFontNormalSmall")
+	local heightHeader = Label(f, HEIGHT_X, y, "Height", "GameFontNormalSmall")
+	Info(f, heightHeader, "Width and height",
+		"The frame's own size in pixels, before Scale. Bars, portrait and text fit themselves to it. Party sets all four members at once. Changes wait until you're out of combat.")
 	y = y - 18
 
+	local function W(key) return (KUI:GetKainedSize(key)) end
+	local function H(key) return select(2, KUI:GetKainedSize(key)) end
 	for _, item in ipairs(KUI.KAINED_FRAMES) do
 		local key = item.key
 		Label(f, 16, y - 5, item.label)
@@ -164,40 +174,51 @@ local function Build()
 		Slider(f, SCALE_X, y - 3, KUI.KAINED_SCALE_MIN, KUI.KAINED_SCALE_MAX, 0.05,
 			function() return KUI:GetKainedScale(key) end,
 			function(v) KUI:SetKainedScale(key, v) end)
+		Slider(f, WIDTH_X, y - 3, KUI.KAINED_WIDTH_MIN, KUI.KAINED_WIDTH_MAX, 1,
+			function() return W(key) end,
+			function(v) KUI:SetKainedSize(key, v, nil) end, Whole)
+		Slider(f, HEIGHT_X, y - 3, KUI.KAINED_HEIGHT_MIN, KUI.KAINED_HEIGHT_MAX, 1,
+			function() return H(key) end,
+			function(v) KUI:SetKainedSize(key, nil, v) end, Whole)
 		y = y - ROW
 	end
 
-	y = y - 6
+	y = y - 10
+	local top = y
 
+	Label(f, 16, y, "Party", "GameFontNormalSmall")
+	y = y - 18
 	local sideways = Checkbox(f, 12, y, "Stack party frames side by side",
 		function() return KUI:GetKainedPartyHorizontal() end,
 		function(on) KUI:SetKainedPartyHorizontal(on) end)
 	Info(f, sideways.label, "Stack party frames side by side",
 		"Lines your party up in a row instead of a column. The top-left corner stays where it is; /kuf unlock to move the row.")
-	y = y - 26
+	y = y - ROW
 	local rangeLook = Checkbox(f, 12, y, "Grey out party members out of range",
 		function() return KUI:GetKainedPartyLook("range") end,
 		function(on) KUI:SetKainedPartyLook("range", on) end)
 	Info(f, rangeLook.label, "Out of range",
-		"A party member your heals can't reach, or who is offline, fades with a grey wash over their bars; names and numbers stay readable on top. The red in-combat edge still shows at full strength. Untick for just a light fade instead.")
-	y = y - 26
+		"A party member your heals can't reach fades with a grey wash over their bars; names and numbers stay readable on top. The red in-combat edge still shows at full strength. Untick for just a light fade instead. Offline members always show fully grey at full strength.")
+	y = y - ROW
 	local combatLook = Checkbox(f, 12, y, "Red edge on party members in combat",
 		function() return KUI:GetKainedPartyLook("combat") end,
 		function(on) KUI:SetKainedPartyLook("combat", on) end)
 	Info(f, combatLook.label, "In combat",
 		"A party member who is fighting gets a red edge and crossed swords in the corner. Members out of combat keep a plain frame, so you can tell at a glance who has pulled and who hasn't.")
-	y = y - 34
+	local bottom = y - ROW
 
-	Label(f, 16, y, "Text", "GameFontNormalSmall")
-	y = y - 20
+	y = top
+	local DROP_X, DROP_W = RIGHT_X + 60, 200
+	Label(f, RIGHT_X, y, "Text", "GameFontNormalSmall")
+	y = y - 18
 	local function FontPart(i) return select(i, KUI:GetKainedFont()) end
 	local function FamilyOf(key)
 		for _, family in ipairs(KUI.KAINED_FONTS) do
 			if family.key == key then return family end
 		end
 	end
-	Label(f, 16, y - 5, "Font")
-	Dropdown(f, FADE_X, y, 200,
+	Label(f, RIGHT_X, y - 5, "Font")
+	Dropdown(f, DROP_X, y, DROP_W,
 		function()
 			local list, style = {}, FontPart(2)
 			for _, family in ipairs(KUI.KAINED_FONTS) do
@@ -208,8 +229,8 @@ local function Build()
 		function() return FontPart(1) end,
 		function(key) KUI:SetKainedFont(key) end)
 	y = y - ROW
-	Label(f, 16, y - 5, "Style")
-	Dropdown(f, FADE_X, y, 200,
+	Label(f, RIGHT_X, y - 5, "Style")
+	Dropdown(f, DROP_X, y, DROP_W,
 		function()
 			local list, family = {}, FamilyOf(FontPart(1))
 			for _, style in ipairs(KUI.KAINED_FONT_STYLES) do
@@ -222,8 +243,8 @@ local function Build()
 		function() return FontPart(2) end,
 		function(key) KUI:SetKainedFont(nil, key) end)
 	y = y - ROW
-	Label(f, 16, y - 5, "Outline")
-	Dropdown(f, FADE_X, y, 200,
+	Label(f, RIGHT_X, y - 5, "Outline")
+	Dropdown(f, DROP_X, y, DROP_W,
 		function()
 			local list, family = {}, FamilyOf(FontPart(1))
 			local file = family and family.styles[FontPart(2)]
@@ -234,14 +255,15 @@ local function Build()
 		end,
 		function() return FontPart(3) end,
 		function(key) KUI:SetKainedFont(nil, nil, key) end)
-	y = y - 40
+
+	y = math.min(bottom, y - ROW) - 12
 
 	local lockButton = Button(f, 16, y, 120, "Unlock", function()
 		SlashCmdList["KAINUIKUF"](KUI:IsKainedUnlocked() and "lock" or "unlock")
 	end)
 	refreshers[#refreshers + 1] = function() lockButton:SetText(KUI:IsKainedUnlocked() and "Lock" or "Unlock") end
 	Button(f, 146, y, 130, "Reset positions", function() SlashCmdList["KAINUIKUF"]("reset") end)
-	Button(f, 286, y, 120, "Reset scales", function() KUI:ResetKainedScales() end)
+	Button(f, 286, y, 150, "Reset sizes and scales", function() KUI:ResetKainedScales() end)
 
 	f:SetSize(WIDTH, -y + 38)
 	f:SetScript("OnShow", Refresh)
