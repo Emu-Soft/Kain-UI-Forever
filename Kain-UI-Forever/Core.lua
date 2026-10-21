@@ -19,6 +19,7 @@ KUI.defaults = {
 	kainedPositions = {},
 	kainedFade = { player = true },
 	kainedFadeAlpha = 0,
+	kainedFadeAlphas = {},
 	kainedScales = {},
 	kainedPartyHorizontal = false,
 	kainedFont = "ptsansnarrow",

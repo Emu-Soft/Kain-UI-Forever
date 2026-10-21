@@ -2,6 +2,18 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.343",
+		sections = {
+			{ title = "New", items = {
+				"Kained: each frame you tick to fade in /kuf gets its own Faded alpha slider, so your party can stay half-visible while your own frame disappears completely.",
+			} },
+			{ title = "Fixed", items = {
+				"Kained: ticking Target or Target of target to fade now works. Having a target used to count as a reason to stay fully shown, so those two never faded; now they fade on their own (out of combat, at full health and power, not casting), while picking a target still brings your other frames back.",
+				"/kuf says when the frames are unlocked, because they stay fully shown while you move them and only fade once locked.",
+			} },
+		},
+	},
+	{
 		version = "1.0.342",
 		sections = {
 			{ title = "New", items = {

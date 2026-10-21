@@ -785,11 +785,15 @@ local function FadeOn(key)
 	return type(all) == "table" and all[key] == true
 end
 
-local function FadedAlpha()
-	local a = KUI.db and KUI.db.kainedFadeAlpha
+local function FadedAlpha(key)
+	local all = KUI.db and KUI.db.kainedFadeAlphas
+	local a = type(all) == "table" and all[key]
+	if not PlainNumber(a) then a = KUI.db and KUI.db.kainedFadeAlpha end
 	if not PlainNumber(a) then return 0 end
 	return math.max(0, math.min(1, a))
 end
+
+local SHOWS_TARGET = { target = true, targettarget = true }
 
 local function FadeOnUpdate(fade, elapsed)
 	fade.elapsed = fade.elapsed + elapsed
@@ -830,17 +834,18 @@ local function PlayerActive()
 		if not (PlainNumber(power) and PlainNumber(powerMax)) or power ~= powerMax then return true end
 	end
 	if not (PlainNumber(health) and PlainNumber(healthMax)) or health ~= healthMax then return true end
-	return Yes(UnitExists("target"))
+	return false
 end
 
 local previewingNow
 local function UpdateFade()
 	local active = (previewingNow and previewingNow()) or PlayerActive()
-	local faded = FadedAlpha()
+	local targeting = Yes(UnitExists("target"))
 	for _, key in ipairs(FADE_KEYS) do
 		local owner = key == "party" and holder or frames[key]
 		if owner then
-			if active or not FadeOn(key) then FadeTo(owner, 1, casting) else FadeTo(owner, faded) end
+			local awake = active or (targeting and not SHOWS_TARGET[key])
+			if awake or not FadeOn(key) then FadeTo(owner, 1, casting) else FadeTo(owner, FadedAlpha(key)) end
 		end
 	end
 end
@@ -1779,11 +1784,12 @@ function KUI:SetKainedFade(key, on)
 	pcall(UpdateFade)
 end
 
-function KUI:GetKainedFadeAlpha() return FadedAlpha() end
+function KUI:GetKainedFadeAlpha(key) return FadedAlpha(key) end
 
-function KUI:SetKainedFadeAlpha(alpha)
+function KUI:SetKainedFadeAlpha(key, alpha)
 	if not KUI.db or not PlainNumber(alpha) then return end
-	KUI.db.kainedFadeAlpha = math.max(0, math.min(1, math.floor(alpha * 100 + 0.5) / 100))
+	KUI.db.kainedFadeAlphas = type(KUI.db.kainedFadeAlphas) == "table" and KUI.db.kainedFadeAlphas or {}
+	KUI.db.kainedFadeAlphas[key] = math.max(0, math.min(1, math.floor(alpha * 100 + 0.5) / 100))
 	pcall(UpdateFade)
 end
 

@@ -1,9 +1,9 @@
 local addonName, KUI = ...
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WIDTH = 430
+local WIDTH = 600
 local ROW = 28
-local FADE_X, SCALE_X, SCALE_W = 140, 190, 170
+local FADE_X, ALPHA_X, SCALE_X, SLIDER_W = 140, 172, 390, 140
 
 local panel
 local refreshers = {}
@@ -24,13 +24,13 @@ local function Checkbox(parent, x, y, label, get, set)
 		text:SetText(label)
 		check.label = text
 	end
-	check:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
+	check:SetScript("OnClick", function(self) set(self:GetChecked() and true or false); Refresh() end)
 	refreshers[#refreshers + 1] = function() check:SetChecked(get() and true or false) end
 	return check
 end
 
 local function Slider(parent, x, y, lo, hi, step, get, set)
-	local slider = KUI.CreateOptionsSlider(parent, x, y, SCALE_W, lo, hi, step)
+	local slider = KUI.CreateOptionsSlider(parent, x, y, SLIDER_W, lo, hi, step)
 	local value = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	value:SetPoint("LEFT", slider, "RIGHT", 8, 0)
 	local syncing = false
@@ -45,7 +45,7 @@ local function Slider(parent, x, y, lo, hi, step, get, set)
 		value:SetText(Percent(get()))
 		syncing = false
 	end
-	return slider
+	return slider, value
 end
 
 local function Label(parent, x, y, text, font)
@@ -127,7 +127,9 @@ local function Build()
 	status:SetJustifyH("LEFT")
 	refreshers[#refreshers + 1] = function()
 		if KUI:KainedFramesActive() then
-			status:SetText("|cff999999Drag the frames with Unlock below, or |cffffff00/kuf unlock|r|cff999999.|r")
+			status:SetText(KUI:IsKainedUnlocked()
+				and "|cffffff00Unlocked:|r |cff999999frames stay fully shown while you move them. Lock to see them fade.|r"
+				or "|cff999999Drag the frames with Unlock below, or |cffffff00/kuf unlock|r|cff999999.|r")
 		else
 			status:SetText("|cffff8060Not in use: pick Kained Unit Frames under Style in /kui (Unit Frames). Changes here are kept for when you do.|r")
 		end
@@ -137,7 +139,8 @@ local function Build()
 	Label(f, 16, y, "Frame", "GameFontNormalSmall")
 	local fadeHeader = Label(f, FADE_X, y, "Fade", "GameFontNormalSmall")
 	Info(f, fadeHeader, "Combat fader",
-		"Ticked frames fade out when you're out of combat, at full health and power, not casting and with no target, and come back as soon as any of that changes.")
+		"Ticked frames fade out when you're out of combat, at full health and power and not casting, and come back as soon as any of that changes. Picking a target brings the others back too, while your target and its target fade on their own. The slider beside the tick is how much still shows when faded: 0% hides it.")
+	Label(f, ALPHA_X, y, "Faded alpha", "GameFontNormalSmall")
 	Label(f, SCALE_X, y, "Scale", "GameFontNormalSmall")
 	y = y - 18
 
@@ -148,6 +151,14 @@ local function Build()
 			nil,
 			function() return KUI:GetKainedFade(key) end,
 			function(on) KUI:SetKainedFade(key, on) end)
+		local alpha, alphaValue = Slider(f, ALPHA_X, y - 3, 0, 1, 0.05,
+			function() return KUI:GetKainedFadeAlpha(key) end,
+			function(v) KUI:SetKainedFadeAlpha(key, v) end)
+		refreshers[#refreshers + 1] = function()
+			local on = KUI:GetKainedFade(key)
+			alpha:SetShown(on)
+			alphaValue:SetShown(on)
+		end
 		Slider(f, SCALE_X, y - 3, KUI.KAINED_SCALE_MIN, KUI.KAINED_SCALE_MAX, 0.05,
 			function() return KUI:GetKainedScale(key) end,
 			function(v) KUI:SetKainedScale(key, v) end)
@@ -155,12 +166,6 @@ local function Build()
 	end
 
 	y = y - 6
-	local alphaLabel = Label(f, 16, y - 2, "Faded opacity")
-	Info(f, alphaLabel, "Faded opacity", "How much of a faded frame still shows. 0% hides it completely.")
-	Slider(f, SCALE_X, y, 0, 1, 0.05,
-		function() return KUI:GetKainedFadeAlpha() end,
-		function(v) KUI:SetKainedFadeAlpha(v) end)
-	y = y - 32
 
 	local sideways = Checkbox(f, 12, y, "Stack party frames side by side",
 		function() return KUI:GetKainedPartyHorizontal() end,
