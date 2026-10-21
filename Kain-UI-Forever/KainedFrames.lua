@@ -1364,11 +1364,11 @@ local function UIScale()
 	return uiScale
 end
 
-local function Place(f, spec, key)
+local function Place(f, spec, key, spot)
 	local scale = FrameScale(key, spec)
 	local down = (f.extra or 0) / 2
 	f:ClearAllPoints()
-	local saved = SavedSpot(key)
+	local saved = spot or SavedSpot(key)
 	if saved then
 		f:SetPoint("CENTER", UIParent, "CENTER", saved.x / scale, saved.y / scale - down)
 		return
@@ -1578,14 +1578,27 @@ local function PlaceMover(box)
 	end
 end
 
-local function SaveMover(box)
+local function MoverSpot(box)
 	local cx, cy = box:GetCenter()
 	local ux, uy = UIParent:GetCenter()
-	if not (PlainNumber(cx) and PlainNumber(cy) and PlainNumber(ux) and PlainNumber(uy)) then return end
-	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
-
+	if not (PlainNumber(cx) and PlainNumber(cy) and PlainNumber(ux) and PlainNumber(uy)) then return nil end
 	local up = Extra(box.item.key) * FrameScale(box.item.key, box.item.spec) / 2
-	KUI.db.kainedPositions[box.item.key] = { x = math.floor((cx - ux) * 10 + 0.5) / 10, y = math.floor((cy - uy + up) * 10 + 0.5) / 10 }
+	return { x = cx - ux, y = cy - uy + up }
+end
+
+local function FollowMover(box)
+	if InCombatLockdown() then return end
+	local m = box.item
+	local f = m.key == "party" and holder or frames[m.key]
+	local spot = MoverSpot(box)
+	if f and spot then Place(f, m.spec, m.key, spot) end
+end
+
+local function SaveMover(box)
+	local spot = MoverSpot(box)
+	if not spot then return end
+	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
+	KUI.db.kainedPositions[box.item.key] = { x = math.floor(spot.x * 10 + 0.5) / 10, y = math.floor(spot.y * 10 + 0.5) / 10 }
 	PlaceMover(box)
 	PlaceFrames()
 end
@@ -1615,8 +1628,10 @@ local function NewMover(m)
 	box:SetScript("OnDragStart", function(self)
 		self:StartMoving()
 		if KUI.BeginAlignDrag then pcall(KUI.BeginAlignDrag, KUI, self) end
+		self:SetScript("OnUpdate", FollowMover)
 	end)
 	box:SetScript("OnDragStop", function(self)
+		self:SetScript("OnUpdate", nil)
 		self:StopMovingOrSizing()
 		if KUI.EndAlignDrag then pcall(KUI.EndAlignDrag, KUI, self) end
 		SaveMover(self)
