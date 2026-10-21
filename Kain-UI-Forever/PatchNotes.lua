@@ -6,10 +6,11 @@ local PATCH_NOTES = {
 		sections = {
 			{ title = "New", items = {
 				"Kained: each frame you tick to fade in /kuf gets its own Faded alpha slider, so your party can stay half-visible while your own frame disappears completely.",
-				"Kained party, for healers: a member your heals can't reach turns faint with a grey wash over their bars, and a member who is fighting gets a red edge and crossed swords in the corner, so it's clear at a glance who's out of reach and who has pulled. Both can be switched off in /kuf.",
+				"Kained party, for healers: a member your heals can't reach, or who is offline, turns fully grey (health, power and portrait, still at full strength so you can read them), and a member who is fighting gets a red edge and crossed swords in the corner, so it's clear at a glance who's out of reach and who has pulled. Both can be switched off in /kuf.",
 			} },
 			{ title = "Fixed", items = {
 				"Kained: the combat fader works. The game hides exact health and power numbers from addons, and the fader took that to mean you were hurt, so nothing ever faded. It now works like Shadowed Unit Frames' own fader: a ticked frame fades out of combat when you're not casting and its own unit (you, your pet, your target and so on) is at full health and mana, energy or focus. Your own frame also stays while you have a target.",
+				"Kained fonts now change when you pick one in /kuf. The text always stayed in PT Sans Narrow before.",
 				"/kuf says when the frames are unlocked, because they stay fully shown while you move them and only fade once locked.",
 			} },
 		},

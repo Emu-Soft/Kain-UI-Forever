@@ -55,6 +55,7 @@ local COLORS = {
 		tapped = RGB(0.5, 0.5, 0.5), offline = RGB(0.5, 0.5, 0.5), enemyUnattack = RGB(0.6, 0.2, 0.2),
 		inc = RGB(0, 0.35, 0.23),
 	},
+	grey = RGB(0.45, 0.45, 0.45),
 	class = {
 		DEATHKNIGHT = RGB(0.77, 0.12, 0.23), DEMONHUNTER = RGB(0.64, 0.19, 0.79), DRUID = RGB(1, 0.49, 0.04),
 		EVOKER = RGB(0.2, 0.58, 0.5), HUNTER = RGB(0.67, 0.83, 0.45), MAGE = RGB(0.41, 0.8, 0.94),
@@ -405,6 +406,7 @@ end
 
 local function UpdateHealthColor(f)
 	local unit, bar = f.unit, f.health
+	if f.greyed then TintColor(bar, COLORS.grey) return end
 	local connected = UnitIsConnected(unit)
 	if Plain(connected) and connected == false then TintColor(bar, COLORS.health.offline) return end
 	if f.spec.petColor then TintColor(bar, COLORS.class.PET) return end
@@ -423,6 +425,7 @@ local function UpdateHealthColor(f)
 end
 
 local function UpdatePowerColor(f)
+	if f.greyed then TintColor(f.power, COLORS.grey) return end
 	local _, token = PowerType(f.unit)
 	local c = Plain(token) and type(token) == "string" and COLORS.power[token]
 	if not c and Plain(token) and type(token) == "string" and type(PowerBarColor) == "table" then
@@ -962,7 +965,7 @@ local function RefreshAuras(f)
 	end
 end
 
-local RANGE_IN, RANGE_OUT, RANGE_DIM, RANGE_EVERY = 1, 0.7, 0.45, 0.5
+local RANGE_IN, RANGE_OUT, RANGE_EVERY = 1, 0.7, 0.5
 local IN_COMBAT_ICON = { 0.5, 1, 0, 0.49 }
 
 local function RangeLookOn() return not (KUI.db and KUI.db.kainedPartyRangeLook == false) end
@@ -1003,10 +1006,19 @@ local function ResolveRangeSpell()
 	end
 end
 
+local function SetGreyed(f, grey)
+	if (f.greyed or false) == grey then return end
+	f.greyed = grey
+	UpdateHealthColor(f)
+	UpdatePowerColor(f)
+	if f.portrait and f.portrait.SetDesaturated then f.portrait:SetDesaturated(grey) end
+end
+
 local function ShowRange(f, inRange)
 	local look = RangeLookOn()
-	f:SetAlpha(inRange and RANGE_IN or (look and RANGE_DIM or RANGE_OUT))
-	if f.oor then f.oor:SetAlpha((look and not inRange) and 1 or 0) end
+	f:SetAlpha((inRange or look) and RANGE_IN or RANGE_OUT)
+	if f.oor then f.oor:SetAlpha(0) end
+	SetGreyed(f, look and not inRange)
 end
 
 local function UpdateRange(f)
@@ -1026,7 +1038,8 @@ local function UpdateRange(f)
 		if ok and Plain(inRange) then ShowRange(f, inRange and true or false) return end
 
 		local look = RangeLookOn()
-		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, look and RANGE_DIM or RANGE_OUT) then
+		if ok and f.SetAlphaFromBoolean and pcall(f.SetAlphaFromBoolean, f, inRange, RANGE_IN, look and RANGE_IN or RANGE_OUT) then
+			SetGreyed(f, false)
 			if f.oor and not (look and pcall(f.oor.SetAlphaFromBoolean, f.oor, inRange, 0, 1)) then f.oor:SetAlpha(0) end
 			return
 		end
@@ -1107,7 +1120,8 @@ local function ApplyFont()
 	local family = FontFamily()
 	local flags = FontOutline()
 	local ok, set = pcall(textFont.SetFont, textFont, family.styles[FontStyle(family)], LOOK.fontSize, flags)
-	if not (ok and set) then textFont:SetFont(LOOK.font, LOOK.fontSize, flags) end
+
+	if not ok or set == false or not textFont:GetFont() then textFont:SetFont(LOOK.font, LOOK.fontSize, flags) end
 	for _, fs in ipairs(textStrings) do fs:SetFontObject(textFont) end
 end
 
@@ -1222,7 +1236,7 @@ local function Build(spec, parent)
 		oor:SetFrameLevel(level + 3)
 		local wash = oor:CreateTexture(nil, "OVERLAY")
 		wash:SetAllPoints(oor)
-		wash:SetColorTexture(0.35, 0.35, 0.35, 0.6)
+		wash:SetColorTexture(0.3, 0.3, 0.3, 0.9)
 		oor:SetAlpha(0)
 		f.oor = oor
 

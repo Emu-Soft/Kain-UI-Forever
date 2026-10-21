@@ -177,7 +177,7 @@ local function Build()
 		function() return KUI:GetKainedPartyLook("range") end,
 		function(on) KUI:SetKainedPartyLook("range", on) end)
 	Info(f, rangeLook.label, "Out of range",
-		"A party member your heals can't reach turns faint with a grey wash over their bars. Untick for just a light fade. Offline members show the same way.")
+		"A party member your heals can't reach, or who is offline, turns fully grey: health, power and portrait, still at full strength. Untick for just a light fade instead.")
 	y = y - 26
 	local combatLook = Checkbox(f, 12, y, "Red edge on party members in combat",
 		function() return KUI:GetKainedPartyLook("combat") end,
