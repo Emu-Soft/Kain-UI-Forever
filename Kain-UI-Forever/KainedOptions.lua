@@ -5,7 +5,8 @@ local WIDTH = 750
 local ROW = 28
 local FADE_X, SLIDER_W = 128, 90
 local ALPHA_X, SCALE_X, WIDTH_X, HEIGHT_X = 158, 296, 434, 572
-local RIGHT_X = 380
+local RIGHT_X = 410
+local PARTY_X = 40
 local PREVIEW_SIZE = 14
 
 local panel
@@ -151,7 +152,7 @@ local function Build()
 	local fadeHeader = Label(f, FADE_X, y, "Fade", "GameFontNormalSmall")
 	Info(f, fadeHeader, "Combat fader",
 		"Works like Shadowed Unit Frames' combat fader. A ticked frame fades out when you're out of combat and not casting, and its own unit is at full health and mana, energy or focus. It comes back as soon as any of that changes. Your own frame also stays while you have a target. Faded alpha is how much still shows when faded: 0% hides it.")
-	Label(f, ALPHA_X, y, "Faded alpha", "GameFontNormalSmall")
+	Label(f, ALPHA_X + 26, y, "Faded alpha", "GameFontNormalSmall")
 	Label(f, SCALE_X, y, "Scale", "GameFontNormalSmall")
 	Label(f, WIDTH_X, y, "Width", "GameFontNormalSmall")
 	local heightHeader = Label(f, HEIGHT_X, y, "Height", "GameFontNormalSmall")
@@ -191,21 +192,21 @@ local function Build()
 	y = y - 10
 	local top = y
 
-	Label(f, 16, y, "Party", "GameFontNormalSmall")
+	Label(f, PARTY_X, y, "Party", "GameFontNormalSmall")
 	y = y - 18
-	local sideways = Checkbox(f, 12, y, "Stack party frames side by side",
+	local sideways = Checkbox(f, PARTY_X - 4, y, "Stack party frames side by side",
 		function() return KUI:GetKainedPartyHorizontal() end,
 		function(on) KUI:SetKainedPartyHorizontal(on) end)
 	Info(f, sideways.label, "Stack party frames side by side",
 		"Lines your party up in a row instead of a column. The top-left corner stays where it is; /kuf unlock to move the row.")
 	y = y - ROW
-	local rangeLook = Checkbox(f, 12, y, "Grey out party members out of range",
+	local rangeLook = Checkbox(f, PARTY_X - 4, y, "Grey out party members out of range",
 		function() return KUI:GetKainedPartyLook("range") end,
 		function(on) KUI:SetKainedPartyLook("range", on) end)
 	Info(f, rangeLook.label, "Out of range",
 		"A party member your heals can't reach fades with a grey wash over their bars; names and numbers stay readable on top. The red in-combat edge still shows at full strength. Untick for just a light fade instead. Offline members always show fully grey at full strength.")
 	y = y - ROW
-	local combatLook = Checkbox(f, 12, y, "Red edge on party members in combat",
+	local combatLook = Checkbox(f, PARTY_X - 4, y, "Red edge on party members in combat",
 		function() return KUI:GetKainedPartyLook("combat") end,
 		function(on) KUI:SetKainedPartyLook("combat", on) end)
 	Info(f, combatLook.label, "In combat",
@@ -261,7 +262,7 @@ local function Build()
 		function() return FontPart(3) end,
 		function(key) KUI:SetKainedFont(nil, nil, key) end)
 
-	y = math.min(bottom, y - ROW) - 12
+	y = math.min(bottom, y - ROW) - 20
 
 	local buttonsX = math.floor((WIDTH - 420) / 2)
 	local lockButton = Button(f, buttonsX, y, 120, "Unlock", function()
@@ -271,7 +272,7 @@ local function Build()
 	Button(f, buttonsX + 130, y, 130, "Reset positions", function() SlashCmdList["KAINUIKUF"]("reset") end)
 	Button(f, buttonsX + 270, y, 150, "Reset sizes and scales", function() KUI:ResetKainedScales() end)
 
-	f:SetSize(WIDTH, -y + 56)
+	f:SetSize(WIDTH, -y + 72)
 	f:SetScript("OnShow", Refresh)
 	panel = f
 	return f
