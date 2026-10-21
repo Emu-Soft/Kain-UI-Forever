@@ -97,6 +97,18 @@ KUI.KAIN_PRESET = {
 		party = { x = -960.8, y = -65.1 },
 		targettarget = { x = 367.8, y = -168 },
 	},
+	kained = {
+		kainedFade = { player = false, pet = false, target = false, targettarget = false, focus = false, focustarget = false, party = false },
+		kainedFadeAlphas = { player = 0, party = 1 },
+		kainedScales = {},
+		kainedSizes = {},
+		kainedFont = "ptsansnarrow",
+		kainedFontStyle = "bold",
+		kainedFontOutline = "",
+		kainedPartyHorizontal = false,
+		kainedPartyRangeLook = true,
+		kainedPartyCombatLook = true,
+	},
 
 	windowPositions = {
 		character = { from = "TOPLEFT", dx = 18.5, dy = -148.5 },

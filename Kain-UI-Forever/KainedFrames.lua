@@ -1975,6 +1975,26 @@ function KUI:SetKainedPartyLook(which, on)
 	RangeTick()
 end
 
+local function Copy(t)
+	local c = {}
+	for k, v in pairs(t) do c[k] = type(v) == "table" and Copy(v) or v end
+	return c
+end
+
+function KUI:SetKainedOptions(options)
+	if not KUI.db or type(options) ~= "table" then return end
+	for _, key in ipairs({ "kainedFade", "kainedFadeAlphas", "kainedScales", "kainedSizes" }) do
+		if type(options[key]) == "table" then KUI.db[key] = Copy(options[key]) end
+	end
+	for _, key in ipairs({ "kainedFont", "kainedFontStyle", "kainedFontOutline", "kainedPartyHorizontal", "kainedPartyRangeLook", "kainedPartyCombatLook" }) do
+		if options[key] ~= nil then KUI.db[key] = options[key] end
+	end
+	if textFont then pcall(ApplyFont) end
+	ApplyLayoutOptions()
+	pcall(UpdateFade)
+	RangeTick()
+end
+
 function KUI:GetKainedPartyHorizontal() return Horizontal() and true or false end
 
 function KUI:SetKainedPartyHorizontal(on)

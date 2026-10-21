@@ -8,11 +8,15 @@ local PATCH_NOTES = {
 				"Kained: set the width and height of each frame in /kuf (party sets all four members at once). Bars, portrait and text fit themselves to the new size, and Reset sizes and scales puts everything back. The /kuf menu is laid out as one table, a row per frame, with Party and Text options side by side underneath.",
 				"Kained: each frame you tick to fade in /kuf gets its own Faded alpha slider, so your party can stay half-visible while your own frame disappears completely.",
 				"Kained party, for healers: a member your heals can't reach fades with a grey wash over their bars (names and numbers stay readable on top), an offline member shows fully grey at full strength, and a member who is fighting gets a red edge and crossed swords in the corner, at full strength even while faded, so it's clear at a glance who's out of reach and who has pulled. Both can be switched off in /kuf.",
+				"The font menus in /kuf show each choice in its own font, so you can see what you're getting before you pick it: each font, each of its styles, and each outline.",
+			} },
+			{ title = "Changed", items = {
+				"Quick Preset now also sets the Kained options: no fading, full-strength party when faded, out-of-range and in-combat party looks on, party in a column, PT Sans Narrow Bold, and every frame at its standard size and scale.",
 			} },
 			{ title = "Fixed", items = {
 				"Kained: the combat fader works. The game hides exact health and power numbers from addons, and the fader took that to mean you were hurt, so nothing ever faded. It now works like Shadowed Unit Frames' own fader: a ticked frame fades out of combat when you're not casting and its own unit (you, your pet, your target and so on) is at full health and mana, energy or focus. Your own frame also stays while you have a target.",
-				"The font menus in /kuf show each choice in its own font, so you can see what you're getting before you pick it: each font, each of its styles, and each outline.",
 				"Kained fonts now change when you pick one in /kuf. The text always stayed in PT Sans Narrow before.",
+				"/kuf opens on top of the /kui settings window instead of behind it.",
 				"/kuf says when the frames are unlocked, because they stay fully shown while you move them and only fade once locked.",
 			} },
 		},

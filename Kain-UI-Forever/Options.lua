@@ -254,6 +254,7 @@ function KUI:ApplyKainPreset()
 	Set("SetXPBarUnderPortrait", p.xpBarUnderPortrait)
 	Set("SetHideDefaultXPBar", p.xpBarHideDefault)
 
+	if p.kained then Set("SetKainedOptions", p.kained) end
 	if p.kainedPositions then Set("SetKainedPositions", p.kainedPositions) end
 
 	if KUI.SetUnitFrameStyle then
