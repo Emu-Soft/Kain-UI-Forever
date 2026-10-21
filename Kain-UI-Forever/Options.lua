@@ -166,6 +166,9 @@ local function CreateSlider(parent, x, y, width, minValue, maxValue, step)
 	return slider
 end
 
+KUI.CreateOptionsSlider = CreateSlider
+KUI.AddOptionsInfoButton = AddInfoButton
+
 local function CreateSectionHeader(parent, label, x, y)
 	local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	header:SetPoint("TOPLEFT", x, y)
@@ -1048,6 +1051,15 @@ local function BuildPanel()
 			table.insert(refreshers, SyncStyle)
 			SyncStyle()
 			y4 = y4 - 30
+
+			if KUI.ToggleKainedOptions then
+				local kufButton = CreateFrame("Button", "KainUIForeverKainedOptionsButton", content, "UIPanelButtonTemplate")
+				kufButton:SetSize(170, 22)
+				kufButton:SetPoint("TOPLEFT", COL4_X, y4)
+				kufButton:SetText("Kained options (/kuf)")
+				kufButton:SetScript("OnClick", function() KUI:ToggleKainedOptions() end)
+				y4 = y4 - 30
+			end
 		end
 	end
 

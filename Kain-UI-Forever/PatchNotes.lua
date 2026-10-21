@@ -2,9 +2,10 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.341",
+		version = "1.0.342",
 		sections = {
 			{ title = "New", items = {
+				"Kained options: type /kuf (or press Kained options under Unit Frames in /kui) for a menu of its own. Pick which frames fade out of combat (your own frame as before, and now your pet, target, focus, their targets and party too) and how much of them still shows when faded. Scale each frame on its own, from half size to double. Stack your party side by side instead of in a column. Unlock, reset positions and reset scales are there too.",
 				"Kained party: members out of reach of your heals fade, and a debuff your class can remove shows big beside that member, edged in its colour (poison green, magic blue and so on), so it's easy to spot and cleanse.",
 				"Kained shows what a cast will do, like Blizzard's own bars: while you cast, the mana the spell will cost shows as a lighter stretch at the end of your mana bar, and heals on their way to you, your pet, your target, your focus or your party show as a green stretch past their health.",
 				"GCDWatch watches enemy players only: NPCs and pets don't flash, and in dungeons and raids nothing does. Untick Players only in its settings to watch everything you can attack.",

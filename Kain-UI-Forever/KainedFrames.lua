@@ -62,7 +62,7 @@ local UNITS = {
 		point = { "CENTER", "CENTER", -132.72284444348, -97.872558822901 },
 		portrait = "LEFT", health = 1.2, power = 1.0,
 		texts = { hl = "nameGroup", hr = "curmaxhpPerhp", pl = "perpp", pr = "curmaxpp" },
-		fader = true, combo = true, druidMana = true, incHeal = true, costPrediction = true,
+		combo = true, druidMana = true, incHeal = true, costPrediction = true,
 		indicators = { "raid", "leader", "pvp", "status", "ready" },
 		auras = {
 			{ filter = "HELPFUL", side = "LEFT", below = true, max = 5, cancel = true },
@@ -100,7 +100,7 @@ local UNITS = {
 		indicators = { "raid" } },
 }
 
-local PARTY = { width = 190, height = 45, scale = 1, spacing = 23,
+local PARTY = { width = 190, height = 45, scale = 1, spacing = 23, hspacing = 70,
 	point = { "TOPLEFT", "BOTTOMLEFT", 2.2222807057094, 477.80001175668 },
 	portrait = "LEFT", health = 1.2, power = 1.0, incHeal = true,
 	texts = { hl = "name", hr = "curmaxhpPerhp", pl = "levelPerpp", pr = "curmaxpp" },
@@ -138,6 +138,28 @@ local aurasAvailable
 local function Plain(v) return not (issecretvalue and issecretvalue(v)) end
 local function Yes(v) return Plain(v) and v == true end
 local function PlainNumber(v) return Plain(v) and type(v) == "number" end
+
+local SCALE_MIN, SCALE_MAX = 0.5, 2
+
+local function UserScale(key)
+	local all = KUI.db and KUI.db.kainedScales
+	local s = type(all) == "table" and all[key]
+	if not PlainNumber(s) then return 1 end
+	return math.max(SCALE_MIN, math.min(SCALE_MAX, s))
+end
+
+local function FrameScale(key, spec)
+	return (spec.scale or 1) * UserScale(key)
+end
+
+local function Horizontal()
+	return KUI.db and KUI.db.kainedPartyHorizontal == true
+end
+
+local function PartySize()
+	if Horizontal() then return 4 * PARTY.width + 3 * PARTY.hspacing, PARTY.height end
+	return PARTY.width, 4 * PARTY.height + 3 * PARTY.spacing
+end
 
 local function Enabled()
 	return KUI.db and KUI.db.kainedFrames == true
@@ -732,34 +754,18 @@ end
 
 local DEPLETES = { [POWER.MANA] = true, [POWER.ENERGY] = true, [POWER.FOCUS] = true }
 
-local function FadeTo(f, alpha, fast)
-	local fade = f.fade
-	if fade.target == alpha then return end
-	fade.from = fade.target or 1
-	fade.target = alpha
-	fade.elapsed = 0
-	fade.time = fast and 0.15 or (alpha > fade.from and 0.25 or 0.75)
-	fade:Show()
+local FADE_KEYS = { "player", "pet", "target", "targettarget", "focus", "focustarget", "party" }
+local casting = false
+
+local function FadeOn(key)
+	local all = KUI.db and KUI.db.kainedFade
+	return type(all) == "table" and all[key] == true
 end
 
-local previewingNow
-local function UpdateFade(f)
-	if not f.fade then return end
-	if previewingNow and previewingNow() then FadeTo(f, 1) return end
-	if InCombatLockdown() or f.fade.casting then FadeTo(f, 1, f.fade.casting) return end
-	local unit = f.unit
-	local ptype = PowerType(unit)
-	local power, powerMax = UnitPower(unit), UnitPowerMax(unit)
-	local health, healthMax = UnitHealth(unit), UnitHealthMax(unit)
-	local active = false
-	if Plain(ptype) and DEPLETES[ptype] then
-		active = not (PlainNumber(power) and PlainNumber(powerMax)) or power ~= powerMax
-	end
-	if not active then
-		active = not (PlainNumber(health) and PlainNumber(healthMax)) or health ~= healthMax
-	end
-	if not active then active = Yes(UnitExists("target")) end
-	FadeTo(f, active and 1 or 0)
+local function FadedAlpha()
+	local a = KUI.db and KUI.db.kainedFadeAlpha
+	if not PlainNumber(a) then return 0 end
+	return math.max(0, math.min(1, a))
 end
 
 local function FadeOnUpdate(fade, elapsed)
@@ -771,6 +777,49 @@ local function FadeOnUpdate(fade, elapsed)
 		return
 	end
 	f:SetAlpha(fade.from + (fade.target - fade.from) * (fade.elapsed / fade.time))
+end
+
+local function FadeTo(owner, alpha, fast)
+	local fade = owner.fade
+	if not fade then
+		if alpha == 1 then return end
+
+		fade = CreateFrame("Frame", nil, UIParent)
+		fade.owner, fade.elapsed, fade.time, fade.target = owner, 0, 0, 1
+		fade:SetScript("OnUpdate", FadeOnUpdate)
+		fade:Hide()
+		owner.fade = fade
+	end
+	if fade.target == alpha then return end
+	fade.from = fade.target or 1
+	fade.target = alpha
+	fade.elapsed = 0
+	fade.time = fast and 0.15 or (alpha > fade.from and 0.25 or 0.75)
+	fade:Show()
+end
+
+local function PlayerActive()
+	if InCombatLockdown() or casting then return true end
+	local ptype = PowerType("player")
+	local power, powerMax = UnitPower("player"), UnitPowerMax("player")
+	local health, healthMax = UnitHealth("player"), UnitHealthMax("player")
+	if Plain(ptype) and DEPLETES[ptype] then
+		if not (PlainNumber(power) and PlainNumber(powerMax)) or power ~= powerMax then return true end
+	end
+	if not (PlainNumber(health) and PlainNumber(healthMax)) or health ~= healthMax then return true end
+	return Yes(UnitExists("target"))
+end
+
+local previewingNow
+local function UpdateFade()
+	local active = (previewingNow and previewingNow()) or PlayerActive()
+	local faded = FadedAlpha()
+	for _, key in ipairs(FADE_KEYS) do
+		local owner = key == "party" and holder or frames[key]
+		if owner then
+			if active or not FadeOn(key) then FadeTo(owner, 1, casting) else FadeTo(owner, faded) end
+		end
+	end
 end
 
 local function AurasAvailable()
@@ -1004,7 +1053,7 @@ local function Build(spec, parent)
 	f:RegisterForClicks("AnyUp")
 	f.extra = spec.xpRoom and (LOOK.gap + LOOK.xpHeight) or nil
 	f:SetSize(spec.width, spec.height + (f.extra or 0))
-	f:SetScale(spec.scale or 1)
+	f:SetScale(spec.party and (spec.scale or 1) or FrameScale(spec.key, spec))
 	f:SetHitRectInsets(LOOK.inset, LOOK.inset, LOOK.inset, LOOK.inset)
 	f:SetScript("OnEnter", ShowTooltip)
 	f:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -1079,14 +1128,6 @@ local function Build(spec, parent)
 		f.icons[name] = icon
 	end
 
-	if spec.fader then
-		local fade = CreateFrame("Frame", nil, f)
-		fade.owner, fade.elapsed, fade.time, fade.target = f, 0, 0, 1
-		fade:SetScript("OnUpdate", FadeOnUpdate)
-		fade:Hide()
-		f.fade = fade
-	end
-
 	f.auraRows = {}
 	if spec.auras and AurasAvailable() then
 		for _, def in ipairs(spec.auras) do
@@ -1129,7 +1170,7 @@ FullUpdate = function(f)
 		UpdatePortrait(f)
 		UpdateTexts(f)
 		UpdateIndicators(f)
-		UpdateFade(f)
+		if f == frames.player then UpdateFade() end
 	end)
 end
 
@@ -1152,14 +1193,14 @@ local function OnUnitEvent(f, event, unit)
 			UpdateHealth(f)
 			UpdateIncHeal(f)
 			UpdateTexts(f)
-			if f.fade then UpdateFade(f) end
+			if f == frames.player then UpdateFade() end
 		end)
 	elseif what == "power" then
 		Safe(function()
 			UpdatePower(f)
 			UpdateTexts(f)
 			if f.combo or f.druid then UpdateExtras(f) end
-			if f.fade then UpdateFade(f) end
+			if f == frames.player then UpdateFade() end
 			if f.icons.happy then UpdateIndicators(f, "happy") end
 		end)
 	elseif what == "texts" then
@@ -1266,7 +1307,7 @@ local function UIScale()
 end
 
 local function Place(f, spec, key)
-	local scale = spec.scale or 1
+	local scale = FrameScale(key, spec)
 	local down = (f.extra or 0) / 2
 	f:ClearAllPoints()
 	local saved = SavedSpot(key)
@@ -1279,22 +1320,35 @@ local function Place(f, spec, key)
 	f:SetPoint(p[1], UIParent, p[2], p[3] / scale, p[4] / scale - (p[1] == "CENTER" and down or 0))
 end
 
+local function LayoutParty()
+	holder:SetSize(PartySize())
+	local horizontal = Horizontal()
+	for i = 1, 4 do
+		local f = frames["party" .. i]
+		if f then
+			f:ClearAllPoints()
+			if horizontal then
+				f:SetPoint("TOPLEFT", holder, "TOPLEFT", (i - 1) * (PARTY.width + PARTY.hspacing), 0)
+			else
+				f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(i - 1) * (PARTY.height + PARTY.spacing))
+			end
+		end
+	end
+end
+
 local function BuildAll()
 	holder = CreateFrame("Frame", "KainUIForeverKainedParty", UIParent, "SecureHandlerStateTemplate")
-	holder:SetSize(PARTY.width, 4 * PARTY.height + 3 * PARTY.spacing)
+	holder:SetSize(PartySize())
+	holder:SetScale(FrameScale("party", PARTY))
 	Place(holder, PARTY, "party")
 	if RegisterStateDriver then RegisterStateDriver(holder, "visibility", "[group:raid] hide; show") end
 	for _, spec in ipairs(UNITS) do
 		local f = Build(spec, spec.party and holder or UIParent)
-		if spec.party then
-			f:ClearAllPoints()
-			f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -(spec.party - 1) * (PARTY.height + PARTY.spacing))
-		else
-			Place(f, spec, spec.key)
-		end
+		if not spec.party then Place(f, spec, spec.key) end
 		RegisterUnitEvents(f)
 		frames[spec.key] = f
 	end
+	LayoutParty()
 	built = true
 end
 
@@ -1425,7 +1479,7 @@ local function Movable()
 			list[#list + 1] = { key = spec.key, spec = spec, label = spec.label or TitleCase(spec.key) }
 		end
 	end
-	list[#list + 1] = { key = "party", spec = PARTY, label = "Party", height = 4 * PARTY.height + 3 * PARTY.spacing }
+	list[#list + 1] = { key = "party", spec = PARTY, label = "Party" }
 	return list
 end
 local LABELS = { player = "Player", pet = "Pet", target = "Target", targettarget = "Target of target",
@@ -1445,11 +1499,17 @@ local function Extra(key)
 	return f and f.extra or 0
 end
 
+local function MoverSize(m)
+	if m.key == "party" then return PartySize() end
+	return m.spec.width, m.spec.height
+end
+
 local function PlaceMover(box)
 	local m = box.item
-	local scale = m.spec.scale or 1
+	local scale = FrameScale(m.key, m.spec)
 	local extra = Extra(m.key) * scale
-	box:SetSize(m.spec.width * scale, (m.height or m.spec.height) * scale + extra)
+	local w, h = MoverSize(m)
+	box:SetSize(w * scale, h * scale + extra)
 	box:ClearAllPoints()
 	local saved = SavedSpot(m.key)
 	if saved then
@@ -1466,7 +1526,7 @@ local function SaveMover(box)
 	if not (PlainNumber(cx) and PlainNumber(cy) and PlainNumber(ux) and PlainNumber(uy)) then return end
 	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
 
-	local up = Extra(box.item.key) * (box.item.spec.scale or 1) / 2
+	local up = Extra(box.item.key) * FrameScale(box.item.key, box.item.spec) / 2
 	KUI.db.kainedPositions[box.item.key] = { x = math.floor((cx - ux) * 10 + 0.5) / 10, y = math.floor((cy - uy + up) * 10 + 0.5) / 10 }
 	PlaceMover(box)
 	PlaceFrames()
@@ -1536,12 +1596,7 @@ local function StartPreview()
 			FullUpdate(f)
 		end
 	end
-	local player = frames.player
-	if player and player.fade then
-		player.fade:Hide()
-		player.fade.target = 1
-		player:SetAlpha(1)
-	end
+	pcall(UpdateFade)
 end
 
 local function StopPreview()
@@ -1557,7 +1612,7 @@ local function StopPreview()
 			FullUpdate(f)
 		end
 	end
-	if frames.player then pcall(UpdateFade, frames.player) end
+	pcall(UpdateFade)
 end
 
 local function SnapElements(on)
@@ -1613,6 +1668,88 @@ end
 
 function KUI:IsKainedUnlocked() return unlocked end
 
+local optionsPending = false
+local toldCombat = false
+
+local function ApplyLayoutOptions()
+	if not built then return end
+	if InCombatLockdown() then
+		optionsPending = true
+		if not toldCombat then
+			toldCombat = true
+			print("|cff33ff99Kain-UI Forever|r Kained Unit Frames change size and layout once you're out of combat.")
+		end
+		return
+	end
+	optionsPending, toldCombat = false, false
+	for _, spec in ipairs(UNITS) do
+		local f = frames[spec.key]
+		if f and not spec.party then f:SetScale(FrameScale(spec.key, spec)) end
+	end
+	holder:SetScale(FrameScale("party", PARTY))
+	LayoutParty()
+	PlaceFrames()
+	for _, box in pairs(movers) do PlaceMover(box) end
+	Each(function(f) pcall(PlacePanel, f) end)
+end
+
+KUI.KAINED_FRAMES = {}
+for _, key in ipairs(FADE_KEYS) do KUI.KAINED_FRAMES[#KUI.KAINED_FRAMES + 1] = { key = key, label = LABELS[key] } end
+KUI.KAINED_SCALE_MIN, KUI.KAINED_SCALE_MAX = SCALE_MIN, SCALE_MAX
+
+function KUI:GetKainedFade(key) return FadeOn(key) end
+
+function KUI:SetKainedFade(key, on)
+	if not KUI.db then return end
+	KUI.db.kainedFade = type(KUI.db.kainedFade) == "table" and KUI.db.kainedFade or {}
+	KUI.db.kainedFade[key] = on and true or false
+	pcall(UpdateFade)
+end
+
+function KUI:GetKainedFadeAlpha() return FadedAlpha() end
+
+function KUI:SetKainedFadeAlpha(alpha)
+	if not KUI.db or not PlainNumber(alpha) then return end
+	KUI.db.kainedFadeAlpha = math.max(0, math.min(1, math.floor(alpha * 100 + 0.5) / 100))
+	pcall(UpdateFade)
+end
+
+function KUI:GetKainedScale(key) return UserScale(key) end
+
+function KUI:SetKainedScale(key, scale)
+	if not KUI.db or not PlainNumber(scale) then return end
+	KUI.db.kainedScales = type(KUI.db.kainedScales) == "table" and KUI.db.kainedScales or {}
+	scale = math.max(SCALE_MIN, math.min(SCALE_MAX, math.floor(scale * 100 + 0.5) / 100))
+	if UserScale(key) == scale then return end
+	KUI.db.kainedScales[key] = scale
+	ApplyLayoutOptions()
+end
+
+function KUI:ResetKainedScales()
+	if not KUI.db then return end
+	KUI.db.kainedScales = {}
+	ApplyLayoutOptions()
+end
+
+function KUI:GetKainedPartyHorizontal() return Horizontal() and true or false end
+
+function KUI:SetKainedPartyHorizontal(on)
+	if not KUI.db then return end
+	on = on and true or false
+	if Horizontal() == on then return end
+
+	local saved = SavedSpot("party")
+	local scale = FrameScale("party", PARTY)
+	local oldW, oldH = PartySize()
+	KUI.db.kainedPartyHorizontal = on
+	if saved then
+		local newW, newH = PartySize()
+		saved.x = saved.x + (newW - oldW) * scale / 2
+		saved.y = saved.y - (newH - oldH) * scale / 2
+	end
+	ApplyLayoutOptions()
+end
+
 SLASH_KAINUIKUF1 = "/kuf"
 SlashCmdList["KAINUIKUF"] = function(msg)
 	local command = (type(msg) == "string" and msg:match("^%s*(%S*)") or ""):lower()
@@ -1626,8 +1763,10 @@ SlashCmdList["KAINUIKUF"] = function(msg)
 	elseif command == "reset" then
 		KUI:ResetKainedPositions()
 		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames are back in their starting spots" .. (InCombatLockdown() and " (once you're out of combat)." or "."))
+	elseif command == "" and KUI.ToggleKainedOptions then
+		KUI:ToggleKainedOptions()
 	else
-		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames: |cffffff00/kuf unlock|r to move them, |cffffff00/kuf lock|r when done, |cffffff00/kuf reset|r to put them all back.")
+		print("|cff33ff99Kain-UI Forever|r Kained Unit Frames: |cffffff00/kuf|r for options, |cffffff00/kuf unlock|r to move them, |cffffff00/kuf lock|r when done, |cffffff00/kuf reset|r to put them all back.")
 	end
 end
 
@@ -1663,6 +1802,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 		KUI:ApplyKainedFrames()
 	end
 	if event == "PLAYER_REGEN_ENABLED" and placePending then PlaceFrames() end
+	if event == "PLAYER_REGEN_ENABLED" and optionsPending then ApplyLayoutOptions() end
 
 	if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		fighting = event == "PLAYER_REGEN_DISABLED"
@@ -1697,7 +1837,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 	if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_UPDATE_RESTING" then
 		if player then
 			pcall(UpdateIndicators, player, "status")
-			pcall(UpdateFade, player)
+			pcall(UpdateFade)
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		local target = frames.target
@@ -1706,7 +1846,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 			RefreshAuras(target)
 		end
 		if player then
-			pcall(UpdateFade, player)
+			pcall(UpdateFade)
 			Safe(UpdateExtras, player)
 		end
 	elseif event == "PLAYER_FOCUS_CHANGED" then
@@ -1745,10 +1885,10 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
 			Safe(UpdateCost, player, nil)
 		end
 
-		if player.fade and (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP"
-				or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_STOP") then
-			player.fade.casting = (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START") or nil
-			pcall(UpdateFade, player)
+		if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP"
+				or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+			casting = event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START"
+			pcall(UpdateFade)
 		end
 	end
 end)
