@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.345",
+		sections = {
+			{ title = "Fixed", items = {
+				"Kained: raid markers (skull, cross, star and the rest) show on your frames again, on you, your target, focus, pet, their targets and your party. The game hides which marker a unit has from addons, so Kained now hands it straight to the game to draw, the same way Blizzard's own frames do.",
+			} },
+		},
+	},
+	{
 		version = "1.0.344",
 		sections = {
 			{ title = "Changed", items = {

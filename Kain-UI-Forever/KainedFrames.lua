@@ -728,9 +728,18 @@ end
 local INDICATOR = {}
 INDICATOR.raid = function(f, icon)
 	local index = GetRaidTargetIndex and GetRaidTargetIndex(f.unit)
-	if not PlainNumber(index) or index < 1 or index > 8 then icon:Hide() return end
-	local col, row = (index - 1) % 4, math.floor((index - 1) / 4)
-	SetIcon(icon, true, "Interface\\TargetingFrame\\UI-RaidTargetingIcons", col * 0.25, (col + 1) * 0.25, row * 0.25, (row + 1) * 0.25)
+	if type(index) ~= "number" then icon:Hide() return end
+	icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+	if icon.SetSpriteSheetCell then
+		icon:SetSpriteSheetCell(index, 4, 4)
+	elseif PlainNumber(index) and index >= 1 and index <= 8 then
+		local col, row = (index - 1) % 4, math.floor((index - 1) / 4)
+		icon:SetTexCoord(col * 0.25, (col + 1) * 0.25, row * 0.25, (row + 1) * 0.25)
+	else
+		icon:Hide()
+		return
+	end
+	icon:Show()
 end
 INDICATOR.leader = function(f, icon)
 	if Yes(UnitIsGroupLeader and UnitIsGroupLeader(f.unit)) then
