@@ -1294,7 +1294,12 @@ local function Build(spec, parent)
 		local p = IND[name]
 		local icon = layer:CreateTexture(nil, "OVERLAY")
 		icon:SetSize(p[5], p[5])
-		icon:SetPoint(p[1], f, p[2], p[3], p[4])
+		if name == "raid" and f.portrait then
+			local corner = spec.portrait == "RIGHT" and "TOPRIGHT" or "TOPLEFT"
+			icon:SetPoint(corner, f.portrait, corner, corner == "TOPRIGHT" and 2 or -2, 2)
+		else
+			icon:SetPoint(p[1], f, p[2], p[3], p[4])
+		end
 		icon:Hide()
 		f.icons[name] = icon
 	end

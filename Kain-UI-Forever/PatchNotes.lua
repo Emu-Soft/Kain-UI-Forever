@@ -6,6 +6,7 @@ local PATCH_NOTES = {
 		sections = {
 			{ title = "Fixed", items = {
 				"Kained: raid markers (skull, cross, star and the rest) show on your frames again, on you, your target, focus, pet, their targets and your party. The game hides which marker a unit has from addons, so Kained now hands it straight to the game to draw, the same way Blizzard's own frames do.",
+				"Kained: the raid marker sits on the top corner of the portrait, on the outside edge of the frame, so it no longer covers your numbers. Frames without a portrait keep it in the middle.",
 			} },
 		},
 	},
