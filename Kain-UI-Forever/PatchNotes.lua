@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.346",
+		sections = {
+			{ title = "Fixed", items = {
+				"A short debuff icon on an enemy's nameplate, like a stun, no longer hides behind the level number in the corner -- it now shows properly, sized to fit right there.",
+			} },
+		},
+	},
+	{
 		version = "1.0.345",
 		sections = {
 			{ title = "Fixed", items = {
