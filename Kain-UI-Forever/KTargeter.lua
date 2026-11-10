@@ -548,16 +548,35 @@ local SEND_INTERVAL = 0.25
 local SEND_QUEUE_MAX = 1000
 local sendQueue, sendTicker = {}, nil
 
-local function CommRestricted()
-    local ci = C_ChatInfo
-    if not ci then return true end
+local function CommChecks()
+    local ci, out = C_ChatInfo, {}
     for _, name in ipairs({ "InChatMessagingLockdown", "AreOutgoingAddonChatMessagesRestricted" }) do
-        if ci[name] then
-            local ok, restricted = pcall(ci[name])
-            if ok and Plain(restricted) == true then return true end
+        local v = "n/a"
+        if ci and ci[name] then
+            local ok, r = pcall(ci[name])
+            r = ok and Plain(r)
+            v = not ok and "error" or (r == true and "yes" or (r == false and "no" or "?"))
+        end
+        out[#out + 1] = name .. " " .. v
+    end
+    return table.concat(out, ", ")
+end
+
+local function SendResultName(result)
+    if result == nil or result == true then return "Success" end
+    if result == false then return "Failed" end
+    local results = Enum and Enum.SendAddonMessageResult
+    if results then
+        for k, v in pairs(results) do
+            if v == result then return k end
         end
     end
-    return false
+    return tostring(result)
+end
+
+local commBlockedUntil, lastSendResult, sentCount = 0, nil, 0
+local function CommRestricted()
+    return GetTime() < commBlockedUntil
 end
 
 local function CommChannels()
@@ -584,12 +603,17 @@ local function PumpSendQueue()
     if CommRestricted() then return end
     local item = sendQueue[1]
     local ok, result = pcall(C_ChatInfo.SendAddonMessage, COMM_PREFIX, item.text, item.channel)
-    local results = Enum and Enum.SendAddonMessageResult
-    if ok and results and result ~= nil
-        and (result == results.AddonMessageThrottle or result == results.ChannelThrottle) then
+    local name = ok and SendResultName(Plain(result)) or "Error"
+    lastSendResult = name
+    if name:find("Throttle") then
+        return
+    end
+    if name:find("Lockdown") or name:find("Restrict") or name:find("Disallow") then
+        commBlockedUntil = GetTime() + 5
         return
     end
     table.remove(sendQueue, 1)
+    if name == "Success" then sentCount = sentCount + 1 end
 end
 
 local function SendKTMessage(text)
@@ -1263,8 +1287,10 @@ local RunProbe = Guarded("probe", function()
 
     local commState = "ok"
     if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then commState = "no SendAddonMessage"
-    elseif CommRestricted() then commState = "RESTRICTED right now" end
-    say("sharing: %s | comms %s | %d message(s) queued", DB_IsSharingEnabled() and "on" or "off", commState, #sendQueue)
+    elseif CommRestricted() then commState = "the game is holding messages right now" end
+    say("sharing: %s | comms %s | %d sent, %d message(s) queued | last send: %s",
+        DB_IsSharingEnabled() and "on" or "off", commState, sentCount, #sendQueue, lastSendResult or "none yet")
+    say("  client checks: %s", CommChecks())
 
     local anyErr = false
     for label, n in pairs(errorCounts) do
