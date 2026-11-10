@@ -2,15 +2,23 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.348",
+		sections = {
+			{ title = "Changed", items = {
+				"Kill on Sight spots enemies sooner: nameplates now appear as far away as the game allows, and a new enemy is picked up the moment their nameplate shows. You can turn the longer range off in /kos options, and your own setting comes back.",
+			} },
+			{ title = "Fixed", items = {
+				"Kill on Sight now shares the list with the guild on Forever: the game said messages were blocked when they weren't, so nothing was sent.",
+				"K-Targeter sharing now works on Forever, for the same reason: it held on to what you'd learned instead of sharing it. Type /kt probe to see how sharing is going.",
+			} },
+		},
+	},
+	{
 		version = "1.0.347",
 		sections = {
 			{ title = "New", items = {
 				"Kill on Sight is built in: the BH&G Kill List. Type /kos for the guild's shared kill-on-sight list, the Recently Seen page with your wins and losses against every enemy you've met, and the Horde Scum Nearby window.",
 				"Already using the standalone BH&G Kill List addon? K-UI takes over from it: your list, records and settings carry across, and the standalone addon stays quiet. Type /kos off to use the standalone addon instead.",
-				"Kill on Sight spots enemies sooner: nameplates now appear as far away as the game allows, and a new enemy is picked up the moment their nameplate shows. You can turn the longer range off in /kos options, and your own setting comes back.",
-			} },
-			{ title = "Fixed", items = {
-				"K-Targeter sharing now works on Forever: the game said messages to the guild and group were blocked when they weren't, so K-Targeter held on to what you'd learned instead of sharing it. Type /kt probe to see how sharing is going.",
 			} },
 		},
 	},
