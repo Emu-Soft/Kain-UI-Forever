@@ -93,6 +93,8 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - **Plater style** nameplates. Untick to get your own settings back.
 - **GCDWatch**: see what an enemy just did as an icon with its name beside their nameplate: their spells (gold edge), buffs they just gained (green), and in duels the debuffs they just put on you (red). Optional bar for your target, anywhere on screen. Its **Settings** button (or `/kui gcdw`) opens all its options. Based on Forever GCD by Tarolg, used under its MIT license (included in the `GCDWatch` folder). It watches enemy players only (untick Players only in its settings to watch NPCs too). If you have Forever GCD installed, it keeps doing the job and GCDWatch stays off.
 
+- **Kill on Sight (BH&G Kill List)**: a kill list shared with every guild member who uses it, kept in step automatically. A warning and a sound when someone on the list is nearby, a small "Horde Scum Nearby" window, and your wins and losses against every enemy you've met. Type `/kos`. If you also have the standalone BH&G Kill List addon, K-UI takes over and brings your list with it; `/kos off` hands the job back to the standalone addon.
+
 ### Macros
 - **Weapon Swap Macro Helper**: drag your weapons into the slots at the top of the settings for a one-click swap macro.
 - **Macro icon names**: hover any macro icon to see its name, or search icons by name.
@@ -122,6 +124,9 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 | `/kui factoryreset confirm` | Erase all of this addon's settings and start fresh. Can't be undone. |
 | `/kainuiemoji on` / `off` | Show or hide emoji in chat. |
 | `/kainuiemoji list` | List every emoji code you can type. |
+| `/kos` | Open the kill list. `/kos help` lists everything else. |
+| `/kos seen` | Everyone you've come across, with your wins and losses. |
+| `/kos off` / `on` | Turn K-UI's kill list off or on (after a reload). |
 | `/kkey` | K-Key options. |
 | `/kt` | K-Targeter options. |
 | `/rl` | Reload your interface. |
