@@ -7,6 +7,7 @@ local PATCH_NOTES = {
 			{ title = "New", items = {
 				"Kill on Sight is built in: the BH&G Kill List. Type /kos for the guild's shared kill-on-sight list, the Recently Seen page with your wins and losses against every enemy you've met, and the Horde Scum Nearby window.",
 				"Already using the standalone BH&G Kill List addon? K-UI takes over from it: your list, records and settings carry across, and the standalone addon stays quiet. Type /kos off to use the standalone addon instead.",
+				"Kill on Sight spots enemies sooner: nameplates now appear as far away as the game allows, and a new enemy is picked up the moment their nameplate shows. You can turn the longer range off in /kos options, and your own setting comes back.",
 			} },
 		},
 	},
