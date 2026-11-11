@@ -2,6 +2,15 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.349",
+		sections = {
+			{ title = "Fixed", items = {
+				"Kill on Sight: players on your own side can't be put on the kill list any more, from your target, the right-click menu, the nearby window or /kos add.",
+				"Kill on Sight: someone on your side who is already on the list no longer sets off a warning. You get one note in chat on how to take them off.",
+			} },
+		},
+	},
+	{
 		version = "1.0.348",
 		sections = {
 			{ title = "Changed", items = {
