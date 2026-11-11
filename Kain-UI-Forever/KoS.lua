@@ -123,6 +123,7 @@ function ns.SplitName(full)
 	if type(full) ~= "string" then return nil end
 	full = full:gsub("^%s+", ""):gsub("%s+$", "")
 	local name, realm = full:match("^([^%-]+)%-(.+)$")
+	if not name then name, realm = full:match("^(%S+)%s+(%S+)$") end
 	if not name then name = full end
 	name = ns.Clean(name, 48)
 	if not name or name:find(" ") then return nil end
@@ -136,7 +137,7 @@ end
 function ns.DisplayName(e)
 	if not e then return "?" end
 	if e.r and e.r:lower() ~= ns.MyRealm():lower() then
-		return e.n .. "-" .. e.r
+		return e.n .. " " .. e.r
 	end
 	return e.n
 end
@@ -966,9 +967,12 @@ function ns.IsAlly(info)
 	if info.ally ~= nil then return info.ally end
 	local key = ns.Key(info.name, info.realm or ns.MyRealm())
 	if ns.allies[key] or GuildKeys()[key] then return true end
-	local who = info.name
-	if info.realm and info.realm:lower() ~= ns.MyRealm():lower() then who = info.name .. "-" .. info.realm end
+	local who, who2 = info.name, nil
+	if info.realm and info.realm:lower() ~= ns.MyRealm():lower() then
+		who, who2 = info.name .. "-" .. info.realm, info.name .. " " .. info.realm
+	end
 	if Call(UnitInParty, who) or Call(UnitInRaid, who) then return true end
+	if who2 and (Call(UnitInParty, who2) or Call(UnitInRaid, who2)) then return true end
 	return false
 end
 
@@ -2448,7 +2452,7 @@ do
 local HELP = {
 	"/kos - open the kill list",
 	"/kos add - add your target (asks for a reason)",
-	"/kos add <name> [reason] - add someone by name (Name or Name-Realm)",
+	"/kos add <name> [reason] - add someone by name (Name, or Name-Realm for someone from elsewhere)",
 	"/kos remove <name> - take someone off the list (for everyone)",
 	"/kos reason <name> <reason> - change someone's reason",
 	"/kos check <name> - is this player on the list?",

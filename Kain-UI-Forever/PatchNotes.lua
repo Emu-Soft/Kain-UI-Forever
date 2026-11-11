@@ -7,7 +7,7 @@ local PATCH_NOTES = {
 			{ title = "Fixed", items = {
 				"Kill on Sight: players on your own side can't be put on the kill list any more, from your target, the right-click menu, the nearby window or /kos add.",
 				"Kill on Sight: someone on your side who is already on the list no longer sets off a warning. You get one note in chat on how to take them off.",
-				"Kill on Sight: left-clicking a name in the Horde Scum Nearby window targets them again.",
+				"Kill on Sight: left-clicking a name in the Horde Scum Nearby window targets them, including players from elsewhere, now shown as \"Xal Thorn\" the way the game shows them.",
 				"Kill on Sight: the Horde Scum Nearby window keeps its top edge where you put it and only grows downwards.",
 			} },
 		},
