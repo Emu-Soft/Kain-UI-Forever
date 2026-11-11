@@ -1914,8 +1914,7 @@ local function MakeRow(i)
 	row:SetSize(NEARBY_W - 8, ROW_H)
 	row:SetPoint("TOPLEFT", nearby, "TOPLEFT", 4, -20 - (i - 1) * ROW_H)
 
-	row:RegisterForClicks("AnyUp", "AnyDown")
-	row:SetAttribute("useOnKeyDown", false)
+	row:RegisterForClicks("AnyDown", "AnyUp")
 	row:SetAttribute("type1", "macro")
 	local hl = row:CreateTexture(nil, "HIGHLIGHT")
 	hl:SetAllPoints()
@@ -1930,6 +1929,17 @@ local function MakeRow(i)
 	row.right = Text(row, "GameFontDisableSmall", "RIGHT")
 	row.right:SetPoint("RIGHT", -3, 0)
 	row:SetScript("PostClick", function(self, button, down)
+		if ns.clickDebug then
+			local get = (C_CVar and C_CVar.GetCVar) or GetCVar
+			local ok, keyDown = pcall(get, "ActionButtonUseKeyDown")
+			ns.Print(string.format("click: %s %s | cast on key down: %s | type1 %s | macro %s | in combat: %s",
+				tostring(button), down and "press" or "release", ok and tostring(keyDown) or "?",
+				tostring(self:GetAttribute("type1")), tostring(self:GetAttribute("macrotext")),
+				InCombatLockdown() and "yes" or "no"))
+			C_Timer.After(0.3, function()
+				ns.Print("target now: " .. tostring(ns.PlainText(UnitName("target")) or "none"))
+			end)
+		end
 		if button == "RightButton" and not down then RowMenu(self) end
 	end)
 	row:SetScript("OnEnter", function(self)
@@ -2006,12 +2016,12 @@ local function LayoutNearby()
 		if item and i <= count then
 			row.key = item.key
 			row.info = { name = item.n.name, realm = item.n.realm, class = item.n.class, guild = item.n.guild, level = item.n.level }
-			row:SetAttribute("macrotext1", "/targetexact " .. ns.TargetName({ n = item.n.name, r = item.n.realm }))
+			row:SetAttribute("macrotext", "/targetexact " .. ns.TargetName({ n = item.n.name, r = item.n.realm }))
 			FillRowText(row, item)
 			row:Show()
 		else
 			row.key, row.info = nil, nil
-			row:SetAttribute("macrotext1", nil)
+			row:SetAttribute("macrotext", nil)
 			row:Hide()
 		end
 	end
@@ -2450,6 +2460,7 @@ local HELP = {
 	"/kos test - show a test warning",
 	"/kos move - move the warning",
 	"/kos status - what the addon can see (for bug reports)",
+	"/kos clicks - write clicks on the nearby window to chat (for bug reports)",
 	"/kos on | off - turn K-UI's kill list on or off (K-UI only)",
 }
 
@@ -2576,6 +2587,9 @@ local function Handler(msg)
 		ns.Print(ns.ToggleBannerMove() and "drag the warning where you want it, then type /kos move again." or "warning position saved.")
 	elseif cmd == "status" or cmd == "probe" then
 		Status()
+	elseif cmd == "clicks" then
+		ns.clickDebug = not ns.clickDebug
+		ns.Print(ns.clickDebug and "clicks on the nearby window are now written to chat. Type /kos clicks again to stop." or "click details off.")
 	else
 		for _, line in ipairs(HELP) do print("  " .. line) end
 	end
