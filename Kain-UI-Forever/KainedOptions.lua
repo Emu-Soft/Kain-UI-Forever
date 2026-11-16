@@ -210,7 +210,7 @@ local function Build()
 		function() return KUI:GetKainedPartyLook("combat") end,
 		function(on) KUI:SetKainedPartyLook("combat", on) end)
 	Info(f, combatLook.label, "In combat",
-		"A party member who is fighting gets a red edge and crossed swords in the corner. Members out of combat keep a plain frame, so you can tell at a glance who has pulled and who hasn't.")
+		"A party member who is fighting gets a glowing red edge and crossed swords in the corner. Members out of combat keep a plain frame, so you can tell at a glance who has pulled and who hasn't.")
 	local bottom = y - ROW
 
 	y = top

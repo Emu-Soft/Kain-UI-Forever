@@ -989,6 +989,20 @@ end
 local RANGE_IN, RANGE_OUT, RANGE_DIM, RANGE_EVERY = 1, 0.7, 0.45, 0.5
 local IN_COMBAT_ICON = { 0.5, 1, 0, 0.49 }
 
+local GLOW_TEXTURE = MEDIA .. "KainedGlow"
+local GLOW = 10
+local EDGE_RED = { 0.9, 0.1, 0.1 }
+local GLOW_PIECES = {
+	{ coords = { 0, 0.25, 0, 0.25 }, points = { { "BOTTOMRIGHT", "TOPLEFT" } }, w = true, h = true },
+	{ coords = { 0.75, 1, 0, 0.25 }, points = { { "BOTTOMLEFT", "TOPRIGHT" } }, w = true, h = true },
+	{ coords = { 0, 0.25, 0.75, 1 }, points = { { "TOPRIGHT", "BOTTOMLEFT" } }, w = true, h = true },
+	{ coords = { 0.75, 1, 0.75, 1 }, points = { { "TOPLEFT", "BOTTOMRIGHT" } }, w = true, h = true },
+	{ coords = { 0.25, 0.75, 0, 0.25 }, points = { { "BOTTOMLEFT", "TOPLEFT" }, { "BOTTOMRIGHT", "TOPRIGHT" } }, h = true },
+	{ coords = { 0.25, 0.75, 0.75, 1 }, points = { { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }, h = true },
+	{ coords = { 0, 0.25, 0.25, 0.75 }, points = { { "TOPRIGHT", "TOPLEFT" }, { "BOTTOMRIGHT", "BOTTOMLEFT" } }, w = true },
+	{ coords = { 0.75, 1, 0.25, 0.75 }, points = { { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" } }, w = true },
+}
+
 local function RangeLookOn() return not (KUI.db and KUI.db.kainedPartyRangeLook == false) end
 local function CombatLookOn() return not (KUI.db and KUI.db.kainedPartyCombatLook == false) end
 local HEAL_SPELLS = {
@@ -1271,12 +1285,24 @@ local function Build(spec, parent)
 		f:HookScript("OnHide", function() edge:SetAlpha(0) end)
 		edge:SetPoint("TOPLEFT", panel, "TOPLEFT", -1, 1)
 		edge:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 1, -1)
+
 		for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
 			local t = edge:CreateTexture(nil, "OVERLAY")
-			t:SetColorTexture(0.9, 0.1, 0.1, 1)
+			t:SetColorTexture(EDGE_RED[1], EDGE_RED[2], EDGE_RED[3], 1)
 			t:SetPoint(side[1], edge, side[1])
 			t:SetPoint(side[2], edge, side[2])
-			if i <= 2 then t:SetHeight(2) else t:SetWidth(2) end
+			if i <= 2 then t:SetHeight(1) else t:SetWidth(1) end
+		end
+		edge.glow = {}
+		for _, piece in ipairs(GLOW_PIECES) do
+			local t = edge:CreateTexture(nil, "ARTWORK")
+			t:SetTexture(GLOW_TEXTURE)
+			t:SetVertexColor(EDGE_RED[1], EDGE_RED[2], EDGE_RED[3], 1)
+			t:SetTexCoord(piece.coords[1], piece.coords[2], piece.coords[3], piece.coords[4])
+			for _, a in ipairs(piece.points) do t:SetPoint(a[1], panel, a[2], 0, 0) end
+			if piece.w then t:SetWidth(GLOW) end
+			if piece.h then t:SetHeight(GLOW) end
+			edge.glow[#edge.glow + 1] = t
 		end
 		local p = IND.status
 		local swords = edge:CreateTexture(nil, "OVERLAY")

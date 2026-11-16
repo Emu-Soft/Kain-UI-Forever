@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.352",
+		sections = {
+			{ title = "Changed", items = {
+				"Kained party: a member who is fighting now gets a thin red line with a soft red glow around it, instead of a hard red box.",
+			} },
+		},
+	},
+	{
 		version = "1.0.351",
 		sections = {
 			{ title = "New", items = {
