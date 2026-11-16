@@ -726,6 +726,7 @@ local function SetIcon(icon, shown, texture, l, r, t, b)
 end
 
 local INDICATOR = {}
+
 INDICATOR.raid = function(f, icon)
 	local index = GetRaidTargetIndex and GetRaidTargetIndex(f.unit)
 	if type(index) ~= "number" then icon:Hide() return end
@@ -816,7 +817,6 @@ local function FadedAlpha(key)
 	if not PlainNumber(a) then return 0 end
 	return math.max(0, math.min(1, a))
 end
-
 
 local function FadeOnUpdate(fade, elapsed)
 	fade.elapsed = fade.elapsed + elapsed
@@ -1266,7 +1266,6 @@ local function Build(spec, parent)
 		oor:SetAlpha(0)
 		f.oor = oor
 
-
 		local edge = CreateFrame("Frame", nil, parent)
 		edge:SetFrameLevel(level + 5)
 		f:HookScript("OnHide", function() edge:SetAlpha(0) end)
@@ -1715,6 +1714,7 @@ local function SaveMover(box)
 	local spot = MoverSpot(box)
 	if not spot then return end
 	KUI.db.kainedPositions = type(KUI.db.kainedPositions) == "table" and KUI.db.kainedPositions or {}
+
 	KUI.db.kainedPositions[box.item.key] = { x = math.floor(spot.x * 10 + 0.5) / 10, y = math.floor(spot.y * 10 + 0.5) / 10 }
 	PlaceMover(box)
 	PlaceFrames()

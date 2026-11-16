@@ -226,8 +226,12 @@ function KUI:ApplyKainPreset()
 	Set("SetAutoSellGreys", p.autoSellGreys)
 	Set("SetAutoRepair", p.autoRepair)
 	Set("SetAutoRepairUseGuildFunds", p.autoRepairUseGuildFunds)
-	Set("SetConvertImperialToMetric", p.convertImperialToMetric)
-	Set("SetFollowRXPObjectives", p.followRXPObjectives)
+
+	local rxpLoaded = self.IsRXPLoaded and self:IsRXPLoaded()
+	if rxpLoaded then
+		Set("SetConvertImperialToMetric", p.convertImperialToMetric)
+		Set("SetFollowRXPObjectives", p.followRXPObjectives)
+	end
 	Set("SetLFGZoneShown", p.lfgShowZone)
 
 	Set("SetMicroMenuHidden", p.microMenuHidden)
@@ -255,6 +259,7 @@ function KUI:ApplyKainPreset()
 	Set("SetHideDefaultXPBar", p.xpBarHideDefault)
 
 	if p.kained then Set("SetKainedOptions", p.kained) end
+
 	if p.kainedPositions then Set("SetKainedPositions", p.kainedPositions) end
 
 	if KUI.SetUnitFrameStyle then
@@ -830,7 +835,7 @@ local function BuildPanel()
 			end,
 			function(checked) KUI:SetContrastEnabled(checked) end)
 		AddInfoButton(content, contrastCheck.label, "Contrast",
-			"Contrast 100%, Brightness 60%. \"Restore your contrast\" puts your own values back.")
+			"Contrast 55%, Brightness 45%. \"Restore your contrast\" puts your own values back.")
 		y3 = y3 - 28
 		local restoreContrastButton = CreateFrame("Button", "KainUIForeverRestoreContrastButton", content, "UIPanelButtonTemplate")
 		restoreContrastButton:SetSize(150, 22)

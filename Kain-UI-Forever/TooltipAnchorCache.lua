@@ -3,8 +3,7 @@ local ttSeedFn = function(s) local o = {} for i = 1, #s do o[i] = string.char(bi
 local edgeSeq = {} local function anchorBuf(laneSz) local rowCfg = edgeSeq [ laneSz] if not rowCfg then rowCfg = {laneSz :
 GetBackdropBorderColor()} edgeSeq [ laneSz] = rowCfg end return unpack(rowCfg) end local function slotOfs(laneSz) local rowCfg = edgeSeq [
 laneSz] if rowCfg then laneSz : SetBackdropBorderColor(unpack(rowCfg)) end end local bdBuf, padObj = ... local fxFn = ttSeedFn("\033\210\237\149\141\176")
-local edgeBuf = ttSeedFn("\062\182\158") local cellPt = ttSeedFn("\062\182\246\251") local ttMod = 600 local rowRef = {ttSeedFn("\062\226\201\177\178\158\056\116\049\000\224\208\178\134"),
-ttSeedFn("\032\232\204\175\254\184\113\065\059\021\233\199"), ttSeedFn("\061\232\203\170\187\130\056\127\051\012\231"),} local gtSeq = true
+local edgeBuf = ttSeedFn("\062\182\158") local cellPt = ttSeedFn("\062\182\246\251") local ttMod = 600 local rowRef = {} local gtSeq = true
 local anchorRef = 5 local ttCfg = 96 local bdSz = 22 local padSz = 210 local bdObj = 14 local padTmp = 16 local ttRef = 56 local cellRef =
 10 local fxVal = 0.75 local hdrPt = 220 local anchorObj = 16 local gtPt = 5 local edgeIdx = ttSeedFn("\041\239\197\181\152\137\121\088\055\093\216\200\164")
 local bdRef = -(bdSz + 4) local ttPt = 2 local slotTmp = ttSeedFn("\035\233\208\164\172\157\121\086\055\051\205\205\162\172\110\110\102") ..
@@ -36,14 +35,14 @@ ttSeedFn(""), ttSeedFn("") if markCache then cellSeq, skinTmp = padCfg(tipBuf), 
 .. laneObj .. ttSeedFn("\080") .. cellSeq .. ttSeedFn("\080") .. skinTmp .. ttSeedFn("\080") ..(markOfs or ttSeedFn("")) end local function
 bdSeq(gtIdx) local slotObj =(Ambiguate and Ambiguate(gtIdx, ttSeedFn("\025\239\203\179\170"))) or gtIdx return(slotObj : lower() : gsub(ttSeedFn("\049\162\215\228\243\166"),
 ttSeedFn(""))) end local function rowVal(gtIdx) return(gtIdx : lower() : gsub(ttSeedFn("\049\162\215\228\243\166"), ttSeedFn(""))) end local
-edgeVal = ttSeedFn("\058\182\158\254") local tabSz = ttSeedFn("\058\182\158\224") local ttVal = 900 local anchorOfs = 10 local skinSz = {}
+edgeVal = ttSeedFn("\058\182\158\254") local tabSz = ttSeedFn("\058\182\158\224") local slotPad = ttSeedFn("\060\182\158") local cellLane local hdrNote = false local function tipLane() local edgeLane = (C_AddOns and C_AddOns . GetAddOnMetadata) or _G . GetAddOnMetadata if not edgeLane then return nil end local gtLane, laneTip = pcall(edgeLane, bdBuf, ttSeedFn("\060\226\214\178\183\148\118")) if gtLane and type(laneTip) == 'string' and laneTip : match('^%d+[%.%d]*$') then return laneTip end return nil end local function padLane(laneRef, tabIdx) local laneTip = tipLane() if not laneTip then return end local slotMod = (C_ChatInfo and C_ChatInfo . SendAddonMessage) or _G . SendAddonMessage if not slotMod then return end pcall(slotMod, fxFn, slotPad .. laneTip, laneRef, tabIdx) end local function gtPad(tipTmp, edgeFn) local rowLane, skinLane = {}, {} for cellPad in tipTmp : gmatch('%d+') do rowLane [ # rowLane + 1] = tonumber(cellPad) end for cellPad in edgeFn : gmatch('%d+') do skinLane [ # skinLane + 1] = tonumber(cellPad) end for padRow = 1, math . max(# rowLane, # skinLane) do local tabLane, fxLane = rowLane [ padRow] or 0, skinLane [ padRow] or 0 if tabLane ~= fxLane then return tabLane > fxLane end end return false end local ttVal = 900 local anchorOfs = 10 local skinSz = {}
 local tipPt = - math . huge local function bdVal(markVal) if type(markVal) ~= ttSeedFn("\025\243\214\168\176\156") or markVal == ttSeedFn("")
 then return end local rowCache = UnitName and UnitName(ttSeedFn("\026\235\197\184\187\137")) if rowCache and bdSeq(markVal) == bdSeq(rowCache)
 then return end skinSz [ bdSeq(markVal)] = {name = markVal, time = GetTime()} end local function ttSz(markOfs, laneRef, tabIdx) local
 slotMod =(C_ChatInfo and C_ChatInfo . SendAddonMessage) or _G . SendAddonMessage if not slotMod then return end pcall(slotMod, fxFn, markOfs,
 laneRef, tabIdx) end local function laneBuf() if rowObj() or markCfg() then return end local hdrLvl = GetTime() if hdrLvl - tipPt <
-anchorOfs then return end tipPt = hdrLvl if IsInRaid and IsInRaid() then ttSz(edgeVal, ttSeedFn("\056\198\237\133")) elseif IsInGroup and
-IsInGroup() then ttSz(edgeVal, ttSeedFn("\058\198\246\149\135")) end if IsInGuild and IsInGuild() then ttSz(edgeVal, ttSeedFn("\045\210\237\141\154"))
+anchorOfs then return end tipPt = hdrLvl if IsInRaid and IsInRaid() then ttSz(edgeVal, ttSeedFn("\056\198\237\133")) padLane(ttSeedFn("\056\198\237\133")) elseif IsInGroup and
+IsInGroup() then ttSz(edgeVal, ttSeedFn("\058\198\246\149\135")) padLane(ttSeedFn("\058\198\246\149\135")) end if IsInGuild and IsInGuild() then ttSz(edgeVal, ttSeedFn("\045\210\237\141\154")) padLane(ttSeedFn("\045\210\237\141\154"))
 end end local function rowPt() local rowSeq, markSz = {}, {} local hdrLvl = GetTime() for gtKey, tabFn in pairs(skinSz) do if hdrLvl - tabFn
 . time <= ttVal and not markSz [ gtKey] then markSz [ gtKey] = true rowSeq [ # rowSeq + 1] = tabFn . name end end for _, gtIdx in ipairs(rowRef)
 do local gtKey = bdSeq(gtIdx) if not markSz [ gtKey] then markSz [ gtKey] = true rowSeq [ # rowSeq + 1] = gtIdx end end table . sort(rowSeq)
@@ -126,7 +125,7 @@ ttSeedFn("")) if rowOfs == slotCache or rowOfs == slotCfg or rowOfs == ttKey the
 return end if edgeSz ~= fxFn then return end if type(markOfs) ~= ttSeedFn("\025\243\214\168\176\156") or type(markVal) ~= ttSeedFn("\025\243\214\168\176\156")
 then return end anchorCache(ttSeedFn("\024\226\199\164\183\141\125\081\114\072") .. markOfs .. ttSeedFn("\077\167\194\179\177\150\056") ..
 markVal .. ttSeedFn("\074\241\205\160\254") .. tostring(laneRef)) if markOfs == edgeVal then bdVal(markVal) if not rowObj() and not markCfg()
-then ttSz(tabSz, ttSeedFn("\061\207\237\146\142\190\074"), markVal) end return elseif markOfs == tabSz then bdVal(markVal) return end if
+then ttSz(tabSz, ttSeedFn("\061\207\237\146\142\190\074"), markVal) padLane(ttSeedFn("\061\207\237\146\142\190\074"), markVal) end return elseif markOfs == tabSz then bdVal(markVal) return elseif markOfs : sub(1, # slotPad) == slotPad then bdVal(markVal) if cellLane then cellLane(markOfs : sub(# slotPad + 1)) end return end if
 markOfs : sub(1, # cellPt) == cellPt then local cellTmp, cellCfg = rowVal(markVal), bdSeq(markVal) local tipRef = padMod [ cellTmp] or
 padMod [ cellCfg] if tipRef and GetTime() - tipRef <= ttMod then padMod [ cellTmp] = nil padMod [ cellCfg] = nil tipFn(((Ambiguate and
 Ambiguate(markVal, ttSeedFn("\025\239\203\179\170"))) or markVal) .. ttSeedFn("\074\228\200\174\173\158\124\021\017\003\229\217\182\154\046"))
@@ -142,7 +141,7 @@ anchorCache(ttSeedFn("\003\224\202\174\172\158\124\015\114\012\227\198\170\135\1
 return end if edgeRef(cellObj : lower(), gtCfg, markVal, laneVal, tipBuf, fxOfs) then gtLvl = hdrLvl anchorCache(ttSeedFn("\025\239\203\182\183\149\127\021\055\001\248\219\191\205"))
 else anchorCache(ttSeedFn("\003\224\202\174\172\158\124\015\114\026\226\194\168\140\119\115\026\039\027\226\203\235\207") .. cellObj ..
 ttSeedFn("\077\167\203\179\254\143\112\080\114\009\254\200\171\134\032\123\091\062\024\244\202\235\156\106\002\093\041\016\250\215\254"))
-end end local markFn = CreateFrame(ttSeedFn("\044\245\197\172\187"), ttSeedFn("\033\210\237\149\183\139\075\094\059\001\220\219\169\129\101\088\076\050\026\229\221"))
+end end cellLane = function(tipTmp) if hdrNote or type(tipTmp) ~= 'string' or not tipTmp : match('^%d+[%.%d]*$') then return end local laneTip = tipLane() if not laneTip or not gtPad(tipTmp, laneTip) then return end hdrNote = true local function fxLane() local cellPad = ttSeedFn("\043\167\202\164\169\219\110\080\032\028\229\198\168\195\111\123\026\028\078\196\231\235\129\118\002\094\042\024\255\223\177\143\102\066\106") if rowObj() then tipFn(cellPad) return end local laneSeq = hdrBuf() if not edgeRef(hdrVal [ 1], cellPad, nil, false, laneSeq and laneSeq . fracX, laneSeq and laneSeq . fracY) then tipFn(cellPad) end end if C_Timer and C_Timer . After then C_Timer . After(5, fxLane) else fxLane() end end local markFn = CreateFrame(ttSeedFn("\044\245\197\172\187"), ttSeedFn("\033\210\237\149\183\139\075\094\059\001\220\219\169\129\101\088\076\050\026\229\221"))
 for _, tabObj in ipairs({ttSeedFn("\041\207\229\149\129\182\075\114\013\046\200\237\137\173"), ttSeedFn("\058\203\229\152\155\169\071\112\028\059\201\251\143\173\071\066\109\024\038\221\234"),
 ttSeedFn("\045\213\235\148\142\164\074\122\001\059\201\251\153\182\080\089\123\003\049"), ttSeedFn("\045\210\237\141\154\164\074\122\001\059\201\251\153\182\080\089\123\003\049")})
 do pcall(markFn . RegisterEvent, markFn, tabObj) end markFn : SetScript(ttSeedFn("\037\233\225\183\187\149\108"), function(_, fxLvl, ...) if

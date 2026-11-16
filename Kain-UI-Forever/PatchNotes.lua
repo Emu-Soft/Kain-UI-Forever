@@ -2,6 +2,18 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.351",
+		sections = {
+			{ title = "New", items = {
+				"You'll get a heads-up when a newer K-UI is out.",
+			} },
+			{ title = "Changed", items = {
+				"Quick Preset skips the RestedXP options if you don't have RestedXP.",
+				"Contrast option is softer: 55% contrast, 45% brightness.",
+			} },
+		},
+	},
+	{
 		version = "1.0.349",
 		sections = {
 			{ title = "Fixed", items = {

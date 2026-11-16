@@ -297,6 +297,7 @@ local function IsRXPLoaded()
 	return (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("RXPGuides"))
 		or (IsAddOnLoaded and IsAddOnLoaded("RXPGuides")) or false
 end
+function KUI:IsRXPLoaded() return IsRXPLoaded() and true or false end
 
 function KUI:ApplyFollowRXPObjectives()
 	if not (KUI.db and KUI.db.followRXPObjectives) then return end

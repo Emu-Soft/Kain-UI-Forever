@@ -3,8 +3,8 @@ local _, KUI = ...
 local BRIGHTNESS_CVARS = { "Brightness" }
 local CONTRAST_CVARS = { "Contrast" }
 
-local CONTRAST_VALUE = "100"
-local BRIGHTNESS_VALUE = "60"
+local CONTRAST_VALUE = "55"
+local BRIGHTNESS_VALUE = "45"
 
 local scanLines = { "Contrast hasn't been turned on yet this session -- check the box, then run this again." }
 local function ResetScan() scanLines = {} end
@@ -98,13 +98,13 @@ function KUI:SetContrastEnabled(enabled)
 	local saved = KUI.db.contrastSavedValues
 	if saved.brightnessCVar then
 		local ok, err = pcall(SetCVar, saved.brightnessCVar, BRIGHTNESS_VALUE)
-		Note("brightness (%s): %s", saved.brightnessCVar, ok and "set to 60%" or ("failed: " .. tostring(err)))
+		Note("brightness (%s): %s", saved.brightnessCVar, ok and "set to 45%" or ("failed: " .. tostring(err)))
 	else
 		Note("no brightness CVar found on this client (tried: %s).", table.concat(BRIGHTNESS_CVARS, ", "))
 	end
 	if saved.contrastCVar then
 		local ok, err = pcall(SetCVar, saved.contrastCVar, CONTRAST_VALUE)
-		Note("contrast (%s): %s", saved.contrastCVar, ok and "set to 100%" or ("failed: " .. tostring(err)))
+		Note("contrast (%s): %s", saved.contrastCVar, ok and "set to 55%" or ("failed: " .. tostring(err)))
 	else
 		Note("no contrast CVar found on this client (tried: %s) -- brightness alone still applied above, if found.", table.concat(CONTRAST_CVARS, ", "))
 	end
