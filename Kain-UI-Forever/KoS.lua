@@ -923,7 +923,6 @@ local lastGuildNote = {}
 
 local SOUNDS = {
 	kos = "detected-kos.mp3",
-	kosaway = "detected-kosaway.mp3",
 	nearby = "detected-nearby.mp3",
 	add = "list-add.mp3",
 	remove = "list-remove.mp3",
@@ -1319,8 +1318,8 @@ ns.Listen("GUILD_SIGHTING", function(key, zone, sender)
 	if lastGuildNote[key] and GetTime() - lastGuildNote[key] < GUILD_NOTE_COOLDOWN then return end
 	lastGuildNote[key] = GetTime()
 	local where = (zone and zone ~= "") and (" in " .. zone) or ""
+
 	ns.Print(ns.ColorName(e) .. " spotted by " .. ns.ShortSender(sender) .. where .. ".")
-	if ns.Setting("sound") then ns.PlaySound("kosaway") end
 	ns.Fire("SEEN", key)
 end)
 
@@ -2347,7 +2346,7 @@ opts:Hide()
 
 local OPTIONS = {
 	{ "banner", "Show a big warning when a listed player shows up" },
-	{ "sound", "Play the warning sounds (kill list, guild sightings, adding and removing)" },
+	{ "sound", "Play the warning sounds (kill list, adding and removing)" },
 	{ "nearbySound", "Play a sound for every new enemy player nearby" },
 	{ "chat", "Write the warning in chat" },
 	{ "shareSightings", "Tell the guild when I spot a listed player" },
