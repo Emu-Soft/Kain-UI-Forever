@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.353",
+		sections = {
+			{ title = "Changed", items = {
+				"Kill on Sight: no more sound when a guildmate spots someone on the list. You still get the chat line.",
+			} },
+		},
+	},
+	{
 		version = "1.0.352",
 		sections = {
 			{ title = "Changed", items = {
