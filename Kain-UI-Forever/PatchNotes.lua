@@ -6,6 +6,7 @@ local PATCH_NOTES = {
 		sections = {
 			{ title = "Changed", items = {
 				"Group Finder: the Players list is split into Tank, Healer and DPS, each with its own fold button. Someone who signed up for more than one role shows up in each of them. Type /kui lfgroles off to go back to one Players list.",
+				"Kill on Sight: the nearby window now hides itself in dungeons, raids and scenarios, and stays up in battlegrounds, arenas and the open world.",
 			} },
 		},
 	},
