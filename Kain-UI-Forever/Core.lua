@@ -46,6 +46,7 @@ KUI.defaults = {
 	convertImperialToMetric = false,
 	followRXPObjectives = false,
 	lfgShowZone = true,
+	lfgRoleSections = true,
 	levelUpScreenshot = false,
 
 	gcdWatch = false,
@@ -74,6 +75,7 @@ KUI.KAIN_PRESET = {
 	convertImperialToMetric = true,
 	followRXPObjectives = true,
 	lfgShowZone = true,
+	lfgRoleSections = true,
 	microMenuHidden = false,
 	hiddenMicroButtons = {
 		character = true, profession = true, spellbook = true, talent = true,
@@ -464,6 +466,129 @@ if EventUtil and EventUtil.ContinueOnAddOnLoaded then
 	EventUtil.ContinueOnAddOnLoaded(LFG_ADDON, HookLFGBrowseList)
 end
 
+local LFG_ROLE_SECTIONS = {
+	{ key = "tank", label = "Tank" },
+	{ key = "healer", label = "Healer" },
+	{ key = "dps", label = "DPS" },
+	{ key = "none", label = "No Role" },
+}
+local LFG_ROLE_LABELS = {}
+for _, section in ipairs(LFG_ROLE_SECTIONS) do LFG_ROLE_LABELS[section.key] = section.label end
+
+local lfgRoleOwner = {}
+local lfgRoleHeaders = {}
+local lfgRoleCollapsed = {}
+local lfgRoleHooked = false
+
+local function LFGReadRoles(resultID)
+	local info = C_LFGList.GetSearchResultPlayerInfo(resultID, 1)
+	if not info or not canaccessvalue(info) then return nil end
+	local roles = info.lfgRoles
+	if type(roles) ~= "table" or not canaccessvalue(roles) then return nil end
+	local tank, healer, dps = roles.tank, roles.healer, roles.dps
+	if not (canaccessvalue(tank) and canaccessvalue(healer) and canaccessvalue(dps)) then return nil end
+	return { tank = tank and true or false, healer = healer and true or false, dps = dps and true or false }
+end
+
+local function FindLFGPlayersNode(provider, soloType)
+	for index, node in ipairs(provider:GetChildrenNodes()) do
+		local data = node:GetData()
+		if type(data) == "table" and data.dividerType == soloType and not data.kuiRole then
+			return node, index
+		end
+	end
+	return nil
+end
+
+function KUI:SplitLFGPlayersByRole()
+	if not (KUI.db and KUI.db.lfgRoleSections ~= false) then return end
+	if not (C_LFGList and C_LFGList.GetSearchResultPlayerInfo) then return end
+	local soloType = LFGVanillaBrowseDividerType and LFGVanillaBrowseDividerType.CategorySolo
+	local scrollBox = GetLFGScrollBox()
+	local provider = soloType and scrollBox and scrollBox.GetDataProvider and scrollBox:GetDataProvider()
+	if not (provider and provider.GetChildrenNodes and provider.InsertAtIndex) then return end
+
+	for key, node in pairs(lfgRoleHeaders) do
+		lfgRoleCollapsed[key] = node:IsCollapsed() and true or nil
+	end
+
+	local playersNode, playersIndex = FindLFGPlayersNode(provider, soloType)
+	if not playersNode then return end
+
+	local buckets = {}
+	for _, section in ipairs(LFG_ROLE_SECTIONS) do buckets[section.key] = {} end
+	for _, child in ipairs(playersNode:GetNodes()) do
+		local data = child:GetData()
+		local resultID = type(data) == "table" and data.resultID
+		if type(resultID) ~= "number" then return end
+		local roles = LFGReadRoles(resultID)
+		if not roles then return end
+		local placed = false
+		for _, key in ipairs({ "tank", "healer", "dps" }) do
+			if roles[key] then
+				table.insert(buckets[key], data)
+				placed = true
+			end
+		end
+		if not placed then table.insert(buckets.none, data) end
+	end
+
+	wipe(lfgRoleHeaders)
+	local insertAt = playersIndex
+	for _, section in ipairs(LFG_ROLE_SECTIONS) do
+		local list = buckets[section.key]
+		if #list > 0 then
+			local header = provider:InsertAtIndex({ dividerType = soloType, kuiRole = section.key, kuiCount = #list }, insertAt)
+			insertAt = insertAt + 1
+
+			header:SetCollapsed(lfgRoleCollapsed[section.key] and true or false, false, true)
+			for _, data in ipairs(list) do
+				header:Insert({ index = data.index, resultID = data.resultID, category = data.category })
+			end
+			lfgRoleHeaders[section.key] = header
+		end
+	end
+	provider:Remove(playersNode)
+end
+
+local function OnLFGRowInitialized(_, frame, node)
+	if not (frame and frame.CategoryLabel and type(node) == "table" and node.GetData) then return end
+	local data = node:GetData()
+	if type(data) ~= "table" or not data.dividerType then return end
+	if data.kuiRole then
+		frame.CategoryLabel:SetText(string.format("%s (%d)", LFG_ROLE_LABELS[data.kuiRole] or "", data.kuiCount or 0))
+		frame.CategoryLabel:Show()
+	end
+	local collapsed = node:IsCollapsed() and true or false
+	if frame.ExpandIcon then frame.ExpandIcon:SetShown(collapsed) end
+	if frame.CollapseIcon then frame.CollapseIcon:SetShown(not collapsed) end
+end
+
+local function HookLFGRoleSections()
+	if lfgRoleHooked then return end
+	local scrollBox = GetLFGScrollBox()
+	if not (scrollBox and scrollBox.RegisterCallback and ScrollBoxListMixin and ScrollBoxListMixin.Event
+		and ScrollBoxListMixin.Event.OnDataProviderReassigned and ScrollUtil and ScrollUtil.AddInitializedFrameCallback) then
+		print("|cffff6060Kain-UI Forever:|r couldn't reach the Group Finder list -- players won't be split by role.")
+		return
+	end
+	lfgRoleHooked = true
+	scrollBox:RegisterCallback(ScrollBoxListMixin.Event.OnDataProviderReassigned, function()
+		KUI:SplitLFGPlayersByRole()
+	end, lfgRoleOwner)
+	ScrollUtil.AddInitializedFrameCallback(scrollBox, OnLFGRowInitialized, lfgRoleOwner, false)
+end
+
+function KUI:SetLFGRoleSections(enabled)
+	if not KUI.db then return end
+	KUI.db.lfgRoleSections = enabled and true or false
+	if enabled and lfgRoleHooked then KUI:SplitLFGPlayersByRole() end
+end
+
+if EventUtil and EventUtil.ContinueOnAddOnLoaded then
+	EventUtil.ContinueOnAddOnLoaded(LFG_ADDON, HookLFGRoleSections)
+end
+
 local function FindOwnText(frame)
 	if frame.GetText then
 		local ok, text = pcall(frame.GetText, frame)
@@ -720,6 +845,7 @@ KUI.USER_COMMANDS = {
 	resetdrag = true, resetlootroll = true, zonebarreset = true, xpreset = true,
 	installmacros = true, weaponswap = true, linksoff = true, clearerrors = true,
 	enabledev = true, disabledev = true, gcdw = true,
+	lfgroles = true,
 	unlock = true, lock = true, reset = true,
 }
 
@@ -873,6 +999,14 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:SquareMinimapScanReport()
 	elseif command == "lfgfieldscan" and KUI.LFGFieldScanReport then
 		KUI:LFGFieldScanReport()
+	elseif command == "lfgroles" and KUI.SetLFGRoleSections then
+
+		local arg = rest:lower()
+		if arg == "on" or arg == "off" then
+			KUI:SetLFGRoleSections(arg == "on")
+		end
+		local on = KUI.db and KUI.db.lfgRoleSections ~= false
+		print("|cff33ff99Kain-UI Forever|r Group Finder players by role: " .. (on and "on" or "off (from the next search)") .. ". Type |cffffff00/kui lfgroles on|r or |cffffff00off|r to change.")
 	elseif command == "diffscan" and KUI.GuildDifficultyScanReport then
 		KUI:GuildDifficultyScanReport()
 	elseif command == "zonebarreset" and KUI.ResetZoneBarPosition then

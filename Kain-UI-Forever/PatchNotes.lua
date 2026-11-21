@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.354",
+		sections = {
+			{ title = "Changed", items = {
+				"Group Finder: the Players list is split into Tank, Healer and DPS, each with its own fold button. Someone who signed up for more than one role shows up in each of them. Type /kui lfgroles off to go back to one Players list.",
+			} },
+		},
+	},
+	{
 		version = "1.0.353",
 		sections = {
 			{ title = "Changed", items = {
@@ -892,6 +900,7 @@ local HELP_COMMANDS = {
 	{ "/kui installmacros", "Add the starter macros again." },
 	{ "/kui weaponswap", "Rebuild the weapon swap macro." },
 	{ "/kui linksoff", "Switch Enhance Chat off straight away, if chat ever misbehaves." },
+	{ "/kui lfgroles off", "Group Finder: one Players list again instead of Tank, Healer and DPS (from your next search). /kui lfgroles on splits it again." },
 	{ "/kui gcdw", "GCDWatch: open its settings and list its commands (on, off, status, unlock, lock, preview)." },
 	{ "/kui factoryreset confirm", "Erase all of this addon's settings and start fresh. Can't be undone." },
 	{ "/kainuiemoji on", "Show emoji in chat. /kainuiemoji off hides them." },

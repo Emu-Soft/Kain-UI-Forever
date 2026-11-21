@@ -233,6 +233,7 @@ function KUI:ApplyKainPreset()
 		Set("SetFollowRXPObjectives", p.followRXPObjectives)
 	end
 	Set("SetLFGZoneShown", p.lfgShowZone)
+	Set("SetLFGRoleSections", p.lfgRoleSections)
 
 	Set("SetMicroMenuHidden", p.microMenuHidden)
 	for _, btn in ipairs(self.GetMicroButtonOptions and self:GetMicroButtonOptions() or {}) do
