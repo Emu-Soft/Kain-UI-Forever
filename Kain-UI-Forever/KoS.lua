@@ -183,6 +183,7 @@ ns.DEFAULTS = {
 	shareSightings = true,
 	guildSightings = true,
 	nearby = true,
+	hideInDungeons = true,
 	nearbyAll = true,
 	nearbyTime = 60,
 	alertCooldown = 60,
@@ -1989,6 +1990,17 @@ local function FillRowText(row, item)
 	row.bg:SetShown(e ~= nil)
 end
 
+local HIDE_IN = { party = true, raid = true, scenario = true }
+function ns.InDungeon()
+	if not IsInInstance then return false end
+	local ok, inside, kind = pcall(IsInInstance)
+	return ok and ns.Plain(inside) and HIDE_IN[ns.Plain(kind)] == true or false
+end
+
+local function NearbyWanted()
+	return ns.Setting("nearby") and not (ns.Setting("hideInDungeons") and ns.InDungeon())
+end
+
 local layoutPending = false
 
 local function LayoutNearby()
@@ -2032,7 +2044,7 @@ local function LayoutNearby()
 	nearby.footer:SetText(more > 0 and ("+" .. more .. " more") or (#list == 0 and "No enemies nearby" or ""))
 	nearby:SetHeight(20 + count * ROW_H + 16)
 	nearby.title:SetText("Horde Scum Nearby" .. (#list > 0 and (" (" .. #list .. ")") or ""))
-	local want = ns.Setting("nearby")
+	local want = NearbyWanted()
 	if want and not nearby:IsShown() then nearby:Show() elseif not want and nearby:IsShown() then nearby:Hide() end
 end
 
@@ -2041,13 +2053,16 @@ ns.Listen("LIST_CHANGED", function() if nearby:IsShown() then LayoutNearby() end
 ns.Listen("SETTINGS_CHANGED", function() LayoutNearby() end)
 ns.On("PLAYER_REGEN_ENABLED", function() if layoutPending then LayoutNearby() end end)
 
+ns.On("PLAYER_ENTERING_WORLD", function() LayoutNearby() end)
+
 function ns.ToggleNearby()
 	if InCombatLockdown() then
 		ns.Print("the nearby window can't be shown or hidden in combat.")
 		return
 	end
 	ns.SetSetting("nearby", not ns.Setting("nearby"))
-	ns.Print("nearby window " .. (ns.Setting("nearby") and "on." or "off."))
+	ns.Print("nearby window " .. (ns.Setting("nearby") and "on." or "off.")
+		.. ((ns.Setting("nearby") and not NearbyWanted()) and " It comes back when you leave this dungeon (or turn off \"Hide the nearby window in dungeons and raids\" in /kos options)." or ""))
 end
 
 local LIST_ROWS = 10
@@ -2352,6 +2367,7 @@ local OPTIONS = {
 	{ "shareSightings", "Tell the guild when I spot a listed player" },
 	{ "guildSightings", "Show the guild's sightings in my chat" },
 	{ "nearby", "Show the nearby enemies window" },
+	{ "hideInDungeons", "Hide the nearby window in dungeons and raids" },
 	{ "nearbyAll", "List every enemy player nearby, not only listed ones" },
 	{ "farPlates", "Show nameplates as far away as the game allows (spots enemies sooner)" },
 }
@@ -2360,7 +2376,7 @@ local checks = {}
 for i, o in ipairs(OPTIONS) do
 	local cb = CreateFrame("CheckButton", nil, opts)
 	cb:SetSize(24, 24)
-	cb:SetPoint("TOPLEFT", 14, -10 - (i - 1) * 28)
+	cb:SetPoint("TOPLEFT", 14, -10 - (i - 1) * 26)
 	cb:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
 	cb:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
 	cb:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
@@ -2382,7 +2398,7 @@ end
 
 local testBtn = CreateFrame("Button", nil, opts, "UIPanelButtonTemplate")
 testBtn:SetSize(120, 22)
-testBtn:SetPoint("TOPLEFT", 16, -10 - #OPTIONS * 28 - 10)
+testBtn:SetPoint("TOPLEFT", 16, -10 - #OPTIONS * 26 - 10)
 testBtn:SetText("Test warning")
 testBtn:SetScript("OnClick", function() ns.TestAlert() end)
 
@@ -2507,6 +2523,7 @@ local function Status()
 		(TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall) and "yes" or "old style",
 		(Menu and Menu.ModifyMenu) and "yes" or "no",
 		CombatLogGetCurrentEventInfo and "yes" or "no (restricted on Forever)"))
+	say("nearby window: " .. (not ns.Setting("nearby") and "off" or ((ns.Setting("hideInDungeons") and ns.InDungeon()) and "hidden in this dungeon" or "on")) .. ".")
 	local any = false
 	for label, n in pairs(ns.errorCounts) do
 		any = true
