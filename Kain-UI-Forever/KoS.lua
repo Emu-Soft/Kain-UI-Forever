@@ -2,7 +2,7 @@ local ADDON_NAME, KUI = ...
 
 local ns = {
 	embedded = true,
-	VERSION = "1.3.0",
+	VERSION = "1.4.0",
 	DB_NAME = "KainUIForeverKoSDB",
 	SOUND_DIR = "Interface\\AddOns\\Kain-UI-Forever\\Media\\KoS\\",
 	FRAME_PREFIX = "KainUIForeverKoS",
@@ -136,16 +136,21 @@ function ns.Key(name, realm)
 	return (name .. "-" .. (StripRealm(realm) or ns.MyRealm())):lower()
 end
 
+function ns.FullName(name, realm)
+	if type(name) ~= "string" then return "?" end
+	return ns.ProperName(name) .. " " .. (StripRealm(realm) or ns.MyRealm())
+end
+
 function ns.DisplayName(e)
 	if not e then return "?" end
+	return ns.FullName(e.n, e.r)
+end
+
+function ns.TargetName(e)
 	if e.r and e.r:lower() ~= ns.MyRealm():lower() then
 		return e.n .. " " .. e.r
 	end
 	return e.n
-end
-
-function ns.TargetName(e)
-	return ns.DisplayName(e)
 end
 
 function ns.ClassColor(classFile)
@@ -159,11 +164,10 @@ function ns.ColorName(e)
 	return string.format("|cff%02x%02x%02x%s|r", r * 255, g * 255, b * 255, ns.DisplayName(e))
 end
 
-function ns.ShortSender(sender)
+function ns.SenderName(sender)
 	if type(sender) ~= "string" then return "?" end
 	local name, realm = sender:match("^([^%-]+)%-(.+)$")
-	if name and StripRealm(realm) and StripRealm(realm):lower() == ns.MyRealm():lower() then return name end
-	return sender
+	return ns.FullName(name or sender, realm)
 end
 
 function ns.Ago(t)
@@ -189,6 +193,9 @@ ns.DEFAULTS = {
 	nearbyAll = true,
 	nearbyTime = 60,
 	alertCooldown = 60,
+	blackWarn = true,
+	blackChat = true,
+	leavePrompt = true,
 }
 
 function ns.InitDB()
@@ -197,6 +204,7 @@ function ns.InitDB()
 	ns.loadedWithData = type(db.entries) == "table" and next(db.entries) ~= nil
 	if type(db.entries) ~= "table" then db.entries = {} end
 	if type(db.guilds) ~= "table" then db.guilds = {} end
+	if type(db.black) ~= "table" then db.black = {} end
 	if type(db.settings) ~= "table" then db.settings = {} end
 	if type(db.pos) ~= "table" then db.pos = {} end
 	for k, v in pairs(ns.DEFAULTS) do
@@ -205,9 +213,11 @@ function ns.InitDB()
 	db.schema = 1
 	ns.db = db
 
-	for key, e in pairs(db.entries) do
-		if type(e) ~= "table" or type(e.n) ~= "string" or type(e.t) ~= "number" then
-			db.entries[key] = nil
+	for _, list in ipairs({ db.entries, db.black }) do
+		for key, e in pairs(list) do
+			if type(e) ~= "table" or type(e.n) ~= "string" or type(e.t) ~= "number" then
+				list[key] = nil
+			end
 		end
 	end
 	for key, g in pairs(db.guilds) do
@@ -328,6 +338,7 @@ function ns.IsNewer(a, b, serialize)
 end
 
 ns.BUCKETS = 16
+ns.BLACK_BUCKETS = 4
 
 local function Hash(s)
 	local h = 5381
@@ -338,13 +349,13 @@ local function Hash(s)
 end
 ns.Hash = Hash
 
-function ns.BucketOf(key)
-	return (Hash(key) % ns.BUCKETS) + 1
+function ns.BucketOf(key, buckets)
+	return (Hash(key) % (buckets or ns.BUCKETS)) + 1
 end
 
-local hashCache, guildDigest
+local hashCache, blackCache, guildDigest
 function ns.InvalidateHashes()
-	hashCache, guildDigest = nil, nil
+	hashCache, blackCache, guildDigest = nil, nil, nil
 end
 
 function ns.GuildDigest()
@@ -364,53 +375,80 @@ function ns.AllGuildEntries()
 	return list
 end
 
-function ns.BucketHashes()
-	if hashCache then return hashCache end
+local function Sums(entries, buckets)
 	local sums = {}
-	for i = 1, ns.BUCKETS do sums[i] = 0 end
-	for key, e in pairs(ns.db.entries) do
-		local b = ns.BucketOf(key)
+	for i = 1, buckets do sums[i] = 0 end
+	for key, e in pairs(entries) do
+		local b = ns.BucketOf(key, buckets)
 		sums[b] = (sums[b] + Hash(key .. "=" .. ns.Serialize(e))) % 4294967296
 	end
-	hashCache = sums
 	return sums
 end
 
-function ns.EntriesInBucket(i)
+local function InBucket(entries, buckets, i)
 	local list = {}
-	for key, e in pairs(ns.db.entries) do
-		if ns.BucketOf(key) == i then list[#list + 1] = e end
+	for key, e in pairs(entries) do
+		if ns.BucketOf(key, buckets) == i then list[#list + 1] = e end
 	end
 	table.sort(list, function(a, b) return ns.Key(a.n, a.r) < ns.Key(b.n, b.r) end)
 	return list
 end
 
-function ns.Get(key)
-	local e = key and ns.db and ns.db.entries[key]
+function ns.BucketHashes()
+	hashCache = hashCache or Sums(ns.db.entries, ns.BUCKETS)
+	return hashCache
+end
+
+function ns.BlackHashes()
+	blackCache = blackCache or Sums(ns.db.black, ns.BLACK_BUCKETS)
+	return blackCache
+end
+
+function ns.EntriesInBucket(i)
+	return InBucket(ns.db.entries, ns.BUCKETS, i)
+end
+
+function ns.BlackInBucket(i)
+	return InBucket(ns.db.black, ns.BLACK_BUCKETS, i)
+end
+
+local KILL = { field = "entries", send = "SendUpdate", added = "ADDED_BY_GUILD", removed = "REMOVED_BY_GUILD" }
+local BLACK = { field = "black", send = "SendBlackUpdate", added = "BLACK_ADDED_BY_GUILD", removed = "BLACK_REMOVED_BY_GUILD" }
+
+local function GetIn(list, key)
+	local e = key and ns.db and ns.db[list.field][key]
 	if e and not e.x then return e end
 	return nil
 end
+
+local function ListOf(list)
+	local out = {}
+	for _, e in pairs(ns.db[list.field]) do
+		if not e.x then out[#out + 1] = e end
+	end
+	table.sort(out, function(a, b) return ns.DisplayName(a):lower() < ns.DisplayName(b):lower() end)
+	return out
+end
+
+function ns.Get(key) return GetIn(KILL, key) end
+function ns.GetBlack(key) return GetIn(BLACK, key) end
 
 function ns.GetByName(name, realm)
 	return ns.Get(ns.Key(name, realm))
 end
 
-function ns.Count()
+function ns.List() return ListOf(KILL) end
+function ns.BlackList() return ListOf(BLACK) end
+local function CountIn(list)
 	local n = 0
-	for _, e in pairs(ns.db.entries) do
+	for _, e in pairs(ns.db[list.field]) do
 		if not e.x then n = n + 1 end
 	end
 	return n
 end
 
-function ns.List()
-	local list = {}
-	for _, e in pairs(ns.db.entries) do
-		if not e.x then list[#list + 1] = e end
-	end
-	table.sort(list, function(a, b) return ns.DisplayName(a):lower() < ns.DisplayName(b):lower() end)
-	return list
-end
+function ns.Count() return CountIn(KILL) end
+function ns.BlackCount() return CountIn(BLACK) end
 
 local function Stamp(old)
 	local t = ns.Now()
@@ -418,18 +456,18 @@ local function Stamp(old)
 	return t
 end
 
-local function Commit(key, e, fromSync)
-	local old = ns.db.entries[key]
+local function Commit(list, key, e, fromSync)
+	local old = ns.db[list.field][key]
 
 	if old then
 		for k, v in pairs(old) do
 			if e[k] == nil and not ns.IsSharedField(k) then e[k] = v end
 		end
 	end
-	ns.db.entries[key] = e
+	ns.db[list.field][key] = e
 	ns.InvalidateHashes()
 	ns.Fire("LIST_CHANGED", key, e, fromSync)
-	if not fromSync and ns.SendUpdate then ns.SendUpdate(e) end
+	if not fromSync and ns[list.send] then ns[list.send](e) end
 end
 
 local sharedSet = {}
@@ -449,11 +487,11 @@ local function SameShared(a, b)
 	return true
 end
 
-function ns.Add(info, reason)
+local function AddTo(list, info, reason)
 	local name, realm = info.name, info.realm or ns.MyRealm()
 	if type(name) ~= "string" or name == "" then return nil end
 	local key = ns.Key(name, realm)
-	local old = ns.db.entries[key]
+	local old = ns.db[list.field][key]
 	local e = old and CopyShared(old) or {}
 	local wasListed = old and not old.x
 	e.n = ns.Clean(name, LIMITS.n)
@@ -473,30 +511,54 @@ function ns.Add(info, reason)
 	end
 	local localInfo = { lv = info.level, race = info.race }
 	for k, v in pairs(localInfo) do e[k] = v end
-	Commit(key, e)
+	Commit(list, key, e)
 	return e, not wasListed
 end
 
-function ns.SetReason(key, reason)
-	local old = ns.Get(key)
+local function SetReasonIn(list, key, reason)
+	local old = GetIn(list, key)
 	if not old then return end
 	local e = CopyShared(old)
 	e.w = ns.Clean(reason, LIMITS.w)
 	if e.w == old.w then return end
 	e.t = Stamp(old)
-	Commit(key, e)
+	Commit(list, key, e)
 end
 
-function ns.Remove(key)
-	local old = ns.Get(key)
+local function RemoveFrom(list, key)
+	local old = GetIn(list, key)
 	if not old then return nil end
 	local e = CopyShared(old)
 	e.x = true
 	e.y = ns.Clean(ns.MyFullName(), LIMITS.y)
 	e.t = Stamp(old)
-	Commit(key, e)
+	Commit(list, key, e)
 	return e
 end
+
+local function MergeInto(list, e)
+	local key = ns.Key(e.n, e.r)
+	local old = ns.db[list.field][key]
+	if old and not ns.IsNewer(e, old) then return false end
+	local wasListed = old and not old.x
+	Commit(list, key, e, true)
+	if not e.x and not wasListed then
+		ns.Fire(list.added, key, e)
+	elseif e.x and wasListed then
+		ns.Fire(list.removed, key, e)
+	end
+	return true
+end
+
+function ns.Add(info, reason) return AddTo(KILL, info, reason) end
+function ns.SetReason(key, reason) return SetReasonIn(KILL, key, reason) end
+function ns.Remove(key) return RemoveFrom(KILL, key) end
+function ns.MergeIncoming(e) return MergeInto(KILL, e) end
+
+function ns.AddBlack(info, reason) return AddTo(BLACK, info, reason) end
+function ns.SetBlackReason(key, reason) return SetReasonIn(BLACK, key, reason) end
+function ns.RemoveBlack(key) return RemoveFrom(BLACK, key) end
+function ns.MergeIncomingBlack(e) return MergeInto(BLACK, e) end
 
 function ns.LearnDetails(key, class, guild)
 	local old = ns.Get(key)
@@ -509,21 +571,7 @@ function ns.LearnDetails(key, class, guild)
 	if needClass then e.c = class end
 	if needGuild then e.g = guild end
 	e.t = Stamp(old)
-	Commit(key, e)
-end
-
-function ns.MergeIncoming(e)
-	local key = ns.Key(e.n, e.r)
-	local old = ns.db.entries[key]
-	if old and not ns.IsNewer(e, old) then return false end
-	local wasListed = old and not old.x
-	Commit(key, e, true)
-	if not e.x and not wasListed then
-		ns.Fire("ADDED_BY_GUILD", key, e)
-	elseif e.x and wasListed then
-		ns.Fire("REMOVED_BY_GUILD", key, e)
-	end
-	return true
+	Commit(KILL, key, e)
 end
 
 function ns.CleanGuildName(name)
@@ -702,14 +750,16 @@ function ns.ImportStandalone()
 	local db = ns.db
 	if type(old.entries) == "table" then
 		ns.syncQuiet = true
-		for _, e in pairs(old.entries) do
-			local copy = type(e) == "table" and type(e.n) == "string" and type(e.t) == "number"
-				and ns.Deserialize(ns.Serialize(e))
-			if copy then
-				for k, v in pairs(e) do
-					if copy[k] == nil and not ns.IsSharedField(k) then copy[k] = v end
+		for field, merge in pairs({ entries = ns.MergeIncoming, black = ns.MergeIncomingBlack }) do
+			for _, e in pairs(type(old[field]) == "table" and old[field] or {}) do
+				local copy = type(e) == "table" and type(e.n) == "string" and type(e.t) == "number"
+					and ns.Deserialize(ns.Serialize(e))
+				if copy then
+					for k, v in pairs(e) do
+						if copy[k] == nil and not ns.IsSharedField(k) then copy[k] = v end
+					end
+					merge(copy)
 				end
-				ns.MergeIncoming(copy)
 			end
 		end
 		if type(old.guilds) == "table" then
@@ -776,10 +826,19 @@ ns.sync = {
 }
 local stats = ns.sync
 local GUILD_BUCKET = ns.BUCKETS + 1
+local BLACK_FIRST = GUILD_BUCKET + 1
+local LAST_BUCKET = GUILD_BUCKET + ns.BLACK_BUCKETS
 
 local function Digest(i)
 	if i == GUILD_BUCKET then return ns.GuildDigest() end
+	if i >= BLACK_FIRST then return ns.BlackHashes()[i - GUILD_BUCKET] end
 	return ns.BucketHashes()[i]
+end
+
+local function BucketContents(i)
+	if i == GUILD_BUCKET then return "E~", ns.SerializeGuild, ns.AllGuildEntries() end
+	if i >= BLACK_FIRST then return "F~", ns.Serialize, ns.BlackInBucket(i - GUILD_BUCKET) end
+	return "D~", ns.Serialize, ns.EntriesInBucket(i)
 end
 
 if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
@@ -871,9 +930,9 @@ end
 
 function ns.QueueLength() return #sendQueue end
 
-local function HashList()
+local function HashList(sums)
 	local out = {}
-	for i, h in ipairs(ns.BucketHashes()) do out[i] = ns.ToB36(h) end
+	for i, h in ipairs(sums) do out[i] = ns.ToB36(h) end
 	return table.concat(out, ",")
 end
 
@@ -887,11 +946,17 @@ function ns.SendGuildUpdate(g)
 	Send("G~" .. ns.SerializeGuild(g))
 end
 
+function ns.SendBlackUpdate(e)
+	if not IsInGuild() then return end
+	Send("K~" .. ns.Serialize(e))
+end
+
 function ns.SendHello()
 	if not IsInGuild() then return false end
 	stats.lastHello = GetTime()
-	Send("H~" .. HashList())
+	Send("H~" .. HashList(ns.BucketHashes()))
 	Send("Q~" .. ns.ToB36(ns.GuildDigest()))
+	Send("W~" .. HashList(ns.BlackHashes()))
 	return true
 end
 
@@ -903,11 +968,9 @@ local function SendBucket(i)
 	lastBucketSent[i] = GetTime()
 	inFlight[i] = digest
 	Send("B~" .. i .. "~" .. ns.ToB36(digest), i)
-	local isGuilds = i == GUILD_BUCKET
-	local kind = isGuilds and "E~" or "D~"
-	local serialize = isGuilds and ns.SerializeGuild or ns.Serialize
+	local kind, serialize, entries = BucketContents(i)
 	local chunk, size = {}, 2
-	for _, e in ipairs(isGuilds and ns.AllGuildEntries() or ns.EntriesInBucket(i)) do
+	for _, e in ipairs(entries) do
 		local s = serialize(e)
 		if size + #s + 1 > MAX_MESSAGE and #chunk > 0 then
 			Send(kind .. table.concat(chunk, "^"), i)
@@ -992,13 +1055,27 @@ local function IsMe(sender)
 	return s == me
 end
 
-local function Merge(s, sender, isGuild)
-	local e = (isGuild and ns.DeserializeGuild or ns.Deserialize)(s)
+local READERS = {
+	U = { "Deserialize", "MergeIncoming" }, D = { "Deserialize", "MergeIncoming" },
+	G = { "DeserializeGuild", "MergeIncomingGuild" }, E = { "DeserializeGuild", "MergeIncomingGuild" },
+	K = { "Deserialize", "MergeIncomingBlack" }, F = { "Deserialize", "MergeIncomingBlack" },
+}
+
+local function Merge(s, sender, kind)
+	local reader = READERS[kind]
+	local e = ns[reader[1]](s)
 	if not e then return end
-	if (isGuild and ns.MergeIncomingGuild or ns.MergeIncoming)(e) then
+	if ns[reader[2]](e) then
 		stats.merged = stats.merged + 1
 		ns.lastMergeFrom = sender
 	end
+end
+
+local function ReadDigests(body, n)
+	local out = {}
+	for d in body:gmatch("[^,]+") do out[#out + 1] = tonumber(d, 36) end
+	if #out ~= n then return nil end
+	return out
 end
 
 local function OnMessage(text, sender)
@@ -1007,13 +1084,13 @@ local function OnMessage(text, sender)
 	if not kind then return end
 	stats.peers[sender] = GetTime()
 
-	if kind == "U" or kind == "G" then
-		Merge(body, sender, kind == "G")
+	if kind == "U" or kind == "G" or kind == "K" then
+		Merge(body, sender, kind)
 
-	elseif kind == "D" or kind == "E" then
+	elseif kind == "D" or kind == "E" or kind == "F" then
 		ns.syncQuiet = true
 		for s in (body .. "^"):gmatch("([^%^]*)%^") do
-			if s ~= "" then Merge(s, sender, kind == "E") end
+			if s ~= "" then Merge(s, sender, kind) end
 		end
 		ns.syncQuiet = false
 		TrafficSeen()
@@ -1025,7 +1102,7 @@ local function OnMessage(text, sender)
 	elseif kind == "B" then
 		local i, digest = body:match("^(%d+)~(%w+)$")
 		i, digest = tonumber(i), digest and tonumber(digest, 36)
-		if i and digest and i >= 1 and i <= GUILD_BUCKET then
+		if i and digest and i >= 1 and i <= LAST_BUCKET then
 			announced[i] = announced[i] or {}
 			announced[i][digest] = true
 			if offers[i] then offers[i][digest] = true end
@@ -1037,16 +1114,13 @@ local function OnMessage(text, sender)
 			TrafficSeen()
 		end
 
-	elseif kind == "H" then
-		local theirs, n = {}, 0
-		for d in body:gmatch("[^,]+") do
-			n = n + 1
-			theirs[n] = tonumber(d, 36)
-		end
-		if n ~= ns.BUCKETS then return end
-		local mine = ns.BucketHashes()
-		for i = 1, ns.BUCKETS do
-			if theirs[i] ~= mine[i] then Offer(i) end
+	elseif kind == "H" or kind == "W" then
+		local players = kind == "H"
+		local mine = players and ns.BucketHashes() or ns.BlackHashes()
+		local theirs = ReadDigests(body, #mine)
+		if not theirs then return end
+		for i = 1, #mine do
+			if theirs[i] ~= mine[i] then Offer(players and i or (GUILD_BUCKET + i)) end
 		end
 
 	elseif kind == "S" then
@@ -1117,6 +1191,7 @@ local function Call(fn, ...)
 	if not ok then return nil end
 	return Plain(a), Plain(b), Plain(c)
 end
+ns.Call = Call
 
 ns.allies = {}
 ns.allyGuilds = {}
@@ -1136,6 +1211,14 @@ local function GuildKeys()
 end
 ns.On("GUILD_ROSTER_UPDATE", function() guildKeysDirty = true end)
 ns.On("PLAYER_GUILD_UPDATE", function() guildKeysDirty = true end)
+
+function ns.IsGuildmate(key)
+	return GuildKeys()[key] or false
+end
+
+function ns.IsEnemy(info)
+	return info.ally == false or (info.ally == nil and info.hostile == true)
+end
 
 function ns.IsAlly(info)
 	if type(info) ~= "table" or not info.name then return false end
@@ -1160,7 +1243,7 @@ end
 
 function ns.RefuseAlly(info)
 	if not ns.IsAlly(info) then return false end
-	ns.Print(ns.ProperName(info.name) .. " is on our side, so they can't go on the kill list.")
+	ns.Print(ns.FullName(info.name, info.realm) .. " is on our side, so they can't go on the kill list.")
 	return true
 end
 
@@ -1240,7 +1323,7 @@ function ns.Alert(e, info, test, quiet)
 	local levelText = (level and level > 0) and (" (" .. level .. ")") or ""
 	if ns.Setting("chat") then
 		local why = e.w and (" - " .. e.w) or ""
-		ns.Print("|cffff2020KILL ON SIGHT:|r " .. ns.ColorName(e) .. levelText .. why .. " |cff999999(added by " .. ns.ShortSender(e.b) .. ")|r")
+		ns.Print("|cffff2020KILL ON SIGHT:|r " .. ns.ColorName(e) .. levelText .. why .. " |cff999999(added by " .. ns.SenderName(e.b) .. ")|r")
 	end
 	if quiet then return end
 	if ns.Setting("sound") then ns.PlaySound("kos") end
@@ -1274,7 +1357,7 @@ local function Seen(info, fromCombatLog)
 		if e and not allyNoted[key] then
 			allyNoted[key] = true
 			ns.Print(ns.ColorName(e) .. " is on the kill list but is on our side. Type |cffffd200/kos remove "
-				.. ns.ProperName(e.n) .. "|r to take them off.")
+				.. ns.DisplayName(e) .. "|r to take them off.")
 		end
 		return
 	end
@@ -1316,7 +1399,7 @@ local function Seen(info, fromCombatLog)
 	if fresh then
 		n.whereAt = GetTime()
 		n.where = ns.WhereAmI()
-		e.seen, e.sz, e.sb = ns.Now(), n.where, ns.MyName()
+		e.seen, e.sz, e.sb = ns.Now(), n.where, ns.SenderName(ns.MyFullName())
 	end
 	if not fromCombatLog then ns.LearnDetails(key, info.class, info.guild) end
 	e = ns.Get(key) or e
@@ -1522,13 +1605,13 @@ end
 ns.Listen("GUILD_SIGHTING", function(key, zone, sender)
 	local e = ns.Get(key)
 	if not e then return end
-	e.seen, e.sz, e.sb = ns.Now(), zone, ns.ShortSender(sender)
+	e.seen, e.sz, e.sb = ns.Now(), zone, ns.SenderName(sender)
 	if not ns.Setting("guildSightings") then return end
 	if lastGuildNote[key] and GetTime() - lastGuildNote[key] < GUILD_NOTE_COOLDOWN then return end
 	lastGuildNote[key] = GetTime()
 	local where = (zone and zone ~= "") and (" in " .. zone) or ""
 
-	ns.Print(ns.ColorName(e) .. " spotted by " .. ns.ShortSender(sender) .. where .. ".")
+	ns.Print(ns.ColorName(e) .. " spotted by " .. ns.SenderName(sender) .. where .. ".")
 	ns.Fire("SEEN", key)
 end)
 
@@ -1538,14 +1621,14 @@ ns.Listen("ADDED_BY_GUILD", function(_, e)
 		caughtUp = caughtUp + 1
 		return
 	end
-	ns.Print(ns.ColorName(e) .. " was added by " .. ns.ShortSender(e.b) .. (e.w and (": " .. e.w) or "."))
+	ns.Print(ns.ColorName(e) .. " was added by " .. ns.SenderName(e.b) .. (e.w and (": " .. e.w) or "."))
 end)
 ns.Listen("GUILD_ADDED_BY_GUILD", function(_, g)
-	ns.Print("the whole guild |cffffd200<" .. g.n .. ">|r was put on the list by " .. ns.ShortSender(g.b) .. (g.w and (": " .. g.w) or "."))
+	ns.Print("the whole guild |cffffd200<" .. g.n .. ">|r was put on the list by " .. ns.SenderName(g.b) .. (g.w and (": " .. g.w) or "."))
 end)
 ns.Listen("GUILD_REMOVED_BY_GUILD", function(_, g)
 	if ns.syncQuiet then return end
-	ns.Print("the guild <" .. g.n .. "> was taken off the list by " .. ns.ShortSender(g.y) .. ".")
+	ns.Print("the guild <" .. g.n .. "> was taken off the list by " .. ns.SenderName(g.y) .. ".")
 end)
 ns.Listen("SYNC_SETTLED", function()
 	if caughtUp > 0 then
@@ -1567,10 +1650,15 @@ local function OnUnitTooltip(tooltip)
 	local g = not e and not info.ally and ns.GetGuild(info.guild)
 	if e then
 		tooltip:AddLine("Kill on sight" .. (e.w and (": " .. e.w) or ""), 1, 0.15, 0.15, true)
-		tooltip:AddLine("BH&G Kill List, added by " .. ns.ShortSender(e.b), 0.6, 0.6, 0.6)
+		tooltip:AddLine("BH&G Kill List, added by " .. ns.SenderName(e.b), 0.6, 0.6, 0.6)
 	elseif g then
 		tooltip:AddLine("Kill on sight: the whole guild <" .. g.n .. ">" .. (g.w and (": " .. g.w) or ""), 1, 0.15, 0.15, true)
-		tooltip:AddLine("BH&G Kill List, added by " .. ns.ShortSender(g.b), 0.6, 0.6, 0.6)
+		tooltip:AddLine("BH&G Kill List, added by " .. ns.SenderName(g.b), 0.6, 0.6, 0.6)
+	end
+	local black = not ns.IsEnemy(info) and ns.GetBlack(key)
+	if black then
+		tooltip:AddLine("On the guild Blacklist: " .. (black.w or "no reason given"), 1, 0.6, 0.1, true)
+		tooltip:AddLine("BH&G Kill List, added by " .. ns.SenderName(black.b), 0.6, 0.6, 0.6)
 	end
 	local rec = ns.Enemy and ns.Enemy(key)
 	if rec and (e or info.hostile) and ((rec.w or 0) + (rec.l or 0)) > 0 then
@@ -1611,8 +1699,18 @@ local function AddMenuButton(_, rootDescription, contextData)
 	local info = MenuTarget(contextData)
 	if not info then return end
 	local key = ns.Key(info.name, info.realm)
-	if not ns.Get(key) and ns.IsAlly(info) then return end
+	local killButtons = ns.Get(key) or not ns.IsAlly(info)
+	local blackButton = ns.CanBlacklist(info)
+	if not killButtons and not blackButton then return end
 	rootDescription:CreateDivider()
+	if blackButton then
+		if ns.GetBlack(key) then
+			rootDescription:CreateButton("|cffff9900Remove from the guild Blacklist|r", function() ns.AskBlackRemove(key) end)
+		else
+			rootDescription:CreateButton("|cffff9900Add to the guild Blacklist|r", function() ns.AskBlackReason(info) end)
+		end
+	end
+	if not killButtons then return end
 	if ns.Get(key) then
 		rootDescription:CreateButton("|cffe03c3cRemove from BH&G Kill List|r", function()
 			ns.RemoveWithMessage(key)
@@ -1704,8 +1802,8 @@ end
 function ns.TargetGuild()
 	local info = ns.ReadUnit("target")
 	if not info then return nil, "target an enemy player first." end
-	if not info.guild then return nil, ns.ProperName(info.name) .. " isn't in a guild (or the game isn't showing it)." end
-	if ns.IsAlly(info) then return nil, ns.ProperName(info.name) .. " is on our side." end
+	if not info.guild then return nil, ns.FullName(info.name, info.realm) .. " isn't in a guild (or the game isn't showing it)." end
+	if ns.IsAlly(info) then return nil, ns.FullName(info.name, info.realm) .. " is on our side." end
 	return info.guild
 end
 
@@ -1924,6 +2022,237 @@ end
 
 do
 
+local Plain, PlainText = ns.Plain, ns.PlainText
+local Call = ns.Call
+
+local LEAVE_WAIT = 10
+local GROUP_COOLDOWN = 300
+local INVITE_COOLDOWN = 30
+local CHAT_COOLDOWN = 600
+
+local function WhyNot(info)
+	if type(info) ~= "table" or type(info.name) ~= "string" then return "that isn't a player name." end
+	local key = ns.Key(info.name, info.realm)
+	local name = ns.FullName(info.name, info.realm)
+	if key == ns.MyFullName():lower() then return "you can't put yourself on the Blacklist." end
+	if ns.IsEnemy(info) then
+		return name .. " is on the other side. The Blacklist is for players on ours; enemies go on the kill list."
+	end
+	if ns.IsGuildmate(key) then return name .. " is in our guild, so they can't go on the Blacklist." end
+	return nil
+end
+
+function ns.CanBlacklist(info)
+	if type(info) ~= "table" or type(info.name) ~= "string" then return false end
+	return ns.GetBlack(ns.Key(info.name, info.realm)) ~= nil or WhyNot(info) == nil
+end
+
+function ns.RefuseBlack(info)
+	local why = WhyNot(info)
+	if why then ns.Print(why) end
+	return why ~= nil
+end
+
+function ns.AddBlackWithMessage(info, reason)
+	if ns.RefuseBlack(info) then return end
+	local e, isNew = ns.AddBlack(info, reason)
+	if not e then
+		ns.Print("couldn't add that player.")
+		return
+	end
+	if isNew then
+		ns.Print("put " .. ns.ColorName(e) .. " on the guild Blacklist" .. (e.w and (": " .. e.w) or "") .. ". Guild members with the addon get it too.")
+	else
+		ns.Print(ns.ColorName(e) .. " is on the guild Blacklist" .. (e.w and (": " .. e.w) or "") .. ".")
+	end
+	return e
+end
+
+function ns.RemoveBlackWithMessage(key)
+	local e = ns.RemoveBlack(key)
+	if e then
+		ns.Print("took " .. ns.ColorName(e) .. " off the guild Blacklist.")
+	else
+		ns.Print("that player isn't on the guild Blacklist.")
+	end
+end
+
+local function FromName(text)
+	text = PlainText(text)
+	if not text then return nil end
+	text = text:match("|h%[?(.-)%]?|h") or text
+	local name, realm = ns.SplitName(text)
+	if not name then return nil end
+	return ns.Key(name, realm), { name = name, realm = realm }
+end
+
+local lastWarn = {}
+
+local function Warn(e, how, kind, cooldown, loud)
+	if not ns.Setting(kind == "chat" and "blackChat" or "blackWarn") then return end
+	local id = ns.Key(e.n, e.r) .. "|" .. kind
+	if lastWarn[id] and GetTime() - lastWarn[id] < cooldown then return end
+	lastWarn[id] = GetTime()
+	ns.Print("|cffff9900BLACKLISTED:|r " .. ns.ColorName(e) .. " " .. how .. (e.w and (" - " .. e.w) or "")
+		.. " |cff999999(added by " .. ns.SenderName(e.b) .. ")|r")
+	if not loud then return end
+	if FlashClientIcon then pcall(FlashClientIcon) end
+	if ns.Setting("banner") and ns.ShowBanner then ns.ShowBanner(e, nil, "BLACKLISTED", how) end
+end
+
+local function InGroup(key)
+	local e = ns.GetBlack(key)
+	if not e then return end
+	e.gs = ns.Now()
+	Warn(e, "is in your group", "group", GROUP_COOLDOWN, true)
+	ns.Fire("LIST_CHANGED")
+end
+
+ns.On("PARTY_INVITE_REQUEST", function(inviter)
+	local key = FromName(inviter)
+	local e = key and ns.GetBlack(key)
+	if e then Warn(e, "invited you to a group", "invite", INVITE_COOLDOWN, true) end
+end)
+
+local function OnChat(how)
+	return function(_, sender, _, _, _, _, _, _, channelName)
+		local key = FromName(sender)
+		local e = key and ns.GetBlack(key)
+		if not e then return end
+		local channel = PlainText(channelName)
+		Warn(e, how or ("is talking in " .. (channel or "a chat channel")), "chat", CHAT_COOLDOWN, false)
+	end
+end
+ns.On("CHAT_MSG_WHISPER", OnChat("is whispering you"))
+ns.On("CHAT_MSG_CHANNEL", OnChat(nil))
+
+local function InDungeon()
+	if not IsInInstance then return false end
+	local ok, inside, kind = pcall(IsInInstance)
+	return ok and Plain(inside) and Plain(kind) == "party" or false
+end
+
+local function Zone()
+	return PlainText(GetRealZoneText and GetRealZoneText()) or "a dungeon"
+end
+
+local pending, quietUntil = nil, 0
+
+local function Left(key, info)
+	if not ns.Setting("leavePrompt") or not InDungeon() then return end
+	if ns.GetBlack(key) or ns.IsGuildmate(key) or key == ns.MyFullName():lower() then return end
+	if pending and pending.key == key then return end
+	local now = GetTime()
+	if pending or now < quietUntil then
+		pending, quietUntil = nil, now + LEAVE_WAIT
+		return
+	end
+	local mine = { key = key, info = info, zone = Zone() }
+	pending = mine
+	C_Timer.After(LEAVE_WAIT, function()
+		if pending ~= mine then return end
+		pending = nil
+		if not InDungeon() or (Call(GetNumGroupMembers) or 0) < 2 then return end
+		if ns.GetBlack(key) then return end
+		ns.AskBlackLeaver(mine.info, "Left " .. mine.zone .. " early")
+	end)
+end
+
+local function ReadGroup()
+	local members, unreadable = {}, false
+	local count = Call(GetNumGroupMembers) or 0
+	if count == 0 then return members, false, 0 end
+	local raid = Call(IsInRaid)
+	local last, prefix = math.min(count - 1, 4), "party"
+	if raid then last, prefix = math.min(count, 40), "raid" end
+	local me = ns.MyFullName():lower()
+	for i = 1, last do
+		local unit = prefix .. i
+		local name, realm = Call(UnitName, unit)
+		if type(name) == "string" and name ~= "" and name ~= UNKNOWNOBJECT and name ~= UNKNOWN then
+			if type(realm) ~= "string" or realm == "" then realm = nil end
+			local key = ns.Key(name, realm)
+			if key ~= me then
+				local _, class = Call(UnitClass, unit)
+				members[key] = { name = name, realm = realm or ns.MyRealm(), class = class, guild = Call(GetGuildInfo, unit), ally = true }
+			end
+		else
+			unreadable = true
+		end
+	end
+	return members, unreadable, count
+end
+
+local roster = {}
+
+ns.On("GROUP_ROSTER_UPDATE", function()
+	local members, unreadable, count = ReadGroup()
+	if count == 0 then
+		roster = {}
+		return
+	end
+	for key in pairs(members) do
+		if not roster[key] then InGroup(key) end
+	end
+	if unreadable then
+
+		for key, info in pairs(members) do roster[key] = info end
+		return
+	end
+	local gone = {}
+	for key, info in pairs(roster) do
+		if not members[key] then gone[key] = info end
+	end
+	roster = members
+	for key, info in pairs(gone) do Left(key, info) end
+end)
+
+local function Pattern(fmt, fallback)
+	fmt = type(fmt) == "string" and fmt or fallback
+	local escaped = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+	return "^" .. escaped:gsub("%%%%s", "(.+)") .. "$"
+end
+
+local JOINED = {
+	Pattern(_G.ERR_JOINED_GROUP_S, "%s joins the party."),
+	Pattern(_G.ERR_RAID_MEMBER_ADDED_S, "%s has joined the raid group."),
+}
+local LEFT = Pattern(_G.ERR_LEFT_GROUP_S, "%s leaves the party.")
+
+ns.On("CHAT_MSG_SYSTEM", function(text)
+	text = PlainText(text)
+	if not text then return end
+	for _, pattern in ipairs(JOINED) do
+		local key = FromName(text:match(pattern))
+		if key then InGroup(key) return end
+	end
+	local key, info = FromName(text:match(LEFT))
+	if key then Left(key, info) end
+end)
+
+local caughtUp = 0
+ns.Listen("BLACK_ADDED_BY_GUILD", function(_, e)
+	if ns.syncQuiet then
+		caughtUp = caughtUp + 1
+		return
+	end
+	ns.Print(ns.ColorName(e) .. " was put on the guild Blacklist by " .. ns.SenderName(e.b) .. (e.w and (": " .. e.w) or "."))
+end)
+ns.Listen("BLACK_REMOVED_BY_GUILD", function(_, e)
+	if ns.syncQuiet then return end
+	ns.Print(ns.ColorName(e) .. " was taken off the guild Blacklist by " .. ns.SenderName(e.y) .. ".")
+end)
+ns.Listen("SYNC_SETTLED", function()
+	if caughtUp > 0 then
+		ns.Print("caught up with the guild: " .. caughtUp .. " player" .. (caughtUp == 1 and "" or "s")
+			.. " added to your Blacklist (" .. ns.BlackCount() .. " in all).")
+		caughtUp = 0
+	end
+end)
+end
+
+do
+
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local ACCENT = { 0.88, 0.24, 0.24 }
 
@@ -1985,111 +2314,114 @@ local function EditBoxOf(dialog)
 	return dialog and ((dialog.GetEditBox and dialog:GetEditBox()) or dialog.editBox)
 end
 
-StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_NAME"] = {
-	text = "Add a player to the BH&G Kill List.\nName (or Name-Realm):",
-	button1 = ACCEPT or "Accept",
-	button2 = CANCEL or "Cancel",
-	hasEditBox = 1,
-	maxLetters = 60,
-	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
-	OnShow = function(dialog) local eb = EditBoxOf(dialog) if eb then eb:SetText("") eb:SetFocus() end end,
-	OnAccept = function(dialog)
-		local eb = EditBoxOf(dialog)
-		local name, realm = ns.SplitName(eb and eb:GetText() or "")
-		if not name then ns.Print("that isn't a player name.") return end
-		C_Timer.After(0.05, function() ns.AskReason({ name = name, realm = realm }) end)
-	end,
-	EditBoxOnEnterPressed = function(eb)
-		local dialog = eb:GetParent()
-		StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_NAME"].OnAccept(dialog)
-		dialog:Hide()
-	end,
-	EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end,
-}
-
-StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_GUILD"] = {
-	text = "Put a whole guild on the BH&G Kill List.\nEvery member you come across counts as kill on sight.\nGuild name:",
-	button1 = ACCEPT or "Accept",
-	button2 = CANCEL or "Cancel",
-	hasEditBox = 1,
-	maxLetters = 64,
-	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
-	OnShow = function(dialog)
-		local eb = EditBoxOf(dialog)
-		if eb then eb:SetText(ns.TargetGuild() or "") eb:SetFocus() end
-	end,
-	OnAccept = function(dialog)
-		local eb = EditBoxOf(dialog)
-		local name = ns.CleanGuildName(eb and eb:GetText() or "")
-		if not name then ns.Print("that isn't a guild name.") return end
-		C_Timer.After(0.05, function() ns.AskGuildReason(name) end)
-	end,
-	EditBoxOnEnterPressed = function(eb)
-		local dialog = eb:GetParent()
-		StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_GUILD"].OnAccept(dialog)
-		dialog:Hide()
-	end,
-	EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end,
-}
-
-StaticPopupDialogs[ns.POPUP_PREFIX .. "REASON"] = {
-	text = "Why is %s kill on sight? (optional)",
-	button1 = ACCEPT or "Accept",
-	button2 = CANCEL or "Cancel",
-	hasEditBox = 1,
-	maxLetters = 80,
-	editBoxWidth = 300,
-	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
-	OnShow = function(dialog, data)
-		data = data or dialog.data
+local function TextPopup(id, def, onAccept, start)
+	def.button1 = def.button1 or ACCEPT or "Accept"
+	def.button2 = def.button2 or CANCEL or "Cancel"
+	def.hasEditBox = 1
+	def.timeout = def.timeout or 0
+	def.whileDead, def.hideOnEscape = 1, 1
+	if def.exclusive == nil then def.exclusive = 1 end
+	def.OnShow = function(dialog, data)
 		local eb = EditBoxOf(dialog)
 		if eb then
-			local e = data and ((data.key and ns.Get(data.key)) or (data.guild and ns.GetGuild(data.guild)))
-			eb:SetText(e and e.w or "")
+			eb:SetText(start and start(data or dialog.data) or "")
 			eb:SetFocus()
 		end
-	end,
-	OnAccept = function(dialog, data)
-		data = data or dialog.data
+	end
+	def.OnAccept = function(dialog, data)
 		local eb = EditBoxOf(dialog)
-		local reason = eb and eb:GetText() or ""
-		if not data then return end
-		if data.guild and data.edit then
-			ns.SetGuildReason(data.guild, reason)
-		elseif data.guild then
-			ns.AddGuildWithMessage(data.guild, reason)
-		elseif data.edit then
-			ns.SetReason(data.key, reason)
-		else
-			ns.AddWithMessage(data.info, reason)
-		end
-	end,
-	EditBoxOnEnterPressed = function(eb)
+		onAccept(eb and eb:GetText() or "", data or dialog.data)
+	end
+	def.EditBoxOnEnterPressed = function(eb)
 		local dialog = eb:GetParent()
-		StaticPopupDialogs[ns.POPUP_PREFIX .. "REASON"].OnAccept(dialog, dialog.data)
+		def.OnAccept(dialog, dialog.data)
 		dialog:Hide()
-	end,
-	EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end,
-}
+	end
+	def.EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end
+	StaticPopupDialogs[ns.POPUP_PREFIX .. id] = def
+end
 
-StaticPopupDialogs[ns.POPUP_PREFIX .. "REMOVE"] = {
-	text = "Remove %s from the BH&G Kill List?\nThis takes them off everyone's list.",
-	button1 = YES or "Yes",
-	button2 = NO or "No",
-	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
-	OnAccept = function(dialog, data)
-		data = data or dialog.data
-		if data and data.guild then
-			ns.RemoveGuildWithMessage(data.guild)
-		elseif data and data.key then
-			ns.RemoveWithMessage(data.key)
-		end
-	end,
-}
+local function AskName(id, text, andThen)
+	TextPopup(id, { text = text, maxLetters = 60 }, function(typed)
+		local name, realm = ns.SplitName(typed)
+		if not name then ns.Print("that isn't a player name.") return end
+		C_Timer.After(0.05, function() andThen({ name = name, realm = realm }) end)
+	end)
+end
+
+AskName("ADD_NAME", "Add a player to the BH&G Kill List.\nName (or Name-Realm):", function(info) ns.AskReason(info) end)
+AskName("BLACK_NAME", "Put a player on the guild Blacklist.\nName (or Name-Realm):", function(info) ns.AskBlackReason(info) end)
+
+TextPopup("ADD_GUILD", {
+	text = "Put a whole guild on the BH&G Kill List.\nEvery member you come across counts as kill on sight.\nGuild name:",
+	maxLetters = 64,
+}, function(typed)
+	local name = ns.CleanGuildName(typed)
+	if not name then ns.Print("that isn't a guild name.") return end
+	C_Timer.After(0.05, function() ns.AskGuildReason(name) end)
+end, function() return ns.TargetGuild() end)
+
+TextPopup("REASON", { text = "Why is %s kill on sight? (optional)", maxLetters = 80, editBoxWidth = 300 }, function(reason, data)
+	if not data then return end
+	if data.guild and data.edit then
+		ns.SetGuildReason(data.guild, reason)
+	elseif data.guild then
+		ns.AddGuildWithMessage(data.guild, reason)
+	elseif data.edit then
+		ns.SetReason(data.key, reason)
+	else
+		ns.AddWithMessage(data.info, reason)
+	end
+end, function(data)
+	local e = data and ((data.key and ns.Get(data.key)) or (data.guild and ns.GetGuild(data.guild)))
+	return e and e.w
+end)
+
+TextPopup("BLACK_REASON", { text = "Why put %s on the guild Blacklist? (optional)", maxLetters = 80, editBoxWidth = 300 }, function(reason, data)
+	if not data then return end
+	if data.edit then
+		ns.SetBlackReason(data.key, reason)
+	else
+		ns.AddBlackWithMessage(data.info, reason)
+	end
+end, function(data)
+	local e = data and data.key and ns.GetBlack(data.key)
+	return e and e.w or (data and data.reason)
+end)
+
+TextPopup("BLACK_LEAVER", {
+	text = "%s left your dungeon group (or was removed from it).\nPut them on the guild Blacklist? Reason:",
+	button1 = "Blacklist", button2 = NO or "No",
+	maxLetters = 80, editBoxWidth = 300, timeout = 60, exclusive = false,
+}, function(reason, data)
+	if data then ns.AddBlackWithMessage(data.info, reason) end
+end, function(data) return data and data.reason end)
+
+local function YesNoPopup(id, text, onAccept)
+	StaticPopupDialogs[ns.POPUP_PREFIX .. id] = {
+		text = text,
+		button1 = YES or "Yes",
+		button2 = NO or "No",
+		timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
+		OnAccept = function(dialog, data) onAccept(data or dialog.data) end,
+	}
+end
+
+YesNoPopup("REMOVE", "Remove %s from the BH&G Kill List?\nThis takes them off everyone's list.", function(data)
+	if data and data.guild then
+		ns.RemoveGuildWithMessage(data.guild)
+	elseif data and data.key then
+		ns.RemoveWithMessage(data.key)
+	end
+end)
+
+YesNoPopup("BLACK_REMOVE", "Take %s off the guild Blacklist?\nThis takes them off everyone's.", function(data)
+	if data and data.key then ns.RemoveBlackWithMessage(data.key) end
+end)
 
 function ns.AskReason(info)
 	if ns.RefuseAlly(info) then return end
-	local shown = NameColor(info.class, info.name)
+	local shown = NameColor(info.class, ns.FullName(info.name, info.realm))
 	StaticPopup_Show(ns.POPUP_PREFIX .. "REASON", shown, nil, { info = info })
 end
 
@@ -2103,6 +2435,33 @@ function ns.AskRemove(key)
 	local e = ns.Get(key)
 	if not e then return end
 	StaticPopup_Show(ns.POPUP_PREFIX .. "REMOVE", ns.ColorName(e), nil, { key = key })
+end
+
+function ns.AskBlackEdit(key)
+	local e = ns.GetBlack(key)
+	if not e then return end
+	StaticPopup_Show(ns.POPUP_PREFIX .. "BLACK_REASON", ns.ColorName(e), nil, { key = key, edit = true })
+end
+
+function ns.AskBlackReason(info)
+	local key = ns.Key(info.name, info.realm)
+	if ns.GetBlack(key) then return ns.AskBlackEdit(key) end
+	if ns.RefuseBlack(info) then return end
+	StaticPopup_Show(ns.POPUP_PREFIX .. "BLACK_REASON", NameColor(info.class, ns.FullName(info.name, info.realm)), nil, { info = info })
+end
+
+function ns.AskBlackLeaver(info, reason)
+	StaticPopup_Show(ns.POPUP_PREFIX .. "BLACK_LEAVER", NameColor(info.class, ns.FullName(info.name, info.realm)), nil, { info = info, reason = reason })
+end
+
+function ns.AskBlackRemove(key)
+	local e = ns.GetBlack(key)
+	if not e then return end
+	StaticPopup_Show(ns.POPUP_PREFIX .. "BLACK_REMOVE", ns.ColorName(e), nil, { key = key })
+end
+
+function ns.AskBlackName()
+	StaticPopup_Show(ns.POPUP_PREFIX .. "BLACK_NAME")
 end
 
 local function GuildText(name)
@@ -2159,12 +2518,14 @@ banner:SetScript("OnUpdate", function(self, elapsed)
 	self:SetAlpha(math.min(1, self.left / 1.0))
 end)
 
-function ns.ShowBanner(e, level)
+function ns.ShowBanner(e, level, title, how)
 	local levelText = (level and level > 0) and ("  |cffcccccc" .. level .. "|r") or ""
 	local guild = e.g and ("  |cff999999<" .. e.g .. ">|r") or ""
-	banner.name:SetText(ns.ColorName(e) .. levelText .. guild)
+	banner.title:SetText(title or "KILL ON SIGHT")
+	if title then banner.title:SetTextColor(1, 0.6, 0.1) else banner.title:SetTextColor(1, 0.15, 0.15) end
+	banner.name:SetText(ns.ColorName(e) .. (how and ("  |cffcccccc" .. how .. "|r") or "") .. levelText .. guild)
 	local why = e.w or "No reason given"
-	banner.why:SetText(why .. "  |cff999999- added by " .. ns.ShortSender(e.b) .. "|r")
+	banner.why:SetText(why .. "  |cff999999- added by " .. ns.SenderName(e.b) .. "|r")
 	banner.left = BANNER_TIME
 	banner:SetAlpha(1)
 	banner:Show()
@@ -2174,6 +2535,8 @@ function ns.ToggleBannerMove()
 	banner.unlocked = not banner.unlocked
 	banner:EnableMouse(banner.unlocked)
 	if banner.unlocked then
+		banner.title:SetText("KILL ON SIGHT")
+		banner.title:SetTextColor(1, 0.15, 0.15)
 		banner.name:SetText("Drag me where you want the warning")
 		banner.why:SetText("Type /kos move again when you're done")
 		banner:Show()
@@ -2185,7 +2548,7 @@ end
 
 local NEARBY_ROWS = 10
 local ROW_H = 16
-local NEARBY_W = 210
+local NEARBY_W = 250
 
 local nearby = CreateFrame("Frame", ns.FRAME_PREFIX .. "Nearby", UIParent, BACKDROP_TEMPLATE)
 nearby:SetSize(NEARBY_W, 22)
@@ -2224,7 +2587,7 @@ local function RowMenu(row)
 	if not key then return end
 	if MenuUtil and MenuUtil.CreateContextMenu then
 		MenuUtil.CreateContextMenu(row, function(_, root)
-			root:CreateTitle(info and info.name or "?")
+			root:CreateTitle(info and ns.FullName(info.name, info.realm) or "?")
 			if ns.Get(key) then
 				root:CreateButton("Edit reason", function() ns.AskEditReason(key) end)
 				root:CreateButton("|cffe03c3cRemove from kill list|r", function() ns.AskRemove(key) end)
@@ -2283,7 +2646,7 @@ local function MakeRow(i)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		local n = ns.nearby[self.key]
 		local e = ns.Get(self.key)
-		GameTooltip:AddLine(e and ns.ColorName(e) or (n and NameColor(n.class, n.name)) or "?")
+		GameTooltip:AddLine(e and ns.ColorName(e) or (n and NameColor(n.class, ns.FullName(n.name, n.realm))) or "?")
 		if n then
 			local bits = {}
 			if n.level and n.level > 0 then bits[#bits + 1] = "Level " .. n.level end
@@ -2294,10 +2657,10 @@ local function MakeRow(i)
 		local g = not e and n and ns.GetGuild(n.guild)
 		if e then
 			GameTooltip:AddLine("Kill on sight" .. (e.w and (": " .. e.w) or ""), 1, 0.2, 0.2, true)
-			GameTooltip:AddLine("Added by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a), 0.6, 0.6, 0.6)
+			GameTooltip:AddLine("Added by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a), 0.6, 0.6, 0.6)
 		elseif g then
 			GameTooltip:AddLine("Kill on sight: the whole guild" .. (g.w and (": " .. g.w) or ""), 1, 0.2, 0.2, true)
-			GameTooltip:AddLine("Guild added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
+			GameTooltip:AddLine("Guild added by " .. ns.SenderName(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
 		end
 		ns.AddStatsLines(GameTooltip, self.key)
 		GameTooltip:AddLine("Left-click: target   Right-click: kill list", 0.5, 0.8, 1)
@@ -2319,7 +2682,7 @@ local function FillRowText(row, item)
 	local n, e = item.n, item.e
 	local listed = e or item.g
 	local level = (n.level and n.level > 0) and (" |cffaaaaaa" .. n.level .. "|r") or ""
-	row.name:SetText(NameColor(n.class, n.name) .. level)
+	row.name:SetText(NameColor(n.class, ns.FullName(n.name, n.realm)) .. level)
 	local age = math.floor(GetTime() - n.seen)
 	local rec = ns.Enemy(item.key)
 	local score = (rec and ((rec.w or 0) + (rec.l or 0)) > 0) and ("|cff40ff40" .. rec.w .. "|r-|cffff4040" .. rec.l .. "|r ") or ""
@@ -2404,7 +2767,7 @@ end
 
 local LIST_ROWS = 10
 local LROW_H = 36
-local WIN_W, WIN_H = 520, 20 + 34 + LIST_ROWS * LROW_H + 40
+local WIN_W, WIN_H = 640, 20 + 34 + LIST_ROWS * LROW_H + 40
 
 local win = CreateFrame("Frame", ns.FRAME_PREFIX .. "Window", UIParent, BACKDROP_TEMPLATE)
 win:SetSize(WIN_W, WIN_H)
@@ -2445,12 +2808,19 @@ end
 
 local addTarget = Button("Add target", 90, function()
 	local info = ns.TargetInfo()
+	if mode == "black" then
+		if not info then ns.Print("target a player first.") return end
+		ns.AskBlackReason(info)
+		return
+	end
 	if not info then ns.Print("target an enemy player first.") return end
 	if ns.GetByName(info.name, info.realm) then ns.AskEditReason(ns.Key(info.name, info.realm)) return end
 	ns.AskReason(info)
 end)
 addTarget:SetPoint("LEFT", search, "RIGHT", 10, 0)
-local addName = Button("Add by name", 96, function() ns.AskAddName() end)
+local addName = Button("Add by name", 96, function()
+	if mode == "black" then ns.AskBlackName() else ns.AskAddName() end
+end)
 addName:SetPoint("LEFT", addTarget, "RIGHT", 4, 0)
 local addGuild = Button("Add guild", 84, function() ns.AskAddGuild() end)
 addGuild:SetPoint("LEFT", addName, "RIGHT", 4, 0)
@@ -2467,8 +2837,17 @@ optionsBtn:SetPoint("LEFT", addGuild, "RIGHT", 4, 0)
 local RefreshList
 local tabSeen = Button("Recently Seen", 110, function() ns.ShowPage("seen") end)
 tabSeen:SetPoint("TOPRIGHT", -28, -5)
+local tabBlack = Button("Blacklist", 80, function() ns.ShowPage("black") end)
+tabBlack:SetPoint("RIGHT", tabSeen, "LEFT", -4, 0)
+tabBlack:SetScript("OnEnter", function(self)
+	GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+	GameTooltip:AddLine("Guild Blacklist")
+	GameTooltip:AddLine("Players on our side to keep out of your groups, shared with the guild. You're warned when one is in your group, invites you or talks in chat.", 1, 1, 1, true)
+	GameTooltip:Show()
+end)
+tabBlack:SetScript("OnLeave", function() GameTooltip:Hide() end)
 local tabKos = Button("Kill List", 80, function() ns.ShowPage("kos") end)
-tabKos:SetPoint("RIGHT", tabSeen, "LEFT", -4, 0)
+tabKos:SetPoint("RIGHT", tabBlack, "LEFT", -4, 0)
 
 local listArea = CreateFrame("Frame", nil, win)
 listArea:SetPoint("TOPLEFT", 6, -56)
@@ -2530,6 +2909,7 @@ for i = 1, LIST_ROWS do
 	row.edit:SetScript("OnClick", function()
 		if row.guild then ns.AskGuildReason(row.guild) return end
 		if not row.key then return end
+		if row.black then ns.AskBlackEdit(row.key) return end
 		if ns.Get(row.key) then ns.AskEditReason(row.key) return end
 		local rec = ns.Enemy(row.key)
 		if rec then ns.AskReason({ name = rec.n, realm = rec.r, class = rec.c, guild = rec.g, level = rec.lv }) end
@@ -2539,7 +2919,13 @@ for i = 1, LIST_ROWS do
 	row.remove:SetPoint("RIGHT", -2, 0)
 	row.remove:SetText("Remove")
 	row.remove:SetScript("OnClick", function()
-		if row.guild then ns.AskRemoveGuild(row.guild) elseif row.key then ns.AskRemove(row.key) end
+		if row.guild then
+			ns.AskRemoveGuild(row.guild)
+		elseif row.black then
+			ns.AskBlackRemove(row.key)
+		elseif row.key then
+			ns.AskRemove(row.key)
+		end
 	end)
 	row:SetScript("OnEnter", function(self)
 		if self.guild then
@@ -2548,12 +2934,25 @@ for i = 1, LIST_ROWS do
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:AddLine("|cffffd200<" .. g.n .. ">|r  whole guild")
 			GameTooltip:AddLine(g.w or "No reason given", 1, 0.75, 0.75, true)
-			GameTooltip:AddLine("Added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
+			GameTooltip:AddLine("Added by " .. ns.SenderName(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
 			GameTooltip:AddLine("Every member you come across counts as kill on sight. The game doesn't tell addons who is in a guild, so a member is only recognised once you see them.", 1, 1, 1, true)
 			GameTooltip:Show()
 			return
 		end
 		if not self.key then return end
+		if self.black then
+			local b = ns.GetBlack(self.key)
+			if not b then return end
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine(ns.ColorName(b) .. "  |cffff9900guild Blacklist|r")
+			if b.g then GameTooltip:AddLine("<" .. b.g .. ">", 0.7, 0.7, 0.7) end
+			GameTooltip:AddLine(b.w or "No reason given", 1, 0.8, 0.5, true)
+			GameTooltip:AddLine("Added by " .. ns.SenderName(b.b) .. ", " .. ns.Ago(b.a), 0.6, 0.6, 0.6)
+			if b.gs then GameTooltip:AddLine("Last in your group " .. ns.Ago(b.gs), 0.6, 0.6, 0.6) end
+			GameTooltip:AddLine("You're warned when they're in your group, invite you or talk in chat.", 1, 1, 1, true)
+			GameTooltip:Show()
+			return
+		end
 		local e = ns.Get(self.key)
 		if mode == "seen" then
 			local rec = ns.Enemy(self.key)
@@ -2576,7 +2975,7 @@ for i = 1, LIST_ROWS do
 		if e.g then GameTooltip:AddLine("<" .. e.g .. ">", 0.7, 0.7, 0.7) end
 		if e.lv or e.race then GameTooltip:AddLine(((e.lv and ("Level " .. e.lv .. " ")) or "") .. (e.race or ""), 1, 1, 1) end
 		GameTooltip:AddLine(e.w or "No reason given", 1, 0.75, 0.75, true)
-		GameTooltip:AddLine("Added by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a), 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("Added by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a), 0.6, 0.6, 0.6)
 		if e.seen then
 			GameTooltip:AddLine("Last seen " .. ns.Ago(e.seen) .. (e.sz and e.sz ~= "" and (" in " .. e.sz) or "") .. (e.sb and (" by " .. e.sb) or ""), 0.6, 0.6, 0.6, true)
 		end
@@ -2608,11 +3007,11 @@ local function MembersSeen(g)
 end
 
 local function FillGuildRow(row, g)
-	row.key, row.guild = nil, g.n
+	row.key, row.guild, row.black = nil, g.n, nil
 	row.name:SetText("|cffffd200<" .. g.n .. ">|r  |cffaaaaaawhole guild|r")
 	row.why:SetText(g.w or "|cff777777No reason given|r")
 	row.why:SetTextColor(1, 0.75, 0.75)
-	row.by:SetText("by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a))
+	row.by:SetText("by " .. ns.SenderName(g.b) .. ", " .. ns.Ago(g.a))
 	local seen = MembersSeen(g)
 	row.seen:SetText(seen > 0 and (seen .. " member" .. (seen == 1 and "" or "s") .. " seen") or "no members seen yet")
 	row.edit:SetText("Edit")
@@ -2622,7 +3021,7 @@ end
 
 local function FillKosRow(row, e)
 	if e.isGuildRow then FillGuildRow(row, e.g) return end
-	row.guild = nil
+	row.guild, row.black = nil, nil
 	row.key = ns.Key(e.n, e.r)
 	local level = e.lv and e.lv > 0 and ("  |cffaaaaaa" .. e.lv .. "|r") or ""
 	local guild = e.g and ("  |cff888888<" .. e.g .. ">|r") or ""
@@ -2631,7 +3030,7 @@ local function FillKosRow(row, e)
 	row.why:SetTextColor(1, 0.75, 0.75)
 	local rec = ns.Enemy(row.key)
 	local score = (rec and ((rec.w or 0) + (rec.l or 0)) > 0) and (ns.Score(rec) .. "  ") or ""
-	row.by:SetText(score .. "by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a))
+	row.by:SetText(score .. "by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a))
 	row.seen:SetText(e.seen and ("seen " .. ns.Ago(e.seen)) or "not seen yet")
 	row.edit:SetText("Edit")
 	row.edit:Show()
@@ -2640,7 +3039,7 @@ end
 
 local function FillSeenRow(row, item)
 	local rec = item.rec
-	row.key, row.guild = item.key, nil
+	row.key, row.guild, row.black = item.key, nil, nil
 	local level = rec.lv and rec.lv > 0 and ("  |cffaaaaaa" .. rec.lv .. "|r") or ""
 	local guild = rec.g and ("  |cff888888<" .. rec.g .. ">|r") or ""
 	row.name:SetText(ns.ColorName({ n = rec.n, r = rec.r, c = rec.c }) .. level .. guild)
@@ -2653,6 +3052,19 @@ local function FillSeenRow(row, item)
 	row.edit:SetText(listed and "Edit" or "KoS")
 	row.edit:Show()
 	row.remove:SetShown(listed)
+end
+
+local function FillBlackRow(row, e)
+	row.key, row.guild, row.black = ns.Key(e.n, e.r), nil, true
+	local guild = e.g and ("  |cff888888<" .. e.g .. ">|r") or ""
+	row.name:SetText(ns.ColorName(e) .. guild)
+	row.why:SetText(e.w or "|cff777777No reason given|r")
+	row.why:SetTextColor(1, 0.8, 0.5)
+	row.by:SetText("by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a))
+	row.seen:SetText(e.gs and ("in your group " .. ns.Ago(e.gs)) or "")
+	row.edit:SetText("Edit")
+	row.edit:Show()
+	row.remove:Show()
 end
 
 local function VersionTag()
@@ -2669,31 +3081,46 @@ RefreshList = function()
 	if mode == "seen" then
 		for _, item in ipairs(ns.EnemyList()) do
 			local r = item.rec
-			if Matches({ r.n, r.r, r.g, r.c, r.race, r.zone }, q) then filtered[#filtered + 1] = item end
+			if Matches({ ns.DisplayName(r), r.g, r.c, r.race, r.zone }, q) then filtered[#filtered + 1] = item end
+		end
+	elseif mode == "black" then
+		for _, e in ipairs(ns.BlackList()) do
+			if Matches({ ns.DisplayName(e), e.g, e.w, e.b, e.c }, q) then filtered[#filtered + 1] = e end
 		end
 	else
 		for _, g in ipairs(ns.GuildList()) do
 			if Matches({ g.n, g.w, g.b }, q) then filtered[#filtered + 1] = { isGuildRow = true, g = g } end
 		end
 		for _, e in ipairs(ns.List()) do
-			if Matches({ e.n, e.r, e.g, e.w, e.b, e.c }, q) then filtered[#filtered + 1] = e end
+			if Matches({ ns.DisplayName(e), e.g, e.w, e.b, e.c }, q) then filtered[#filtered + 1] = e end
 		end
 	end
 	offset = math.max(0, math.min(offset, math.max(0, #filtered - LIST_ROWS)))
 	for i, row in ipairs(lrows) do
 		local item = filtered[offset + i]
 		if item then
-			if mode == "seen" then FillSeenRow(row, item) else FillKosRow(row, item) end
+			if mode == "seen" then
+				FillSeenRow(row, item)
+			elseif mode == "black" then
+				FillBlackRow(row, item)
+			else
+				FillKosRow(row, item)
+			end
 			row:Show()
 		else
-			row.key, row.guild = nil, nil
+			row.key, row.guild, row.black = nil, nil, nil
 			row:Hide()
 		end
 	end
 	tabKos:SetEnabled(mode ~= "kos")
 	tabSeen:SetEnabled(mode ~= "seen")
+	tabBlack:SetEnabled(mode ~= "black")
+	addGuild:SetShown(mode ~= "black")
 	local total
-	if mode == "seen" then
+	if mode == "black" then
+		total = ns.BlackCount()
+		win.title:SetText("|cffff9900Guild Blacklist|r  |cffaaaaaa" .. total .. " player" .. (total == 1 and "" or "s") .. "|r" .. VersionTag())
+	elseif mode == "seen" then
 		local w, l, n = ns.Totals()
 		total = n
 		win.title:SetText("|cffe03c3cRecently Seen|r  |cffaaaaaa" .. n .. " enemies|r  " .. ns.Score({ w = w, l = l }) .. VersionTag())
@@ -2705,6 +3132,7 @@ RefreshList = function()
 	end
 	if total == 0 then
 		emptyText:SetText(mode == "seen" and "No enemy players seen yet. Everyone you come across is kept here, with your wins and losses against them."
+			or mode == "black" and "Nobody on the guild Blacklist yet.\nIt's for players on our side to keep out of groups. Right-click a player or their name in chat, or target them and click Add target. When someone leaves your dungeon group you're asked too."
 			or "Nobody on the list yet.\nTarget an enemy and click Add target, or right-click a player's name.\nAdd guild puts a whole guild on the list.")
 	elseif #filtered == 0 then
 		emptyText:SetText("No one matches \"" .. q .. "\".")
@@ -2715,6 +3143,10 @@ RefreshList = function()
 	local range = (#filtered > LIST_ROWS) and (first .. "-" .. last .. " of " .. #filtered .. ", scroll for more.  ") or ""
 	if mode == "seen" then
 		status:SetText(range .. "Kept on this PC. Wins and losses are worked out from what the game shows addons.")
+		return
+	end
+	if mode == "black" then
+		status:SetText(range .. (IsInGuild() and "Shared with the guild. You're warned when one of them is in your group, invites you or talks in chat." or "Not in a guild: nothing is shared"))
 		return
 	end
 	local peers = 0
@@ -2764,13 +3196,17 @@ local OPTIONS = {
 	{ "hideInDungeons", "Hide the nearby window in dungeons and raids" },
 	{ "nearbyAll", "List every enemy player nearby, not only listed ones" },
 	{ "farPlates", "Show nameplates as far away as the game allows (spots enemies sooner)" },
+	{ "blackWarn", "Warn me when someone on the guild Blacklist is in my group or invites me" },
+	{ "blackChat", "Point out guild Blacklist players who whisper me or talk in chat channels" },
+	{ "leavePrompt", "Offer to blacklist someone who leaves my dungeon group" },
 }
+local OPTION_H = 22
 
 local checks = {}
 for i, o in ipairs(OPTIONS) do
 	local cb = CreateFrame("CheckButton", nil, opts)
 	cb:SetSize(24, 24)
-	cb:SetPoint("TOPLEFT", 14, -10 - (i - 1) * 26)
+	cb:SetPoint("TOPLEFT", 14, -8 - (i - 1) * OPTION_H)
 	cb:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
 	cb:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
 	cb:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
@@ -2792,7 +3228,7 @@ end
 
 local testBtn = CreateFrame("Button", nil, opts, "UIPanelButtonTemplate")
 testBtn:SetSize(120, 22)
-testBtn:SetPoint("TOPLEFT", 16, -10 - #OPTIONS * 26 - 10)
+testBtn:SetPoint("TOPLEFT", 16, -8 - #OPTIONS * OPTION_H - 8)
 testBtn:SetText("Test warning")
 testBtn:SetScript("OnClick", function() ns.TestAlert() end)
 
@@ -2816,10 +3252,10 @@ end)
 platesBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local optsNote = Text(opts, "GameFontDisableSmall")
-optsNote:SetPoint("TOPLEFT", testBtn, "BOTTOMLEFT", 0, -14)
-optsNote:SetWidth(460)
+optsNote:SetPoint("TOPLEFT", testBtn, "BOTTOMLEFT", 0, -10)
+optsNote:SetWidth(WIN_W - 60)
 optsNote:SetWordWrap(true)
-optsNote:SetText("Drag the nearby window by its edge to move it. Everything on the list is shared with every guild member who has BH&G Kill List; changes reach everyone online right away, and anyone offline catches up when they log in.")
+optsNote:SetText("Drag the nearby window by its edge to move it. The kill list and the Blacklist are shared with every guild member who has the addon; anyone offline catches up when they log in.")
 
 function ns.ToggleOptions()
 	local show = not opts:IsShown()
@@ -2870,6 +3306,11 @@ local HELP = {
 	"/kos guild remove <guild> - take a guild off the list (for everyone)",
 	"/kos guild reason <guild>: <reason> - change a guild's reason",
 	"/kos guilds - list the guilds on the kill list",
+	"/kos black - put your target on the guild Blacklist (players on our side to keep out of groups)",
+	"/kos black <name> [reason] - put someone on the guild Blacklist by name",
+	"/kos black remove <name> - take someone off the guild Blacklist (for everyone)",
+	"/kos black reason <name> <reason> - change someone's Blacklist reason",
+	"/kos blacklist - open the guild Blacklist (/kos black list writes it in chat)",
 	"/kos seen - everyone you've come across, with your wins and losses",
 	"/kos nearby - show or hide the nearby enemies window",
 	"/kos plates - turn on enemy nameplates (spots enemies as soon as they're in range)",
@@ -2898,7 +3339,7 @@ local function Status()
 		local n = 0
 		for _, e in pairs(ns.db.entries) do if e.x then n = n + 1 end end
 		return n
-	end)() .. " removed ones remembered so removals spread).")
+	end)() .. " removed ones remembered so removals spread), " .. ns.BlackCount() .. " on the guild Blacklist.")
 	say("saved data present at login: " .. (ns.loadedWithData and "yes" or "no (first run, or the client didn't load it; the guild sync fills it back in)"))
 	local s = ns.sync
 	local peers = 0
@@ -2910,8 +3351,10 @@ local function Status()
 	say("last send: " .. (s.lastResult or "none yet") .. " | client checks: " .. ns.CommChecks())
 	local digests = {}
 	for i, h in ipairs(ns.BucketHashes()) do digests[i] = ns.ToB36(h) end
+	local black = {}
+	for i, h in ipairs(ns.BlackHashes()) do black[i] = ns.ToB36(h) end
 	say("list fingerprint: " .. ns.ToB36(ns.Hash(table.concat(digests, ","))) .. ", guilds " .. ns.ToB36(ns.GuildDigest())
-		.. " (the same on every guild member's PC once they're in sync)")
+		.. ", Blacklist " .. ns.ToB36(ns.Hash(table.concat(black, ","))) .. " (the same on every guild member's PC once they're in sync)")
 	local w, l, seenCount = ns.Totals()
 	say("seen " .. seenCount .. " enemy players, record " .. ns.Score({ w = w, l = l }) .. ".")
 	local plates = ns.EnemyPlatesOn()
@@ -2940,7 +3383,7 @@ local function ListGuilds()
 	end
 	ns.Print(#list .. " guild" .. (#list == 1 and "" or "s") .. " on the list:")
 	for _, g in ipairs(list) do
-		print("  |cffffd200<" .. g.n .. ">|r" .. (g.w and (" - " .. g.w) or "") .. " |cff999999(added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a) .. ")|r")
+		print("  |cffffd200<" .. g.n .. ">|r" .. (g.w and (" - " .. g.w) or "") .. " |cff999999(added by " .. ns.SenderName(g.b) .. ", " .. ns.Ago(g.a) .. ")|r")
 	end
 end
 
@@ -2972,20 +3415,59 @@ local function GuildCommand(rest)
 	end
 end
 
-local function Find(arg)
+local function Find(arg, get)
+	get = get or ns.Get
 	local name, realm = ns.SplitName(arg)
 	if not name then return nil end
 	local key = ns.Key(name, realm)
-	if ns.Get(key) then return key, name, realm end
+	if get(key) then return key, name, realm end
 
 	local found
-	for k, e in pairs(ns.db.entries) do
+	for k, e in pairs(get == ns.Get and ns.db.entries or ns.db.black) do
 		if not e.x and e.n:lower() == name:lower() then
 			if found then return nil, name, realm end
 			found = k
 		end
 	end
 	return found, name, realm
+end
+
+local function ListBlack()
+	local list = ns.BlackList()
+	if #list == 0 then
+		ns.Print("nobody on the guild Blacklist. /kos black adds your target.")
+		return
+	end
+	ns.Print(#list .. " player" .. (#list == 1 and "" or "s") .. " on the guild Blacklist:")
+	for _, e in ipairs(list) do
+		print("  " .. ns.ColorName(e) .. (e.w and (" - " .. e.w) or "") .. " |cff999999(added by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a) .. ")|r")
+	end
+end
+
+local function BlackCommand(rest)
+	local sub, arg = rest:match("^(%S*)%s*(.-)$")
+	local lower = sub:lower()
+	if sub == "" then
+		local info = ns.TargetInfo()
+		if not info then ns.Print("target a player first, or type /kos black <name> [reason].") return end
+		ns.AskBlackReason(info)
+	elseif lower == "remove" or lower == "rem" or lower == "del" then
+		local key = Find(arg, ns.GetBlack)
+		if not key then ns.Print("no one called \"" .. arg .. "\" is on the guild Blacklist.") return end
+		ns.RemoveBlackWithMessage(key)
+	elseif lower == "reason" then
+		local who, reason = arg:match("^(%S+)%s*(.-)$")
+		local key = who and Find(who, ns.GetBlack)
+		if not key then ns.Print("usage: /kos black reason <name> <reason>") return end
+		ns.SetBlackReason(key, reason)
+		ns.Print("reason updated.")
+	elseif lower == "list" then
+		ListBlack()
+	else
+		local name, realm = ns.SplitName(sub)
+		if not name then ns.Print("that isn't a player name.") return end
+		ns.AddBlackWithMessage({ name = name, realm = realm }, arg ~= "" and arg or nil)
+	end
 end
 
 local function Handler(msg)
@@ -3023,17 +3505,27 @@ local function Handler(msg)
 		local key, name = Find(rest)
 		local e = key and ns.Get(key)
 		local g = not e and ns.GetGuild(rest)
+		local blackKey = Find(rest, ns.GetBlack)
+		local b = blackKey and ns.GetBlack(blackKey)
 		if e then
-			ns.Print(ns.ColorName(e) .. " is on the list" .. (e.w and (": " .. e.w) or "") .. " (added by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a) .. ").")
+			ns.Print(ns.ColorName(e) .. " is on the list" .. (e.w and (": " .. e.w) or "") .. " (added by " .. ns.SenderName(e.b) .. ", " .. ns.Ago(e.a) .. ").")
 		elseif g then
-			ns.Print("the whole guild <" .. g.n .. "> is on the list" .. (g.w and (": " .. g.w) or "") .. " (added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a) .. ").")
-		else
-			ns.Print((name or rest) .. " isn't on the list.")
+			ns.Print("the whole guild <" .. g.n .. "> is on the list" .. (g.w and (": " .. g.w) or "") .. " (added by " .. ns.SenderName(g.b) .. ", " .. ns.Ago(g.a) .. ").")
+		end
+		if b then
+			ns.Print(ns.ColorName(b) .. " is on the guild Blacklist" .. (b.w and (": " .. b.w) or "") .. " (added by " .. ns.SenderName(b.b) .. ", " .. ns.Ago(b.a) .. ").")
+		end
+		if not e and not g and not b then
+			ns.Print((name or rest) .. " isn't on the kill list or the Blacklist.")
 		end
 	elseif cmd == "guild" then
 		GuildCommand(rest)
 	elseif cmd == "guilds" then
 		ListGuilds()
+	elseif cmd == "black" or cmd == "bl" then
+		BlackCommand(rest)
+	elseif cmd == "blacklist" then
+		if rest == "" then ns.ShowPage("black") else BlackCommand(rest) end
 	elseif cmd == "seen" or cmd == "stats" then
 		ns.ShowPage("seen")
 	elseif cmd == "plates" then
