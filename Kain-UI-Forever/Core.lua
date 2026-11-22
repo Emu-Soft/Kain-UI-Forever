@@ -47,6 +47,7 @@ KUI.defaults = {
 	followRXPObjectives = false,
 	lfgShowZone = true,
 	lfgRoleSections = true,
+	mailAutoSubject = true,
 	levelUpScreenshot = false,
 
 	gcdWatch = false,
@@ -76,6 +77,7 @@ KUI.KAIN_PRESET = {
 	followRXPObjectives = true,
 	lfgShowZone = true,
 	lfgRoleSections = true,
+	mailAutoSubject = true,
 	microMenuHidden = false,
 	hiddenMicroButtons = {
 		character = true, profession = true, spellbook = true, talent = true,
@@ -846,6 +848,7 @@ KUI.USER_COMMANDS = {
 	installmacros = true, weaponswap = true, linksoff = true, clearerrors = true,
 	enabledev = true, disabledev = true, gcdw = true,
 	lfgroles = true,
+	mailsubject = true,
 	unlock = true, lock = true, reset = true,
 }
 
@@ -1007,6 +1010,14 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		end
 		local on = KUI.db and KUI.db.lfgRoleSections ~= false
 		print("|cff33ff99Kain-UI Forever|r Group Finder players by role: " .. (on and "on" or "off (from the next search)") .. ". Type |cffffff00/kui lfgroles on|r or |cffffff00off|r to change.")
+	elseif command == "mailsubject" and KUI.SetMailAutoSubject then
+
+		local arg = rest:lower()
+		if arg == "on" or arg == "off" then
+			KUI:SetMailAutoSubject(arg == "on")
+		end
+		local on = KUI.db and KUI.db.mailAutoSubject ~= false
+		print("|cff33ff99Kain-UI Forever|r Mail subject from attachments: " .. (on and "on" or "off") .. ". Type |cffffff00/kui mailsubject on|r or |cffffff00off|r to change.")
 	elseif command == "diffscan" and KUI.GuildDifficultyScanReport then
 		KUI:GuildDifficultyScanReport()
 	elseif command == "zonebarreset" and KUI.ResetZoneBarPosition then

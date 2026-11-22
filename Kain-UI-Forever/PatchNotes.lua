@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.356",
+		sections = {
+			{ title = "New", items = {
+				"Mail: the subject fills itself in from what you attach. One item gives its name (with the stack size), several give \"Multiple items\" and how many, and money on its own gives the amount, like 1g 20s 67c. Anything you type yourself is never changed. Turn it off under Windows in the settings, or with /kui mailsubject off.",
+			} },
+		},
+	},
+	{
 		version = "1.0.355",
 		sections = {
 			{ title = "New", items = {
@@ -911,6 +919,7 @@ local HELP_COMMANDS = {
 	{ "/kui weaponswap", "Rebuild the weapon swap macro." },
 	{ "/kui linksoff", "Switch Enhance Chat off straight away, if chat ever misbehaves." },
 	{ "/kui lfgroles off", "Group Finder: one Players list again instead of Tank, Healer and DPS (from your next search). /kui lfgroles on splits it again." },
+	{ "/kui mailsubject off", "Mail: stop filling in the subject from what you attach. /kui mailsubject on starts it again." },
 	{ "/kui gcdw", "GCDWatch: open its settings and list its commands (on, off, status, unlock, lock, preview)." },
 	{ "/kui factoryreset confirm", "Erase all of this addon's settings and start fresh. Can't be undone." },
 	{ "/kainuiemoji on", "Show emoji in chat. /kainuiemoji off hides them." },

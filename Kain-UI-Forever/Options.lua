@@ -234,6 +234,7 @@ function KUI:ApplyKainPreset()
 	end
 	Set("SetLFGZoneShown", p.lfgShowZone)
 	Set("SetLFGRoleSections", p.lfgRoleSections)
+	Set("SetMailAutoSubject", p.mailAutoSubject)
 
 	Set("SetMicroMenuHidden", p.microMenuHidden)
 	for _, btn in ipairs(self.GetMicroButtonOptions and self:GetMicroButtonOptions() or {}) do
@@ -1006,6 +1007,13 @@ local function BuildPanel()
 		AddInfoButton(content, dragCheck.label, "Enable Global Dragging",
 			"Drag the Character, Macro, Spellbook/Talents, Map/Quest Log, Combined Bags, professions, quest dialogue, vendor, calendar and Social windows by their title bar. /kainui resetdrag puts them back.")
 		y4 = y4 - 26
+
+		if KUI.SetMailAutoSubject then
+			CreateCheckbox(content, "Fill in mail subjects", COL4_X, y4,
+				function() return KUI.db.mailAutoSubject ~= false end,
+				function(checked) KUI:SetMailAutoSubject(checked) end)
+			y4 = y4 - 26
+		end
 	end
 
 	if KUI.SetXPBarUnderPortrait then
