@@ -2,6 +2,7 @@ local ADDON_NAME, KUI = ...
 
 local ns = {
 	embedded = true,
+	VERSION = "1.3.0",
 	DB_NAME = "KainUIForeverKoSDB",
 	SOUND_DIR = "Interface\\AddOns\\Kain-UI-Forever\\Media\\KoS\\",
 	FRAME_PREFIX = "KainUIForeverKoS",
@@ -19,7 +20,8 @@ ns.POPUP_PREFIX = ns.POPUP_PREFIX or "BHGKOS_"
 ns.active = false
 ns.TITLE = "BH&G Kill List"
 ns.PREFIX = "|cffe03c3cBH&G Kill List:|r "
-ns.VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version"))
+
+ns.VERSION = ns.VERSION or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version"))
 	or (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "?"
 
 local function IsSecret(v)
@@ -2653,6 +2655,12 @@ local function FillSeenRow(row, item)
 	row.remove:SetShown(listed)
 end
 
+local function VersionTag()
+	local v = ns.VERSION
+	if type(v) ~= "string" or v == "" or v == "?" then return "" end
+	return "  |cff666666v" .. v .. "|r"
+end
+
 RefreshList = function()
 	if not win:IsShown() or not ns.db then return end
 	local q = (search:GetText() or ""):lower()
@@ -2688,12 +2696,12 @@ RefreshList = function()
 	if mode == "seen" then
 		local w, l, n = ns.Totals()
 		total = n
-		win.title:SetText("|cffe03c3cRecently Seen|r  |cffaaaaaa" .. n .. " enemies|r  " .. ns.Score({ w = w, l = l }))
+		win.title:SetText("|cffe03c3cRecently Seen|r  |cffaaaaaa" .. n .. " enemies|r  " .. ns.Score({ w = w, l = l }) .. VersionTag())
 	else
 		local guilds = ns.GuildCount()
 		total = ns.Count() + guilds
 		win.title:SetText("|cffe03c3cBH&G Kill List|r  |cffaaaaaa" .. ns.Count() .. " player" .. (ns.Count() == 1 and "" or "s")
-			.. (guilds > 0 and (", " .. guilds .. " guild" .. (guilds == 1 and "" or "s")) or "") .. "|r")
+			.. (guilds > 0 and (", " .. guilds .. " guild" .. (guilds == 1 and "" or "s")) or "") .. "|r" .. VersionTag())
 	end
 	if total == 0 then
 		emptyText:SetText(mode == "seen" and "No enemy players seen yet. Everyone you come across is kept here, with your wins and losses against them."
@@ -2885,7 +2893,7 @@ end
 
 local function Status()
 	local say = ns.Print
-	say((ns.embedded and "K-UI's kill list" or "standalone addon") .. (ns.embedded and "" or (" version " .. ns.VERSION))
+	say((ns.embedded and "K-UI's kill list" or "standalone addon") .. " version " .. ns.VERSION
 		.. (_G.BHGKillListStandalone and ns.embedded and " (the standalone addon is installed and asleep)" or "") .. ", " .. ns.Count() .. " players and " .. ns.GuildCount() .. " whole guilds on the list (" .. (function()
 		local n = 0
 		for _, e in pairs(ns.db.entries) do if e.x then n = n + 1 end end
