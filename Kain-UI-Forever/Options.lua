@@ -71,6 +71,7 @@ function KUI:ApplyAll()
 	Run("rxptweaks", "ApplyFollowRXPObjectives")
 	Run("camera", "ApplyCameraTweaks")
 	Run("gcdwatch", "ApplyGCDWatch")
+	Run("errortext", "ApplyHideErrorText")
 end
 
 local panel
@@ -636,6 +637,13 @@ local function BuildPanel()
 				function(checked) KUI:SetLevelUpScreenshot(checked) end)
 			AddInfoButton(content, shotCheck.label, "Screenshot on level up",
 				"Saved to your World of Warcraft Screenshots folder.")
+			y1 = y1 - 26
+		end
+
+		if KUI.SetHideErrorText then
+			CreateCheckbox(content, "Hide red error text", COL1_X, y1,
+				function() return KUI.db.hideErrorText == true end,
+				function(checked) KUI:SetHideErrorText(checked) end)
 			y1 = y1 - 26
 		end
 	end

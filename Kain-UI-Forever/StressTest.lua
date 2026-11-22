@@ -213,6 +213,7 @@ local TOGGLES = {
 	{ key = "followRXPObjectives", set = "SetFollowRXPObjectives" },
 	{ key = "lfgShowZone", set = "SetLFGZoneShown", get = NotFalse("lfgShowZone") },
 	{ key = "mailAutoSubject", set = "SetMailAutoSubject", get = NotFalse("mailAutoSubject") },
+	{ key = "hideErrorText", set = "SetHideErrorText" },
 	{ key = "microMenuHidden", set = "SetMicroMenuHidden" },
 	{ key = "contrastEnabled", set = "SetContrastEnabled", cvars = true },
 	{ key = "fastLoot", set = "SetFastLoot" },

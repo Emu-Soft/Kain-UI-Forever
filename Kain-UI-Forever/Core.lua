@@ -48,6 +48,7 @@ KUI.defaults = {
 	lfgShowZone = true,
 	mailAutoSubject = true,
 	levelUpScreenshot = false,
+	hideErrorText = false,
 
 	gcdWatch = false,
 	gcdWatchSettings = {},

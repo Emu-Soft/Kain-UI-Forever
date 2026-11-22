@@ -2,8 +2,11 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.357",
+		version = "1.0.358",
 		sections = {
+			{ title = "New", items = {
+				"Settings: an option to hide the red error text and its voice lines.",
+			} },
 			{ title = "Changed", items = {
 				"Group Finder: the Tank, Healer and DPS lists are always on.",
 			} },
