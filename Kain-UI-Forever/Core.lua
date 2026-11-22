@@ -46,7 +46,6 @@ KUI.defaults = {
 	convertImperialToMetric = false,
 	followRXPObjectives = false,
 	lfgShowZone = true,
-	lfgRoleSections = true,
 	mailAutoSubject = true,
 	levelUpScreenshot = false,
 
@@ -76,7 +75,6 @@ KUI.KAIN_PRESET = {
 	convertImperialToMetric = true,
 	followRXPObjectives = true,
 	lfgShowZone = true,
-	lfgRoleSections = true,
 	mailAutoSubject = true,
 	microMenuHidden = false,
 	hiddenMicroButtons = {
@@ -503,7 +501,6 @@ local function FindLFGPlayersNode(provider, soloType)
 end
 
 function KUI:SplitLFGPlayersByRole()
-	if not (KUI.db and KUI.db.lfgRoleSections ~= false) then return end
 	if not (C_LFGList and C_LFGList.GetSearchResultPlayerInfo) then return end
 	local soloType = LFGVanillaBrowseDividerType and LFGVanillaBrowseDividerType.CategorySolo
 	local scrollBox = GetLFGScrollBox()
@@ -579,12 +576,6 @@ local function HookLFGRoleSections()
 		KUI:SplitLFGPlayersByRole()
 	end, lfgRoleOwner)
 	ScrollUtil.AddInitializedFrameCallback(scrollBox, OnLFGRowInitialized, lfgRoleOwner, false)
-end
-
-function KUI:SetLFGRoleSections(enabled)
-	if not KUI.db then return end
-	KUI.db.lfgRoleSections = enabled and true or false
-	if enabled and lfgRoleHooked then KUI:SplitLFGPlayersByRole() end
 end
 
 if EventUtil and EventUtil.ContinueOnAddOnLoaded then
@@ -847,8 +838,6 @@ KUI.USER_COMMANDS = {
 	resetdrag = true, resetlootroll = true, zonebarreset = true, xpreset = true,
 	installmacros = true, weaponswap = true, linksoff = true, clearerrors = true,
 	enabledev = true, disabledev = true, gcdw = true,
-	lfgroles = true,
-	mailsubject = true,
 	unlock = true, lock = true, reset = true,
 }
 
@@ -1002,22 +991,6 @@ SlashCmdList["KAINUIFOREVER"] = function(msg)
 		KUI:SquareMinimapScanReport()
 	elseif command == "lfgfieldscan" and KUI.LFGFieldScanReport then
 		KUI:LFGFieldScanReport()
-	elseif command == "lfgroles" and KUI.SetLFGRoleSections then
-
-		local arg = rest:lower()
-		if arg == "on" or arg == "off" then
-			KUI:SetLFGRoleSections(arg == "on")
-		end
-		local on = KUI.db and KUI.db.lfgRoleSections ~= false
-		print("|cff33ff99Kain-UI Forever|r Group Finder players by role: " .. (on and "on" or "off (from the next search)") .. ". Type |cffffff00/kui lfgroles on|r or |cffffff00off|r to change.")
-	elseif command == "mailsubject" and KUI.SetMailAutoSubject then
-
-		local arg = rest:lower()
-		if arg == "on" or arg == "off" then
-			KUI:SetMailAutoSubject(arg == "on")
-		end
-		local on = KUI.db and KUI.db.mailAutoSubject ~= false
-		print("|cff33ff99Kain-UI Forever|r Mail subject from attachments: " .. (on and "on" or "off") .. ". Type |cffffff00/kui mailsubject on|r or |cffffff00off|r to change.")
 	elseif command == "diffscan" and KUI.GuildDifficultyScanReport then
 		KUI:GuildDifficultyScanReport()
 	elseif command == "zonebarreset" and KUI.ResetZoneBarPosition then

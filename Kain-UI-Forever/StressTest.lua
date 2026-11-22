@@ -212,7 +212,6 @@ local TOGGLES = {
 	{ key = "convertImperialToMetric", set = "SetConvertImperialToMetric" },
 	{ key = "followRXPObjectives", set = "SetFollowRXPObjectives" },
 	{ key = "lfgShowZone", set = "SetLFGZoneShown", get = NotFalse("lfgShowZone") },
-	{ key = "lfgRoleSections", set = "SetLFGRoleSections", get = NotFalse("lfgRoleSections") },
 	{ key = "mailAutoSubject", set = "SetMailAutoSubject", get = NotFalse("mailAutoSubject") },
 	{ key = "microMenuHidden", set = "SetMicroMenuHidden" },
 	{ key = "contrastEnabled", set = "SetContrastEnabled", cvars = true },

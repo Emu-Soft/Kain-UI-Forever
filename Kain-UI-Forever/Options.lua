@@ -233,7 +233,6 @@ function KUI:ApplyKainPreset()
 		Set("SetFollowRXPObjectives", p.followRXPObjectives)
 	end
 	Set("SetLFGZoneShown", p.lfgShowZone)
-	Set("SetLFGRoleSections", p.lfgRoleSections)
 	Set("SetMailAutoSubject", p.mailAutoSubject)
 
 	Set("SetMicroMenuHidden", p.microMenuHidden)

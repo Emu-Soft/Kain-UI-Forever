@@ -2,10 +2,18 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.357",
+		sections = {
+			{ title = "Changed", items = {
+				"Group Finder: the Tank, Healer and DPS lists are always on.",
+			} },
+		},
+	},
+	{
 		version = "1.0.356",
 		sections = {
 			{ title = "New", items = {
-				"Mail: the subject fills itself in from what you attach. One item gives its name (with the stack size), several give \"Multiple items\" and how many, and money on its own gives the amount, like 1g 20s 67c. Anything you type yourself is never changed. Turn it off under Windows in the settings, or with /kui mailsubject off.",
+				"Mail: the subject fills itself in from what you attach.",
 			} },
 		},
 	},
@@ -13,8 +21,8 @@ local PATCH_NOTES = {
 		version = "1.0.355",
 		sections = {
 			{ title = "New", items = {
-				"Kill on Sight: whole guilds can go on the list. Right-click one of their players and pick \"Add the whole guild\", click Add guild in /kos, or type /kos guild add Guild Name: a reason. Everyone from a listed guild you come across counts as kill on sight, and guilds are shared with your guild just like players.",
-				"Kill on Sight: the list window shows the Kill List's version next to the player count (and /kos status says it too), so it's easy to see who needs to update.",
+				"Kill on Sight: whole guilds can go on the list.",
+				"Kill on Sight: the list window shows the Kill List's version.",
 			} },
 		},
 	},
@@ -22,8 +30,8 @@ local PATCH_NOTES = {
 		version = "1.0.354",
 		sections = {
 			{ title = "Changed", items = {
-				"Group Finder: the Players list is split into Tank, Healer and DPS, each with its own fold button. Someone who signed up for more than one role shows up in each of them. Type /kui lfgroles off to go back to one Players list.",
-				"Kill on Sight: the nearby window now hides itself in dungeons, raids and scenarios, and stays up in battlegrounds, arenas and the open world.",
+				"Group Finder: players are listed under Tank, Healer and DPS.",
+				"Kill on Sight: the nearby window hides in dungeons, raids and scenarios.",
 			} },
 		},
 	},
@@ -918,8 +926,6 @@ local HELP_COMMANDS = {
 	{ "/kui installmacros", "Add the starter macros again." },
 	{ "/kui weaponswap", "Rebuild the weapon swap macro." },
 	{ "/kui linksoff", "Switch Enhance Chat off straight away, if chat ever misbehaves." },
-	{ "/kui lfgroles off", "Group Finder: one Players list again instead of Tank, Healer and DPS (from your next search). /kui lfgroles on splits it again." },
-	{ "/kui mailsubject off", "Mail: stop filling in the subject from what you attach. /kui mailsubject on starts it again." },
 	{ "/kui gcdw", "GCDWatch: open its settings and list its commands (on, off, status, unlock, lock, preview)." },
 	{ "/kui factoryreset confirm", "Erase all of this addon's settings and start fresh. Can't be undone." },
 	{ "/kainuiemoji on", "Show emoji in chat. /kainuiemoji off hides them." },
