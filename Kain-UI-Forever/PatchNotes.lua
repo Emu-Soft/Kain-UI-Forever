@@ -2,6 +2,15 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.355",
+		sections = {
+			{ title = "New", items = {
+				"Kill on Sight: whole guilds can go on the list. Right-click one of their players and pick \"Add the whole guild\", click Add guild in /kos, or type /kos guild add Guild Name: a reason. Everyone from a listed guild you come across counts as kill on sight, and guilds are shared with your guild just like players.",
+				"Kill on Sight: the list window shows the Kill List's version next to the player count (and /kos status says it too), so it's easy to see who needs to update.",
+			} },
+		},
+	},
+	{
 		version = "1.0.354",
 		sections = {
 			{ title = "Changed", items = {
