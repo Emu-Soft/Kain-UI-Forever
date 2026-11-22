@@ -194,6 +194,7 @@ function ns.InitDB()
 	local db = _G[ns.DB_NAME]
 	ns.loadedWithData = type(db.entries) == "table" and next(db.entries) ~= nil
 	if type(db.entries) ~= "table" then db.entries = {} end
+	if type(db.guilds) ~= "table" then db.guilds = {} end
 	if type(db.settings) ~= "table" then db.settings = {} end
 	if type(db.pos) ~= "table" then db.pos = {} end
 	for k, v in pairs(ns.DEFAULTS) do
@@ -205,6 +206,11 @@ function ns.InitDB()
 	for key, e in pairs(db.entries) do
 		if type(e) ~= "table" or type(e.n) ~= "string" or type(e.t) ~= "number" then
 			db.entries[key] = nil
+		end
+	end
+	for key, g in pairs(db.guilds) do
+		if type(g) ~= "table" or type(g.n) ~= "string" or type(g.t) ~= "number" then
+			db.guilds[key] = nil
 		end
 	end
 	ns.InvalidateHashes()
@@ -237,6 +243,7 @@ function ns.Fire(name, ...)
 end
 
 local SHARED = { "n", "r", "c", "g", "w", "b", "a", "t", "x", "y" }
+local GUILD_SHARED = { "n", "w", "b", "a", "t", "x", "y" }
 local NUMERIC = { a = true, t = true }
 ns.SHARED_FIELDS = SHARED
 
@@ -253,9 +260,9 @@ local function ToB36(n)
 end
 ns.ToB36 = ToB36
 
-function ns.Serialize(e)
+local function SerializeWith(fields, e)
 	local parts = {}
-	for i, f in ipairs(SHARED) do
+	for i, f in ipairs(fields) do
 		local v = e[f]
 		if NUMERIC[f] then
 			parts[i] = ToB36(v)
@@ -268,18 +275,22 @@ function ns.Serialize(e)
 	return table.concat(parts, "~")
 end
 
-local LIMITS = { n = 48, r = 64, c = 20, g = 64, w = 80, b = 80, y = 80 }
+function ns.Serialize(e) return SerializeWith(SHARED, e) end
+function ns.SerializeGuild(g) return SerializeWith(GUILD_SHARED, g) end
 
-function ns.Deserialize(s)
+local LIMITS = { n = 48, r = 64, c = 20, g = 64, w = 80, b = 80, y = 80 }
+local GUILD_LIMITS = { n = 64, w = 80, b = 80, y = 80 }
+
+local function DeserializeWith(fields, limits, s)
 	if type(s) ~= "string" then return nil end
 	local parts, i = {}, 1
 	for field in (s .. "~"):gmatch("([^~]*)~") do
 		parts[i] = field
 		i = i + 1
 	end
-	if #parts ~= #SHARED then return nil end
+	if #parts ~= #fields then return nil end
 	local e = {}
-	for idx, f in ipairs(SHARED) do
+	for idx, f in ipairs(fields) do
 		local v = parts[idx]
 		if NUMERIC[f] then
 			e[f] = tonumber(v, 36)
@@ -287,20 +298,31 @@ function ns.Deserialize(s)
 		elseif f == "x" then
 			e[f] = (v == "1") or nil
 		elseif v ~= "" then
-			if #v > LIMITS[f] then return nil end
+			if #v > limits[f] then return nil end
 			e[f] = v
 		end
 	end
-	if not e.n or not e.r or e.n:find("[%s~%^|]") then return nil end
+	if not e.n or e.n:find("[~%^|]") then return nil end
 
 	if e.t > ns.Now() + 86400 then return nil end
 	return e
 end
 
-function ns.IsNewer(a, b)
+function ns.Deserialize(s)
+	local e = DeserializeWith(SHARED, LIMITS, s)
+	if not e or not e.r or e.n:find("%s") then return nil end
+	return e
+end
+
+function ns.DeserializeGuild(s)
+	return DeserializeWith(GUILD_SHARED, GUILD_LIMITS, s)
+end
+
+function ns.IsNewer(a, b, serialize)
 	if not b then return true end
 	if a.t ~= b.t then return a.t > b.t end
-	return ns.Serialize(a) > ns.Serialize(b)
+	serialize = serialize or ns.Serialize
+	return serialize(a) > serialize(b)
 end
 
 ns.BUCKETS = 16
@@ -318,9 +340,26 @@ function ns.BucketOf(key)
 	return (Hash(key) % ns.BUCKETS) + 1
 end
 
-local hashCache
+local hashCache, guildDigest
 function ns.InvalidateHashes()
-	hashCache = nil
+	hashCache, guildDigest = nil, nil
+end
+
+function ns.GuildDigest()
+	if guildDigest then return guildDigest end
+	local sum = 0
+	for key, g in pairs(ns.db.guilds) do
+		sum = (sum + Hash(key .. "=" .. ns.SerializeGuild(g))) % 4294967296
+	end
+	guildDigest = sum
+	return sum
+end
+
+function ns.AllGuildEntries()
+	local list = {}
+	for _, g in pairs(ns.db.guilds) do list[#list + 1] = g end
+	table.sort(list, function(a, b) return a.n:lower() < b.n:lower() end)
+	return list
 end
 
 function ns.BucketHashes()
@@ -485,6 +524,114 @@ function ns.MergeIncoming(e)
 	return true
 end
 
+function ns.CleanGuildName(name)
+	if type(name) ~= "string" then return nil end
+	name = name:gsub("^%s*<", ""):gsub(">%s*$", "")
+	return ns.Clean(name, GUILD_LIMITS.n)
+end
+
+function ns.GuildKey(name)
+	name = ns.CleanGuildName(name)
+	return name and name:lower()
+end
+
+function ns.GetGuild(name)
+	local key = ns.GuildKey(name)
+	local g = key and ns.db and ns.db.guilds[key]
+	if g and not g.x then return g end
+	return nil
+end
+
+function ns.GuildList()
+	local list = {}
+	for _, g in ipairs(ns.AllGuildEntries()) do
+		if not g.x then list[#list + 1] = g end
+	end
+	return list
+end
+
+function ns.GuildCount()
+	return #ns.GuildList()
+end
+
+local function CopyGuild(g)
+	local c = {}
+	for _, f in ipairs(GUILD_SHARED) do c[f] = g[f] end
+	return c
+end
+
+local function CommitGuild(key, g, fromSync)
+	ns.db.guilds[key] = g
+	ns.InvalidateHashes()
+	ns.Fire("LIST_CHANGED", nil, nil, fromSync)
+	if not fromSync and ns.SendGuildUpdate then ns.SendGuildUpdate(g) end
+end
+
+function ns.AddGuild(name, reason)
+	name = ns.CleanGuildName(name)
+	if not name then return nil end
+	local key = name:lower()
+	local old = ns.db.guilds[key]
+	local wasListed = old and not old.x
+	local g = old and CopyGuild(old) or {}
+	g.n = (wasListed and old.n) or name
+	if reason ~= nil then g.w = ns.Clean(reason, GUILD_LIMITS.w) end
+	if not wasListed then
+		g.b = ns.Clean(ns.MyFullName(), GUILD_LIMITS.b)
+		g.a = ns.Now()
+	end
+	g.x, g.y = nil, nil
+	if wasListed and g.w == old.w then return old, false end
+	g.t = Stamp(old)
+	CommitGuild(key, g)
+	return g, not wasListed
+end
+
+function ns.SetGuildReason(name, reason)
+	local old = ns.GetGuild(name)
+	if not old then return end
+	local g = CopyGuild(old)
+	g.w = ns.Clean(reason, GUILD_LIMITS.w)
+	if g.w == old.w then return end
+	g.t = Stamp(old)
+	CommitGuild(old.n:lower(), g)
+end
+
+function ns.RemoveGuild(name)
+	local old = ns.GetGuild(name)
+	if not old then return nil end
+	local g = CopyGuild(old)
+	g.x = true
+	g.y = ns.Clean(ns.MyFullName(), GUILD_LIMITS.y)
+	g.t = Stamp(old)
+	CommitGuild(old.n:lower(), g)
+	return g
+end
+
+function ns.LearnGuildSpelling(name)
+	local old = ns.GetGuild(name)
+	name = ns.CleanGuildName(name)
+	if not old or not name or old.n == name then return end
+	local g = CopyGuild(old)
+	g.n = name
+	g.t = Stamp(old)
+	CommitGuild(name:lower(), g)
+end
+
+function ns.MergeIncomingGuild(g)
+	local key = g.n:lower()
+	local old = ns.db.guilds[key]
+	if old and not ns.IsNewer(g, old, ns.SerializeGuild) then return false end
+	local wasListed = old and not old.x
+	CommitGuild(key, g, true)
+	if not g.x and not wasListed then
+		ns.Fire("GUILD_ADDED_BY_GUILD", key, g)
+	elseif g.x and wasListed then
+		ns.Fire("GUILD_REMOVED_BY_GUILD", key, g)
+	end
+	return true
+end
+
 local frame = CreateFrame("Frame")
 ns.frame = frame
 local handlers = {}
@@ -563,6 +710,13 @@ function ns.ImportStandalone()
 				ns.MergeIncoming(copy)
 			end
 		end
+		if type(old.guilds) == "table" then
+			for _, g in pairs(old.guilds) do
+				local copy = type(g) == "table" and type(g.n) == "string" and type(g.t) == "number"
+					and ns.DeserializeGuild(ns.SerializeGuild(g))
+				if copy then ns.MergeIncomingGuild(copy) end
+			end
+		end
 		ns.syncQuiet = false
 	end
 	if type(old.enemies) == "table" then
@@ -619,6 +773,12 @@ ns.sync = {
 	lastHello = nil, peers = {},
 }
 local stats = ns.sync
+local GUILD_BUCKET = ns.BUCKETS + 1
+
+local function Digest(i)
+	if i == GUILD_BUCKET then return ns.GuildDigest() end
+	return ns.BucketHashes()[i]
+end
 
 if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
 	pcall(C_ChatInfo.RegisterAddonMessagePrefix, COMM_PREFIX)
@@ -720,10 +880,16 @@ function ns.SendUpdate(e)
 	Send("U~" .. ns.Serialize(e))
 end
 
+function ns.SendGuildUpdate(g)
+	if not IsInGuild() then return end
+	Send("G~" .. ns.SerializeGuild(g))
+end
+
 function ns.SendHello()
 	if not IsInGuild() then return false end
 	stats.lastHello = GetTime()
 	Send("H~" .. HashList())
+	Send("Q~" .. ns.ToB36(ns.GuildDigest()))
 	return true
 end
 
@@ -731,15 +897,18 @@ local lastBucketSent = {}
 local inFlight = {}
 
 local function SendBucket(i)
-	local digest = ns.BucketHashes()[i]
+	local digest = Digest(i)
 	lastBucketSent[i] = GetTime()
 	inFlight[i] = digest
 	Send("B~" .. i .. "~" .. ns.ToB36(digest), i)
+	local isGuilds = i == GUILD_BUCKET
+	local kind = isGuilds and "E~" or "D~"
+	local serialize = isGuilds and ns.SerializeGuild or ns.Serialize
 	local chunk, size = {}, 2
-	for _, e in ipairs(ns.EntriesInBucket(i)) do
-		local s = ns.Serialize(e)
+	for _, e in ipairs(isGuilds and ns.AllGuildEntries() or ns.EntriesInBucket(i)) do
+		local s = serialize(e)
 		if size + #s + 1 > MAX_MESSAGE and #chunk > 0 then
-			Send("D~" .. table.concat(chunk, "^"), i)
+			Send(kind .. table.concat(chunk, "^"), i)
 			chunk, size = {}, 2
 		end
 		if 2 + #s <= MAX_MESSAGE then
@@ -747,7 +916,7 @@ local function SendBucket(i)
 			size = size + #s + 1
 		end
 	end
-	if #chunk > 0 then Send("D~" .. table.concat(chunk, "^"), i) end
+	if #chunk > 0 then Send(kind .. table.concat(chunk, "^"), i) end
 end
 
 function ns.SendSighting(e, zone)
@@ -769,12 +938,11 @@ end
 RunOffer = function()
 	offerTimer = nil
 	if #sendQueue > 0 then return end
-	local mine = ns.BucketHashes()
 	local order = {}
 	for i in pairs(offers) do order[#order + 1] = i end
 	table.sort(order)
 	for _, i in ipairs(order) do
-		local heardSame = offers[i][mine[i]]
+		local heardSame = offers[i][Digest(i)]
 		local recently = lastBucketSent[i] and (GetTime() - lastBucketSent[i]) < BUCKET_RESEND
 		offers[i] = nil
 		if not heardSame and not recently then
@@ -796,12 +964,11 @@ end
 
 local function CheckSendBack()
 	quietTimer = nil
-	local mine = ns.BucketHashes()
 	local heard = announced
 	announced = {}
 	for i, digests in pairs(heard) do
 		for digest in pairs(digests) do
-			if digest ~= mine[i] then
+			if digest ~= Digest(i) then
 				Offer(i)
 				break
 			end
@@ -823,10 +990,10 @@ local function IsMe(sender)
 	return s == me
 end
 
-local function Merge(s, sender)
-	local e = ns.Deserialize(s)
+local function Merge(s, sender, isGuild)
+	local e = (isGuild and ns.DeserializeGuild or ns.Deserialize)(s)
 	if not e then return end
-	if ns.MergeIncoming(e) then
+	if (isGuild and ns.MergeIncomingGuild or ns.MergeIncoming)(e) then
 		stats.merged = stats.merged + 1
 		ns.lastMergeFrom = sender
 	end
@@ -838,21 +1005,25 @@ local function OnMessage(text, sender)
 	if not kind then return end
 	stats.peers[sender] = GetTime()
 
-	if kind == "U" then
-		Merge(body, sender)
+	if kind == "U" or kind == "G" then
+		Merge(body, sender, kind == "G")
 
-	elseif kind == "D" then
+	elseif kind == "D" or kind == "E" then
 		ns.syncQuiet = true
 		for s in (body .. "^"):gmatch("([^%^]*)%^") do
-			if s ~= "" then Merge(s, sender) end
+			if s ~= "" then Merge(s, sender, kind == "E") end
 		end
 		ns.syncQuiet = false
 		TrafficSeen()
 
+	elseif kind == "Q" then
+		local digest = tonumber(body, 36)
+		if digest and digest ~= ns.GuildDigest() then Offer(GUILD_BUCKET) end
+
 	elseif kind == "B" then
 		local i, digest = body:match("^(%d+)~(%w+)$")
 		i, digest = tonumber(i), digest and tonumber(digest, 36)
-		if i and digest and i >= 1 and i <= ns.BUCKETS then
+		if i and digest and i >= 1 and i <= GUILD_BUCKET then
 			announced[i] = announced[i] or {}
 			announced[i][digest] = true
 			if offers[i] then offers[i][digest] = true end
@@ -921,6 +1092,7 @@ ns.nearby = {}
 local lastAlert = {}
 local lastShared = {}
 local lastGuildNote = {}
+local lastGuildAlert = {}
 
 local SOUNDS = {
 	kos = "detected-kos.mp3",
@@ -945,6 +1117,7 @@ local function Call(fn, ...)
 end
 
 ns.allies = {}
+ns.allyGuilds = {}
 
 local guildKeys, guildKeysDirty = {}, true
 local function GuildKeys()
@@ -974,6 +1147,13 @@ function ns.IsAlly(info)
 	if Call(UnitInParty, who) or Call(UnitInRaid, who) then return true end
 	if who2 and (Call(UnitInParty, who2) or Call(UnitInRaid, who2)) then return true end
 	return false
+end
+
+function ns.IsAllyGuild(name)
+	local key = ns.GuildKey(name)
+	if not key then return false end
+	local mine = PlainText(Call(GetGuildInfo, "player"))
+	return ns.allyGuilds[key] or (mine and mine:lower() == key) or false
 end
 
 function ns.RefuseAlly(info)
@@ -1009,7 +1189,10 @@ function ns.ReadUnit(unit)
 	elseif not hostile then
 		ally = Call(UnitIsFriend, "player", unit) and true or nil
 	end
-	if ally then ns.allies[ns.Key(name, realm or ns.MyRealm())] = true end
+	if ally then
+		ns.allies[ns.Key(name, realm or ns.MyRealm())] = true
+		if type(guild) == "string" and guild ~= "" then ns.allyGuilds[guild:lower()] = true end
+	end
 	return {
 		name = name,
 		realm = realm or ns.MyRealm(),
@@ -1046,7 +1229,7 @@ function ns.WhereAmI()
 	return text
 end
 
-function ns.Alert(e, info, test)
+function ns.Alert(e, info, test, quiet)
 	local key = ns.Key(e.n, e.r)
 	local now = GetTime()
 	if not test and lastAlert[key] and now - lastAlert[key] < (ns.Setting("alertCooldown") or 60) then return end
@@ -1057,9 +1240,24 @@ function ns.Alert(e, info, test)
 		local why = e.w and (" - " .. e.w) or ""
 		ns.Print("|cffff2020KILL ON SIGHT:|r " .. ns.ColorName(e) .. levelText .. why .. " |cff999999(added by " .. ns.ShortSender(e.b) .. ")|r")
 	end
+	if quiet then return end
 	if ns.Setting("sound") then ns.PlaySound("kos") end
 	if FlashClientIcon then pcall(FlashClientIcon) end
 	if ns.Setting("banner") and ns.ShowBanner then ns.ShowBanner(e, level) end
+end
+
+function ns.GuildMemberEntry(g, info)
+	return {
+		n = ns.ProperName(info.name), r = info.realm, c = info.class, g = info.guild or g.n,
+		w = "whole guild <" .. g.n .. "> is on the list" .. (g.w and (": " .. g.w) or ""), b = g.b,
+	}
+end
+
+local function GuildAlert(g, info)
+	local gkey = g.n:lower()
+	local loud = not lastGuildAlert[gkey] or GetTime() - lastGuildAlert[gkey] >= (ns.Setting("alertCooldown") or 60)
+	if loud then lastGuildAlert[gkey] = GetTime() end
+	ns.Alert(ns.GuildMemberEntry(g, info), info, false, not loud)
 end
 
 local lastNearbySound = 0
@@ -1078,7 +1276,8 @@ local function Seen(info, fromCombatLog)
 		end
 		return
 	end
-	if not e and not info.hostile then return end
+	local g = not e and ns.GetGuild(info.guild)
+	if not e and not g and not info.hostile then return end
 
 	local n = ns.nearby[key]
 	local isNewcomer = not n
@@ -1089,7 +1288,7 @@ local function Seen(info, fromCombatLog)
 		ns.nearbyDirty = true
 	end
 	if ns.RecordEnemy then ns.RecordEnemy(info, isNewcomer) end
-	if isNewcomer and not e and info.hostile and not info.dead and ns.Setting("nearbySound")
+	if isNewcomer and not e and not g and info.hostile and not info.dead and ns.Setting("nearbySound")
 		and GetTime() - lastNearbySound > 2 then
 		lastNearbySound = GetTime()
 		ns.PlaySound("nearby")
@@ -1102,6 +1301,11 @@ local function Seen(info, fromCombatLog)
 	n.hostile = info.hostile or n.hostile
 	n.seen = GetTime()
 
+	if g then
+		if not fromCombatLog then ns.LearnGuildSpelling(info.guild) end
+		if not info.dead then GuildAlert(ns.GetGuild(info.guild), info) end
+		return
+	end
 	if not e then return end
 
 	e.lv = info.level or e.lv
@@ -1138,13 +1342,15 @@ function ns.NearbyList()
 			ns.nearbyDirty = true
 		else
 			local e = ns.Get(key)
-			if e or ns.Setting("nearbyAll") then
-				list[#list + 1] = { key = key, n = n, e = e }
+			local g = not e and ns.GetGuild(n.guild) or nil
+			if e or g or ns.Setting("nearbyAll") then
+				list[#list + 1] = { key = key, n = n, e = e, g = g }
 			end
 		end
 	end
 	table.sort(list, function(a, b)
-		if (a.e ~= nil) ~= (b.e ~= nil) then return a.e ~= nil end
+		local la, lb = (a.e or a.g) ~= nil, (b.e or b.g) ~= nil
+		if la ~= lb then return la end
 		return a.n.seen > b.n.seen
 	end)
 	return list
@@ -1332,6 +1538,13 @@ ns.Listen("ADDED_BY_GUILD", function(_, e)
 	end
 	ns.Print(ns.ColorName(e) .. " was added by " .. ns.ShortSender(e.b) .. (e.w and (": " .. e.w) or "."))
 end)
+ns.Listen("GUILD_ADDED_BY_GUILD", function(_, g)
+	ns.Print("the whole guild |cffffd200<" .. g.n .. ">|r was put on the list by " .. ns.ShortSender(g.b) .. (g.w and (": " .. g.w) or "."))
+end)
+ns.Listen("GUILD_REMOVED_BY_GUILD", function(_, g)
+	if ns.syncQuiet then return end
+	ns.Print("the guild <" .. g.n .. "> was taken off the list by " .. ns.ShortSender(g.y) .. ".")
+end)
 ns.Listen("SYNC_SETTLED", function()
 	if caughtUp > 0 then
 		ns.Print("caught up with the guild: " .. caughtUp .. " player" .. (caughtUp == 1 and "" or "s") .. " added to your list (" .. ns.Count() .. " in all).")
@@ -1349,9 +1562,13 @@ local function OnUnitTooltip(tooltip)
 	if not info then return end
 	local key = ns.Key(info.name, info.realm)
 	local e = ns.Get(key)
+	local g = not e and not info.ally and ns.GetGuild(info.guild)
 	if e then
 		tooltip:AddLine("Kill on sight" .. (e.w and (": " .. e.w) or ""), 1, 0.15, 0.15, true)
 		tooltip:AddLine("BH&G Kill List, added by " .. ns.ShortSender(e.b), 0.6, 0.6, 0.6)
+	elseif g then
+		tooltip:AddLine("Kill on sight: the whole guild <" .. g.n .. ">" .. (g.w and (": " .. g.w) or ""), 1, 0.15, 0.15, true)
+		tooltip:AddLine("BH&G Kill List, added by " .. ns.ShortSender(g.b), 0.6, 0.6, 0.6)
 	end
 	local rec = ns.Enemy and ns.Enemy(key)
 	if rec and (e or info.hostile) and ((rec.w or 0) + (rec.l or 0)) > 0 then
@@ -1403,6 +1620,17 @@ local function AddMenuButton(_, rootDescription, contextData)
 			ns.AskReason(info)
 		end)
 	end
+	if info.guild and not ns.IsAlly(info) then
+		if ns.GetGuild(info.guild) then
+			rootDescription:CreateButton("|cffe03c3cRemove guild <" .. info.guild .. "> from BH&G Kill List|r", function()
+				ns.AskRemoveGuild(info.guild)
+			end)
+		else
+			rootDescription:CreateButton("|cffe03c3cAdd the whole guild <" .. info.guild .. "> to BH&G Kill List|r", function()
+				ns.AskGuildReason(info.guild)
+			end)
+		end
+	end
 end
 
 if Menu and Menu.ModifyMenu then
@@ -1435,6 +1663,48 @@ function ns.RemoveWithMessage(key)
 	else
 		ns.Print("that player isn't on the list.")
 	end
+end
+
+function ns.RefuseAllyGuild(name)
+	if not ns.IsAllyGuild(name) then return false end
+	ns.Print("<" .. ns.CleanGuildName(name) .. "> is on our side, so it can't go on the kill list.")
+	return true
+end
+
+function ns.AddGuildWithMessage(name, reason)
+	if not ns.CleanGuildName(name) then
+		ns.Print("that isn't a guild name.")
+		return
+	end
+	if ns.RefuseAllyGuild(name) then return end
+	local g, isNew = ns.AddGuild(name, reason)
+	if not g then return end
+	if isNew then
+		if ns.Setting("sound") then ns.PlaySound("add") end
+		ns.Print("added the whole guild |cffffd200<" .. g.n .. ">|r" .. (g.w and (": " .. g.w) or "")
+			.. ". Every member you come across is kill on sight, and guild members with the addon get it too.")
+	else
+		ns.Print("<" .. g.n .. "> is on the list" .. (g.w and (": " .. g.w) or "") .. ".")
+	end
+	return g
+end
+
+function ns.RemoveGuildWithMessage(name)
+	local g = ns.RemoveGuild(name)
+	if g then
+		if ns.Setting("sound") then ns.PlaySound("remove") end
+		ns.Print("removed the guild <" .. g.n .. "> from the list. Players added one by one stay on it.")
+	else
+		ns.Print("that guild isn't on the list.")
+	end
+end
+
+function ns.TargetGuild()
+	local info = ns.ReadUnit("target")
+	if not info then return nil, "target an enemy player first." end
+	if not info.guild then return nil, ns.ProperName(info.name) .. " isn't in a guild (or the game isn't showing it)." end
+	if ns.IsAlly(info) then return nil, ns.ProperName(info.name) .. " is on our side." end
+	return info.guild
 end
 
 function ns.TargetInfo()
@@ -1735,6 +2005,31 @@ StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_NAME"] = {
 	EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end,
 }
 
+StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_GUILD"] = {
+	text = "Put a whole guild on the BH&G Kill List.\nEvery member you come across counts as kill on sight.\nGuild name:",
+	button1 = ACCEPT or "Accept",
+	button2 = CANCEL or "Cancel",
+	hasEditBox = 1,
+	maxLetters = 64,
+	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
+	OnShow = function(dialog)
+		local eb = EditBoxOf(dialog)
+		if eb then eb:SetText(ns.TargetGuild() or "") eb:SetFocus() end
+	end,
+	OnAccept = function(dialog)
+		local eb = EditBoxOf(dialog)
+		local name = ns.CleanGuildName(eb and eb:GetText() or "")
+		if not name then ns.Print("that isn't a guild name.") return end
+		C_Timer.After(0.05, function() ns.AskGuildReason(name) end)
+	end,
+	EditBoxOnEnterPressed = function(eb)
+		local dialog = eb:GetParent()
+		StaticPopupDialogs[ns.POPUP_PREFIX .. "ADD_GUILD"].OnAccept(dialog)
+		dialog:Hide()
+	end,
+	EditBoxOnEscapePressed = function(eb) eb:GetParent():Hide() end,
+}
+
 StaticPopupDialogs[ns.POPUP_PREFIX .. "REASON"] = {
 	text = "Why is %s kill on sight? (optional)",
 	button1 = ACCEPT or "Accept",
@@ -1747,7 +2042,7 @@ StaticPopupDialogs[ns.POPUP_PREFIX .. "REASON"] = {
 		data = data or dialog.data
 		local eb = EditBoxOf(dialog)
 		if eb then
-			local e = data and data.key and ns.Get(data.key)
+			local e = data and ((data.key and ns.Get(data.key)) or (data.guild and ns.GetGuild(data.guild)))
 			eb:SetText(e and e.w or "")
 			eb:SetFocus()
 		end
@@ -1757,7 +2052,11 @@ StaticPopupDialogs[ns.POPUP_PREFIX .. "REASON"] = {
 		local eb = EditBoxOf(dialog)
 		local reason = eb and eb:GetText() or ""
 		if not data then return end
-		if data.edit then
+		if data.guild and data.edit then
+			ns.SetGuildReason(data.guild, reason)
+		elseif data.guild then
+			ns.AddGuildWithMessage(data.guild, reason)
+		elseif data.edit then
 			ns.SetReason(data.key, reason)
 		else
 			ns.AddWithMessage(data.info, reason)
@@ -1778,7 +2077,11 @@ StaticPopupDialogs[ns.POPUP_PREFIX .. "REMOVE"] = {
 	timeout = 0, whileDead = 1, hideOnEscape = 1, exclusive = 1,
 	OnAccept = function(dialog, data)
 		data = data or dialog.data
-		if data and data.key then ns.RemoveWithMessage(data.key) end
+		if data and data.guild then
+			ns.RemoveGuildWithMessage(data.guild)
+		elseif data and data.key then
+			ns.RemoveWithMessage(data.key)
+		end
 	end,
 }
 
@@ -1798,6 +2101,27 @@ function ns.AskRemove(key)
 	local e = ns.Get(key)
 	if not e then return end
 	StaticPopup_Show(ns.POPUP_PREFIX .. "REMOVE", ns.ColorName(e), nil, { key = key })
+end
+
+local function GuildText(name)
+	return "the whole guild |cffffd200<" .. name .. ">|r"
+end
+
+function ns.AskGuildReason(name)
+	name = ns.CleanGuildName(name)
+	if not name or ns.RefuseAllyGuild(name) then return end
+	local g = ns.GetGuild(name)
+	StaticPopup_Show(ns.POPUP_PREFIX .. "REASON", GuildText(g and g.n or name), nil, { guild = name, edit = g ~= nil })
+end
+
+function ns.AskRemoveGuild(name)
+	local g = ns.GetGuild(name)
+	if not g then return end
+	StaticPopup_Show(ns.POPUP_PREFIX .. "REMOVE", GuildText(g.n), nil, { guild = g.n })
+end
+
+function ns.AskAddGuild()
+	StaticPopup_Show(ns.POPUP_PREFIX .. "ADD_GUILD")
 end
 
 function ns.AskAddName()
@@ -1905,6 +2229,12 @@ local function RowMenu(row)
 			else
 				root:CreateButton("|cffe03c3cAdd to kill list|r", function() ns.AskReason(info) end)
 			end
+			local guild = info and info.guild
+			if guild and ns.GetGuild(guild) then
+				root:CreateButton("|cffe03c3cRemove guild <" .. guild .. "> from kill list|r", function() ns.AskRemoveGuild(guild) end)
+			elseif guild then
+				root:CreateButton("|cffe03c3cAdd the whole guild <" .. guild .. ">|r", function() ns.AskGuildReason(guild) end)
+			end
 		end)
 	elseif ns.Get(key) then
 		ns.AskRemove(key)
@@ -1959,9 +2289,13 @@ local function MakeRow(i)
 			if #bits > 0 then GameTooltip:AddLine(table.concat(bits, " "), 1, 1, 1) end
 			if n.guild then GameTooltip:AddLine("<" .. n.guild .. ">", 0.7, 0.7, 0.7) end
 		end
+		local g = not e and n and ns.GetGuild(n.guild)
 		if e then
 			GameTooltip:AddLine("Kill on sight" .. (e.w and (": " .. e.w) or ""), 1, 0.2, 0.2, true)
 			GameTooltip:AddLine("Added by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a), 0.6, 0.6, 0.6)
+		elseif g then
+			GameTooltip:AddLine("Kill on sight: the whole guild" .. (g.w and (": " .. g.w) or ""), 1, 0.2, 0.2, true)
+			GameTooltip:AddLine("Guild added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
 		end
 		ns.AddStatsLines(GameTooltip, self.key)
 		GameTooltip:AddLine("Left-click: target   Right-click: kill list", 0.5, 0.8, 1)
@@ -1981,13 +2315,14 @@ end
 
 local function FillRowText(row, item)
 	local n, e = item.n, item.e
+	local listed = e or item.g
 	local level = (n.level and n.level > 0) and (" |cffaaaaaa" .. n.level .. "|r") or ""
 	row.name:SetText(NameColor(n.class, n.name) .. level)
 	local age = math.floor(GetTime() - n.seen)
 	local rec = ns.Enemy(item.key)
 	local score = (rec and ((rec.w or 0) + (rec.l or 0)) > 0) and ("|cff40ff40" .. rec.w .. "|r-|cffff4040" .. rec.l .. "|r ") or ""
-	row.right:SetText(score .. (e and "|cffff3030KOS|r" or (age < 5 and "now" or (age .. "s"))))
-	row.bg:SetShown(e ~= nil)
+	row.right:SetText(score .. (listed and "|cffff3030KOS|r" or (age < 5 and "now" or (age .. "s"))))
+	row.bg:SetShown(listed ~= nil)
 end
 
 local HIDE_IN = { party = true, raid = true, scenario = true }
@@ -2091,7 +2426,7 @@ local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", 2, 2)
 
 local search = CreateFrame("EditBox", ns.FRAME_PREFIX .. "Search", win, "InputBoxTemplate")
-search:SetSize(160, 20)
+search:SetSize(118, 20)
 search:SetPoint("TOPLEFT", 16, -30)
 search:SetAutoFocus(false)
 search.hint = Text(search, "GameFontDisableSmall")
@@ -2113,10 +2448,19 @@ local addTarget = Button("Add target", 90, function()
 	ns.AskReason(info)
 end)
 addTarget:SetPoint("LEFT", search, "RIGHT", 10, 0)
-local addName = Button("Add by name", 100, function() ns.AskAddName() end)
+local addName = Button("Add by name", 96, function() ns.AskAddName() end)
 addName:SetPoint("LEFT", addTarget, "RIGHT", 4, 0)
-local optionsBtn = Button("Options", 80, function() ns.ToggleOptions() end)
-optionsBtn:SetPoint("LEFT", addName, "RIGHT", 4, 0)
+local addGuild = Button("Add guild", 84, function() ns.AskAddGuild() end)
+addGuild:SetPoint("LEFT", addName, "RIGHT", 4, 0)
+addGuild:SetScript("OnEnter", function(self)
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	GameTooltip:AddLine("Add a whole guild")
+	GameTooltip:AddLine("Every member of the guild you come across counts as kill on sight. Target one of them first and their guild is filled in for you.", 1, 1, 1, true)
+	GameTooltip:Show()
+end)
+addGuild:SetScript("OnLeave", function() GameTooltip:Hide() end)
+local optionsBtn = Button("Options", 76, function() ns.ToggleOptions() end)
+optionsBtn:SetPoint("LEFT", addGuild, "RIGHT", 4, 0)
 
 local RefreshList
 local tabSeen = Button("Recently Seen", 110, function() ns.ShowPage("seen") end)
@@ -2182,6 +2526,7 @@ for i = 1, LIST_ROWS do
 	row.edit:SetPoint("RIGHT", -56, 0)
 	row.edit:SetText("Edit")
 	row.edit:SetScript("OnClick", function()
+		if row.guild then ns.AskGuildReason(row.guild) return end
 		if not row.key then return end
 		if ns.Get(row.key) then ns.AskEditReason(row.key) return end
 		local rec = ns.Enemy(row.key)
@@ -2191,8 +2536,21 @@ for i = 1, LIST_ROWS do
 	row.remove:SetSize(52, 20)
 	row.remove:SetPoint("RIGHT", -2, 0)
 	row.remove:SetText("Remove")
-	row.remove:SetScript("OnClick", function() if row.key then ns.AskRemove(row.key) end end)
+	row.remove:SetScript("OnClick", function()
+		if row.guild then ns.AskRemoveGuild(row.guild) elseif row.key then ns.AskRemove(row.key) end
+	end)
 	row:SetScript("OnEnter", function(self)
+		if self.guild then
+			local g = ns.GetGuild(self.guild)
+			if not g then return end
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:AddLine("|cffffd200<" .. g.n .. ">|r  whole guild")
+			GameTooltip:AddLine(g.w or "No reason given", 1, 0.75, 0.75, true)
+			GameTooltip:AddLine("Added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a), 0.6, 0.6, 0.6)
+			GameTooltip:AddLine("Every member you come across counts as kill on sight. The game doesn't tell addons who is in a guild, so a member is only recognised once you see them.", 1, 1, 1, true)
+			GameTooltip:Show()
+			return
+		end
 		if not self.key then return end
 		local e = ns.Get(self.key)
 		if mode == "seen" then
@@ -2239,7 +2597,30 @@ emptyText:SetPoint("CENTER")
 emptyText:SetWidth(400)
 emptyText:SetWordWrap(true)
 
+local function MembersSeen(g)
+	local key, n = g.n:lower(), 0
+	for _, rec in pairs(ns.Enemies()) do
+		if rec.g and rec.g:lower() == key then n = n + 1 end
+	end
+	return n
+end
+
+local function FillGuildRow(row, g)
+	row.key, row.guild = nil, g.n
+	row.name:SetText("|cffffd200<" .. g.n .. ">|r  |cffaaaaaawhole guild|r")
+	row.why:SetText(g.w or "|cff777777No reason given|r")
+	row.why:SetTextColor(1, 0.75, 0.75)
+	row.by:SetText("by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a))
+	local seen = MembersSeen(g)
+	row.seen:SetText(seen > 0 and (seen .. " member" .. (seen == 1 and "" or "s") .. " seen") or "no members seen yet")
+	row.edit:SetText("Edit")
+	row.edit:Show()
+	row.remove:Show()
+end
+
 local function FillKosRow(row, e)
+	if e.isGuildRow then FillGuildRow(row, e.g) return end
+	row.guild = nil
 	row.key = ns.Key(e.n, e.r)
 	local level = e.lv and e.lv > 0 and ("  |cffaaaaaa" .. e.lv .. "|r") or ""
 	local guild = e.g and ("  |cff888888<" .. e.g .. ">|r") or ""
@@ -2257,7 +2638,7 @@ end
 
 local function FillSeenRow(row, item)
 	local rec = item.rec
-	row.key = item.key
+	row.key, row.guild = item.key, nil
 	local level = rec.lv and rec.lv > 0 and ("  |cffaaaaaa" .. rec.lv .. "|r") or ""
 	local guild = rec.g and ("  |cff888888<" .. rec.g .. ">|r") or ""
 	row.name:SetText(ns.ColorName({ n = rec.n, r = rec.r, c = rec.c }) .. level .. guild)
@@ -2283,6 +2664,9 @@ RefreshList = function()
 			if Matches({ r.n, r.r, r.g, r.c, r.race, r.zone }, q) then filtered[#filtered + 1] = item end
 		end
 	else
+		for _, g in ipairs(ns.GuildList()) do
+			if Matches({ g.n, g.w, g.b }, q) then filtered[#filtered + 1] = { isGuildRow = true, g = g } end
+		end
 		for _, e in ipairs(ns.List()) do
 			if Matches({ e.n, e.r, e.g, e.w, e.b, e.c }, q) then filtered[#filtered + 1] = e end
 		end
@@ -2294,7 +2678,7 @@ RefreshList = function()
 			if mode == "seen" then FillSeenRow(row, item) else FillKosRow(row, item) end
 			row:Show()
 		else
-			row.key = nil
+			row.key, row.guild = nil, nil
 			row:Hide()
 		end
 	end
@@ -2306,12 +2690,14 @@ RefreshList = function()
 		total = n
 		win.title:SetText("|cffe03c3cRecently Seen|r  |cffaaaaaa" .. n .. " enemies|r  " .. ns.Score({ w = w, l = l }))
 	else
-		total = ns.Count()
-		win.title:SetText("|cffe03c3cBH&G Kill List|r  |cffaaaaaa" .. total .. " player" .. (total == 1 and "" or "s") .. "|r")
+		local guilds = ns.GuildCount()
+		total = ns.Count() + guilds
+		win.title:SetText("|cffe03c3cBH&G Kill List|r  |cffaaaaaa" .. ns.Count() .. " player" .. (ns.Count() == 1 and "" or "s")
+			.. (guilds > 0 and (", " .. guilds .. " guild" .. (guilds == 1 and "" or "s")) or "") .. "|r")
 	end
 	if total == 0 then
 		emptyText:SetText(mode == "seen" and "No enemy players seen yet. Everyone you come across is kept here, with your wins and losses against them."
-			or "Nobody on the list yet.\nTarget an enemy and click Add target, or right-click a player's name.")
+			or "Nobody on the list yet.\nTarget an enemy and click Add target, or right-click a player's name.\nAdd guild puts a whole guild on the list.")
 	elseif #filtered == 0 then
 		emptyText:SetText("No one matches \"" .. q .. "\".")
 	else
@@ -2470,7 +2856,12 @@ local HELP = {
 	"/kos add <name> [reason] - add someone by name (Name, or Name-Realm for someone from elsewhere)",
 	"/kos remove <name> - take someone off the list (for everyone)",
 	"/kos reason <name> <reason> - change someone's reason",
-	"/kos check <name> - is this player on the list?",
+	"/kos check <name> - is this player (or guild) on the list?",
+	"/kos guild - put your target's whole guild on the list (asks for a reason)",
+	"/kos guild add <guild>[: reason] - put a whole guild on the list by name",
+	"/kos guild remove <guild> - take a guild off the list (for everyone)",
+	"/kos guild reason <guild>: <reason> - change a guild's reason",
+	"/kos guilds - list the guilds on the kill list",
 	"/kos seen - everyone you've come across, with your wins and losses",
 	"/kos nearby - show or hide the nearby enemies window",
 	"/kos plates - turn on enemy nameplates (spots enemies as soon as they're in range)",
@@ -2495,7 +2886,7 @@ end
 local function Status()
 	local say = ns.Print
 	say((ns.embedded and "K-UI's kill list" or "standalone addon") .. (ns.embedded and "" or (" version " .. ns.VERSION))
-		.. (_G.BHGKillListStandalone and ns.embedded and " (the standalone addon is installed and asleep)" or "") .. ", " .. ns.Count() .. " players on the list (" .. (function()
+		.. (_G.BHGKillListStandalone and ns.embedded and " (the standalone addon is installed and asleep)" or "") .. ", " .. ns.Count() .. " players and " .. ns.GuildCount() .. " whole guilds on the list (" .. (function()
 		local n = 0
 		for _, e in pairs(ns.db.entries) do if e.x then n = n + 1 end end
 		return n
@@ -2511,7 +2902,8 @@ local function Status()
 	say("last send: " .. (s.lastResult or "none yet") .. " | client checks: " .. ns.CommChecks())
 	local digests = {}
 	for i, h in ipairs(ns.BucketHashes()) do digests[i] = ns.ToB36(h) end
-	say("list fingerprint: " .. ns.ToB36(ns.Hash(table.concat(digests, ","))) .. " (the same on every guild member's PC once they're in sync)")
+	say("list fingerprint: " .. ns.ToB36(ns.Hash(table.concat(digests, ","))) .. ", guilds " .. ns.ToB36(ns.GuildDigest())
+		.. " (the same on every guild member's PC once they're in sync)")
 	local w, l, seenCount = ns.Totals()
 	say("seen " .. seenCount .. " enemy players, record " .. ns.Score({ w = w, l = l }) .. ".")
 	local plates = ns.EnemyPlatesOn()
@@ -2530,6 +2922,46 @@ local function Status()
 		say("  caught errors in '" .. label .. "': " .. n)
 	end
 	if not any then say("no errors caught so far.") end
+end
+
+local function ListGuilds()
+	local list = ns.GuildList()
+	if #list == 0 then
+		ns.Print("no guilds on the list. /kos guild adds your target's guild.")
+		return
+	end
+	ns.Print(#list .. " guild" .. (#list == 1 and "" or "s") .. " on the list:")
+	for _, g in ipairs(list) do
+		print("  |cffffd200<" .. g.n .. ">|r" .. (g.w and (" - " .. g.w) or "") .. " |cff999999(added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a) .. ")|r")
+	end
+end
+
+local function GuildCommand(rest)
+	local sub, arg = rest:match("^(%S*)%s*(.-)$")
+	sub = sub:lower()
+	local name, reason = arg:match("^([^:]*):%s*(.-)%s*$")
+	if not name then name = arg end
+	if reason == "" then reason = nil end
+	if sub == "" or (sub == "add" and name == "") then
+		local guild, why = ns.TargetGuild()
+		if not guild then ns.Print(why .. " Or type /kos guild add <guild name>.") return end
+		ns.AskGuildReason(guild)
+	elseif sub == "add" then
+		ns.AddGuildWithMessage(name, reason)
+	elseif sub == "remove" or sub == "rem" or sub == "del" then
+		if not ns.GetGuild(name) then ns.Print("no guild called \"" .. name .. "\" is on the list.") return end
+		ns.RemoveGuildWithMessage(name)
+	elseif sub == "reason" then
+		if not ns.GetGuild(name) then ns.Print("usage: /kos guild reason <guild>: <reason>") return end
+		ns.SetGuildReason(name, reason)
+		ns.Print("reason updated.")
+	elseif sub == "list" then
+		ListGuilds()
+	else
+		for _, line in ipairs(HELP) do
+			if line:find("guild") then print("  " .. line) end
+		end
+	end
 end
 
 local function Find(arg)
@@ -2582,11 +3014,18 @@ local function Handler(msg)
 	elseif cmd == "check" then
 		local key, name = Find(rest)
 		local e = key and ns.Get(key)
+		local g = not e and ns.GetGuild(rest)
 		if e then
 			ns.Print(ns.ColorName(e) .. " is on the list" .. (e.w and (": " .. e.w) or "") .. " (added by " .. ns.ShortSender(e.b) .. ", " .. ns.Ago(e.a) .. ").")
+		elseif g then
+			ns.Print("the whole guild <" .. g.n .. "> is on the list" .. (g.w and (": " .. g.w) or "") .. " (added by " .. ns.ShortSender(g.b) .. ", " .. ns.Ago(g.a) .. ").")
 		else
 			ns.Print((name or rest) .. " isn't on the list.")
 		end
+	elseif cmd == "guild" then
+		GuildCommand(rest)
+	elseif cmd == "guilds" then
+		ListGuilds()
 	elseif cmd == "seen" or cmd == "stats" then
 		ns.ShowPage("seen")
 	elseif cmd == "plates" then
