@@ -11,7 +11,10 @@ local function SameName(a, b) return type(a) == "string" and type(b) == "string"
 local function IsMe(to)
 	local _, name, realm = M:Me()
 	if not to or not name then return true end
+	to = to:match("^%s*(.-)%s*$"):gsub("%s+", "-")
+	local surname = M:MySurname()
 	return SameName(to, name) or SameName(to, name .. "-" .. (tostring(realm):gsub("%s", "")))
+		or (surname ~= nil and SameName(to, name .. "-" .. surname))
 end
 M.IsMe = IsMe
 
@@ -39,7 +42,10 @@ function M:BefriendAlt(to)
 	if not c then return end
 	local mine = Plain((UnitFactionGroup("player")))
 	if c.faction and mine and c.faction ~= mine then return end
+
+	if not c.surname and self:MySurname() then return end
 	befriended[to:lower()] = true
+	to = M.MailName(c, select(3, self:Me())) or to
 	if Plain(C_FriendList.GetFriendInfo(to)) then return end
 	local count = C_FriendList.GetNumFriends and Plain(C_FriendList.GetNumFriends()) or 0
 	if count >= 100 then return end

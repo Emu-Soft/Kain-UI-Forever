@@ -416,7 +416,8 @@ end
 
 local function CharName(key)
 	local c = M:DB().gold[key]
-	local name = key:gsub("%-", " - ", 1)
+	local ch = M:DB().chars[key]
+	local name = (ch and ch.surname and (ch.name .. " " .. ch.surname)) or key:gsub("%-", " - ", 1)
 	local color = c and c.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.class]
 	if color and color.colorStr then return "|c" .. color.colorStr .. name .. "|r" end
 	return name

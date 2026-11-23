@@ -296,7 +296,7 @@ local function BuildSend(page)
 	function page:Send()
 		if sending then return end
 		if InCombatLockdown() then Say("not in combat."); return end
-		local to = (self.to:GetText() or ""):gsub("%s", "")
+		local to = M:NormalizeName(self.to:GetText() or "") or ""
 		if to == "" then self.status:SetText("Who to? Type a name or pick one of your characters."); return end
 		if M.IsMe(to) then self.status:SetText("That's you."); return end
 		local copper = 0
@@ -322,6 +322,7 @@ local function BuildSend(page)
 		if subject == "" then
 			subject = firstName and (firstCount > 1 and (firstName .. " (" .. firstCount .. ")") or firstName) or M.ShortMoney(copper)
 		end
+		self.to:SetText(to)
 		M:BefriendAlt(to)
 		if SetSendMailShowing then SetSendMailShowing(true) end
 		SetSendMailCOD(cod and copper or 0)
@@ -346,7 +347,7 @@ local function BuildSend(page)
 		for _, key in ipairs(keys) do
 			local c = M:DB().chars[key]
 			if type(c.name) == "string" then
-				local name = c.realm == myRealm and c.name or (c.name .. "-" .. (tostring(c.realm):gsub("%s", "")))
+				local name = M.MailName(c, myRealm)
 				if not M.IsMe(name) then choices[#choices + 1] = { name, name } end
 			end
 		end

@@ -2,7 +2,7 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.365",
+		version = "1.0.366",
 		sections = {
 			{ title = "New", items = {
 				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, posting and cancelling auctions, and its own mailbox window.",
@@ -12,7 +12,7 @@ local PATCH_NOTES = {
 				"The Auction House, Guild and Looking For Group windows can be dragged with Global Dragging, each keeping its own spot.",
 			} },
 			{ title = "Changes", items = {
-				"K-Market adds the alts you mail to your friends list, so the game stops asking before each mail.",
+				"K-Market mails your characters by their full name, surname included, and adds the alts you mail to your friends list so the game stops asking before each mail.",
 			} },
 		},
 	},

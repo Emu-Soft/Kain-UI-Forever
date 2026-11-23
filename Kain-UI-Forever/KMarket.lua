@@ -630,16 +630,50 @@ function M:RecordProfessions()
 	local c = db.chars[key] or {}
 	c.name, c.realm, c.professions = name, realm, found
 	c.faction = Plain((UnitFactionGroup("player"))) or c.faction
+	c.surname = self:MySurname() or c.surname
 	db.chars[key] = c
 end
 
-local function RecipientFor(c, myRealm)
-	if c.realm == myRealm then return c.name end
-	return c.name .. "-" .. tostring(c.realm):gsub("%s", "")
+function M:MySurname()
+	local _, name, realm = self:Me()
+	if not name or type(GetUnitName) ~= "function" then return nil end
+	local ok, full = pcall(GetUnitName, "player", true)
+	full = ok and Plain(full)
+	if type(full) ~= "string" or #full <= #name or full:sub(1, #name) ~= name then return nil end
+	local rest = full:sub(#name + 1):match("^[%s%-]+(.-)%s*$")
+	if not rest or rest == "" then return nil end
+	if realm and rest:gsub("%s", "") == realm:gsub("%s", "") then return nil end
+	return (rest:gsub("%s+", "-"))
+end
+
+function M.MailName(c, myRealm)
+	if type(c) ~= "table" or type(c.name) ~= "string" then return nil end
+	if type(c.surname) == "string" and c.surname ~= "" then return c.name .. "-" .. c.surname end
+	if myRealm and c.realm ~= myRealm then return c.name .. "-" .. (tostring(c.realm):gsub("%s", "")) end
+	return c.name
+end
+local function RecipientFor(c, myRealm) return M.MailName(c, myRealm) end
+
+function M:NormalizeName(text)
+	if type(text) ~= "string" then return nil end
+	text = text:match("^%s*(.-)%s*$"):gsub("%s*%-%s*", "-"):gsub("%s+", "-")
+	if text == "" then return nil end
+	if not text:find("-", 1, true) then
+		local _, _, myRealm = self:Me()
+		local found
+		for _, c in pairs(self:DB().chars) do
+			if type(c.name) == "string" and c.name:lower() == text:lower() then
+				if found then return text end
+				found = c
+			end
+		end
+		if found then return M.MailName(found, myRealm) end
+	end
+	return text
 end
 
 function M:Recipient(op)
-	if type(op.to) == "string" and op.to:match("%S") then return (op.to:gsub("%s", "")) end
+	if type(op.to) == "string" and op.to:match("%S") then return self:NormalizeName(op.to) end
 	if op.kind ~= "crafter" or not IS_PROFESSION[op.profession] then return nil end
 	local me, _, myRealm = self:Me()
 	local best, bestKey
@@ -656,11 +690,12 @@ end
 function M:CharKeyFor(recipient)
 	if type(recipient) ~= "string" then return nil end
 	local _, _, myRealm = self:Me()
-	local want = recipient:lower()
+	local want = (recipient:match("^%s*(.-)%s*$"):gsub("%s+", "-")):lower()
 	for key, c in pairs(self:DB().chars) do
 		if type(c.name) == "string" then
-			local full = (c.name .. "-" .. tostring(c.realm):gsub("%s", "")):lower()
-			if full == want or (c.realm == myRealm and c.name:lower() == want) then return key end
+			local byRealm = (c.name .. "-" .. (tostring(c.realm):gsub("%s", ""))):lower()
+			local mail = M.MailName(c, myRealm):lower()
+			if want == byRealm or want == mail or (c.realm == myRealm and c.name:lower() == want) then return key end
 		end
 	end
 end
