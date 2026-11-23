@@ -4,10 +4,13 @@ KUI.Market = M
 
 local HOUR, DAY = 3600, 86400
 local MERGE_SECONDS = 60
-local SEND_TIMEOUT = 10
+local LEDGER_MAX = 5000
+local SEP = "`"
+M.SEP = SEP
+
 local KINDS = { "mail", "crafter", "post" }
 M.KINDS = KINDS
-local KIND_LABEL = { mail = "Mail", crafter = "Crafter", post = "Post" }
+local KIND_LABEL = { mail = "Mailing", crafter = "Crafter", post = "Auctioning" }
 M.KIND_LABEL = KIND_LABEL
 
 M.PROFESSIONS = { "Alchemy", "Blacksmithing", "Cooking", "Enchanting", "Engineering", "First Aid", "Fishing",
@@ -19,15 +22,52 @@ local function Plain(v)
 	if issecretvalue and issecretvalue(v) then return nil end
 	return v
 end
+M.Plain = Plain
 
-local function Say(msg)
+function M.Say(msg)
 	print("|cff33ff99K-Market:|r " .. msg)
 end
 
-local function Now() return M.clock and M.clock() or time() end
+function M.Now() return M.clock and M.clock() or time() end
+local Now = M.Now
+
+local OP_DEFAULTS = {
+	mail = { to = "", keep = 0, maxQty = 0, restock = false },
+	crafter = { profession = "", to = "", keep = 0, maxQty = 0, restock = false },
+
+	post = { keep = 0, postCap = 5, duration = 2, undercut = 100, minPrice = 0, normalPrice = 0, maxPrice = 0,
+		belowMin = "none", aboveMax = "maxPrice", cancelUndercut = true },
+}
+M.OP_DEFAULTS = OP_DEFAULTS
+local BELOW_MIN = { none = true, minPrice = true, normalPrice = true, maxPrice = true }
+local ABOVE_MAX = { none = true, minPrice = true, normalPrice = true, maxPrice = true }
+
+local function Migrate(m)
+
+	for name, g in pairs(m.groups) do
+		if type(g) == "table" and type(g.items) == "table" then
+			for id in pairs(g.items) do
+				if type(id) == "number" and not m.items[id] then m.items[id] = name end
+			end
+			g.items = nil
+		end
+	end
+	for _, op in pairs(m.ops) do
+		if type(op) == "table" and OP_DEFAULTS[op.kind] then
+			for k, v in pairs(OP_DEFAULTS[op.kind]) do
+				if type(op[k]) ~= type(v) then op[k] = v end
+			end
+			if op.kind == "post" then
+				if not BELOW_MIN[op.belowMin] then op.belowMin = "none" end
+				if not ABOVE_MAX[op.aboveMax] then op.aboveMax = "maxPrice" end
+			end
+		end
+	end
+	m.version = 2
+end
 
 local function Sanitize(m)
-	for _, k in ipairs({ "gold", "groups", "ops", "chars" }) do
+	for _, k in ipairs({ "gold", "groups", "ops", "chars", "items", "inv", "ledger" }) do
 		if type(m[k]) ~= "table" then m[k] = {} end
 	end
 	for key, c in pairs(m.gold) do
@@ -41,17 +81,27 @@ local function Sanitize(m)
 			c.points = good
 		end
 	end
-	for name, g in pairs(m.groups) do
-		if type(name) ~= "string" or type(g) ~= "table" then
-			m.groups[name] = nil
-		else
-			if type(g.items) ~= "table" then g.items = {} end
-			if type(g.ops) ~= "table" then g.ops = {} end
-			for id in pairs(g.items) do if type(id) ~= "number" then g.items[id] = nil end end
+	for path, g in pairs(m.groups) do
+		if type(path) ~= "string" or path == "" or type(g) ~= "table" then
+			m.groups[path] = nil
+		elseif type(g.ops) ~= "table" then
+			g.ops = {}
 		end
 	end
 	for name, op in pairs(m.ops) do
 		if type(name) ~= "string" or type(op) ~= "table" or not KIND_LABEL[op.kind] then m.ops[name] = nil end
+	end
+	Migrate(m)
+
+	for path in pairs(m.groups) do
+		local parent = path:match("^(.*)" .. SEP .. "[^" .. SEP .. "]*$")
+		while parent do
+			if not m.groups[parent] then m.groups[parent] = { ops = {} } end
+			parent = parent:match("^(.*)" .. SEP .. "[^" .. SEP .. "]*$")
+		end
+	end
+	for id, path in pairs(m.items) do
+		if type(id) ~= "number" or type(path) ~= "string" or not m.groups[path] then m.items[id] = nil end
 	end
 	for key, c in pairs(m.chars) do
 		if type(key) ~= "string" or type(c) ~= "table" then
@@ -60,6 +110,16 @@ local function Sanitize(m)
 			c.professions = {}
 		end
 	end
+	for key, inv in pairs(m.inv) do
+		if type(key) ~= "string" or type(inv) ~= "table" then m.inv[key] = nil end
+	end
+	local good = {}
+	for _, e in ipairs(m.ledger) do
+		if type(e) == "table" and type(e.t) == "number" and (e.kind == "sale" or e.kind == "buy") and type(e.copper) == "number" then
+			good[#good + 1] = e
+		end
+	end
+	m.ledger = good
 	m.checked = true
 end
 
@@ -123,26 +183,31 @@ function M:GoldCharacters()
 end
 
 local function ValueAt(points, t)
-	local v
-	for _, p in ipairs(points) do
-		if p[1] > t then break end
-		v = p[2]
+	local lo, hi = 1, #points
+	if hi == 0 or points[1][1] > t then return nil end
+	while lo < hi do
+		local mid = math.floor((lo + hi + 1) / 2)
+		if points[mid][1] <= t then lo = mid else hi = mid - 1 end
 	end
-	return v
+	return points[lo][2]
+end
+
+function M:GoldAt(keys, t)
+	local db = self:DB()
+	local sum
+	for _, key in ipairs(keys or self:GoldCharacters()) do
+		local c = db.gold[key]
+		local v = c and ValueAt(c.points, t)
+		if v then sum = (sum or 0) + v end
+	end
+	return sum
 end
 
 function M:Series(keys, from, to, columns)
-	local db = self:DB()
-	keys = keys or self:GoldCharacters()
 	local values, low, high = {}, nil, nil
 	for i = 1, columns do
 		local t = from + (to - from) * (i - 1) / math.max(columns - 1, 1)
-		local sum
-		for _, key in ipairs(keys) do
-			local c = db.gold[key]
-			local v = c and ValueAt(c.points, t)
-			if v then sum = (sum or 0) + v end
-		end
+		local sum = self:GoldAt(keys, t)
 		values[i] = sum
 		if sum then
 			low = math.min(low or sum, sum)
@@ -150,6 +215,16 @@ function M:Series(keys, from, to, columns)
 		end
 	end
 	return values, low, high
+end
+
+function M:FirstGoldTime(keys)
+	local db, first = self:DB(), nil
+	for _, key in ipairs(keys or self:GoldCharacters()) do
+		local c = db.gold[key]
+		local p = c and c.points[1]
+		if p and (not first or p[1] < first) then first = p[1] end
+	end
+	return first
 end
 
 function M.FormatMoney(copper, short)
@@ -170,6 +245,15 @@ function M.FormatMoney(copper, short)
 	return (neg and "-" or "") .. text
 end
 
+function M.FormatAxisGold(copper)
+	local g = copper / 10000
+	if g < 1000 then return math.floor(g) .. "g" end
+	if g < 10000 then return string.format("%.2fkg", g / 1000) end
+	if g < 1000000 then return math.floor(g / 1000) .. "kg" end
+	if g < 10000000 then return string.format("%.2fMg", g / 1000000) end
+	return math.floor(g / 1000000) .. "Mg"
+end
+
 function M.ParseMoney(text)
 	if type(text) ~= "string" then return nil end
 	text = text:lower():gsub(",", "")
@@ -186,63 +270,172 @@ function M.ParseMoney(text)
 	return math.floor(total + 0.5)
 end
 
+function M:RecordLedger(kind, name, count, copper)
+	if (kind ~= "sale" and kind ~= "buy") or type(copper) ~= "number" or copper <= 0 then return end
+	local ledger = self:DB().ledger
+	ledger[#ledger + 1] = { t = Now(), kind = kind, name = type(name) == "string" and name or "?", count = tonumber(count) or 1, copper = copper }
+	while #ledger > LEDGER_MAX do table.remove(ledger, 1) end
+end
+
+function M:LedgerSummary(from, to)
+	local sum = { sales = 0, buys = 0, soldCount = 0, boughtCount = 0, topSaleUnit = 0, topBuyUnit = 0 }
+	local bySale, byBuy = {}, {}
+	for _, e in ipairs(self:DB().ledger) do
+		if (not from or e.t >= from) and (not to or e.t <= to) then
+			local count = math.max(1, tonumber(e.count) or 1)
+			local unit = e.copper / count
+			if e.kind == "sale" then
+				sum.sales = sum.sales + e.copper
+				sum.soldCount = sum.soldCount + count
+				sum.topSaleUnit = math.max(sum.topSaleUnit, unit)
+				bySale[e.name] = (bySale[e.name] or 0) + e.copper
+			else
+				sum.buys = sum.buys + e.copper
+				sum.boughtCount = sum.boughtCount + count
+				sum.topBuyUnit = math.max(sum.topBuyUnit, unit)
+				byBuy[e.name] = (byBuy[e.name] or 0) + e.copper
+			end
+		end
+	end
+	local function Top(t)
+		local best, amount
+		for name, v in pairs(t) do
+			if not amount or v > amount or (v == amount and name < best) then best, amount = name, v end
+		end
+		return best, amount
+	end
+	sum.topSale, sum.topSaleAmount = Top(bySale)
+	sum.topBuy, sum.topBuyAmount = Top(byBuy)
+	sum.profit = sum.sales - sum.buys
+	return sum
+end
+
+function M:LedgerDays(maxDays)
+	local days, byDay = {}, {}
+	local ledger = self:DB().ledger
+	for i = #ledger, 1, -1 do
+		local e = ledger[i]
+		local t = date("*t", e.t)
+		local day = time({ year = t.year, month = t.month, day = t.day, hour = 0 })
+		local d = byDay[day]
+		if not d then
+			if #days >= (maxDays or 30) then break end
+			d = { day = day, sold = 0, soldCount = 0, bought = 0, boughtCount = 0, lines = {} }
+			byDay[day] = d
+			days[#days + 1] = d
+		end
+		local count = math.max(1, tonumber(e.count) or 1)
+		if e.kind == "sale" then
+			d.sold, d.soldCount = d.sold + e.copper, d.soldCount + count
+		else
+			d.bought, d.boughtCount = d.bought + e.copper, d.boughtCount + count
+		end
+		if #d.lines < 6 then d.lines[#d.lines + 1] = { kind = e.kind, name = e.name, count = count, copper = e.copper } end
+	end
+	table.sort(days, function(a, b) return a.day > b.day end)
+	return days
+end
+
 local function CleanName(name)
 	if type(name) ~= "string" then return nil end
-	name = name:gsub("^%s+", ""):gsub("%s+$", "")
+	name = name:gsub(SEP, ""):gsub("^%s+", ""):gsub("%s+$", "")
 	if name == "" or #name > 40 then return nil end
 	return name
 end
 
-function M:GroupNames()
+function M.ParentPath(path)
+	return path:match("^(.*)" .. SEP .. "[^" .. SEP .. "]*$")
+end
+local ParentPath = M.ParentPath
+
+function M.GroupName(path)
+	return path:match("([^" .. SEP .. "]*)$")
+end
+
+function M.FormatPath(path)
+	return (path:gsub(SEP, " > "))
+end
+
+function M.Depth(path)
+	local _, n = path:gsub(SEP, "")
+	return n
+end
+
+local function IsUnder(path, base)
+	return path == base or path:sub(1, #base + 1) == base .. SEP
+end
+M.IsUnder = IsUnder
+
+function M:GroupPaths()
 	local list = {}
-	for name in pairs(self:DB().groups) do list[#list + 1] = name end
-	table.sort(list, function(a, b) return a:lower() < b:lower() end)
+	for path in pairs(self:DB().groups) do list[#list + 1] = path end
+	table.sort(list, function(a, b) return a:lower():gsub(SEP, "\1") < b:lower():gsub(SEP, "\1") end)
 	return list
 end
+M.GroupNames = M.GroupPaths
 
-function M:NewGroup(name)
+function M:NewGroup(name, parent)
 	name = CleanName(name)
 	local groups = self:DB().groups
-	if not name or groups[name] then return false end
-	groups[name] = { items = {}, ops = {} }
-	return true, name
+	if not name or (parent and not groups[parent]) then return false end
+	local path = parent and (parent .. SEP .. name) or name
+	if groups[path] then return false end
+	groups[path] = { ops = {} }
+	return true, path
 end
 
-function M:RenameGroup(old, new)
-	new = CleanName(new)
-	local groups = self:DB().groups
-	if not new or not groups[old] or groups[new] then return false end
-	groups[new], groups[old] = groups[old], nil
-	return true, new
+function M:RenameGroup(path, newName)
+	newName = CleanName(newName)
+	local db = self:DB()
+	if not newName or not db.groups[path] then return false end
+	local parent = ParentPath(path)
+	local newPath = parent and (parent .. SEP .. newName) or newName
+	if db.groups[newPath] then return false end
+	local moved = {}
+	for p, g in pairs(db.groups) do
+		if IsUnder(p, path) then moved[newPath .. p:sub(#path + 1)] = g; db.groups[p] = nil end
+	end
+	for p, g in pairs(moved) do db.groups[p] = g end
+	for id, p in pairs(db.items) do
+		if IsUnder(p, path) then db.items[id] = newPath .. p:sub(#path + 1) end
+	end
+	return true, newPath
 end
 
-function M:DeleteGroup(name)
-	local groups = self:DB().groups
-	if not groups[name] then return false end
-	groups[name] = nil
+function M:DeleteGroup(path)
+	local db = self:DB()
+	if not db.groups[path] then return false end
+	local parent = ParentPath(path)
+	for p in pairs(db.groups) do if IsUnder(p, path) then db.groups[p] = nil end end
+	for id, p in pairs(db.items) do
+		if IsUnder(p, path) then db.items[id] = parent end
+	end
 	return true
 end
 
-function M:AddItem(group, itemID)
-	local g = self:DB().groups[group]
+function M:AddItem(path, itemID)
+	local db = self:DB()
 	itemID = tonumber(itemID)
-	if not g or not itemID or itemID <= 0 or itemID ~= math.floor(itemID) then return false end
-	if g.items[itemID] then return false end
-	g.items[itemID] = true
+	if not db.groups[path] or not itemID or itemID <= 0 or itemID ~= math.floor(itemID) then return false end
+	if db.items[itemID] == path then return false end
+	db.items[itemID] = path
 	return true
 end
 
-function M:RemoveItem(group, itemID)
-	local g = self:DB().groups[group]
-	if not g or not g.items[itemID] then return false end
-	g.items[itemID] = nil
+function M:RemoveItem(path, itemID)
+	local db = self:DB()
+	if db.items[itemID] ~= path then return false end
+	db.items[itemID] = nil
 	return true
 end
 
-function M:GroupItems(group)
-	local g = self:DB().groups[group]
+function M:ItemGroup(itemID) return self:DB().items[itemID] end
+
+function M:GroupItems(path, deep)
 	local list = {}
-	if g then for id in pairs(g.items) do list[#list + 1] = id end end
+	for id, p in pairs(self:DB().items) do
+		if p == path or (deep and IsUnder(p, path)) then list[#list + 1] = id end
+	end
 	table.sort(list)
 	return list
 end
@@ -263,26 +456,61 @@ function M.ParseItemList(text)
 	return ids
 end
 
-function M:ImportItems(group, text)
-	local added = 0
-	for _, id in ipairs(M.ParseItemList(text)) do
-		if self:AddItem(group, id) then added = added + 1 end
+function M:ImportGroups(base, text)
+	if type(text) ~= "string" then return nil, "nothing to import" end
+	if text:find("^%s*[%w%+/=]+%s*$") and not text:find("[ig]:") and not text:find("^[%d%s,;]+$") then
+		return nil, "that looks like TSM's newer packed export, which K-Market can't read; in TSM use the old list format (\"group:\" and \"i:\" entries)"
 	end
-	return added
+	local db = self:DB()
+	local target, added, made = base, 0, 0
+	if not text:find("group:", 1, true) then
+		if not base then return nil, "pick a group first" end
+		for _, id in ipairs(M.ParseItemList(text)) do if self:AddItem(base, id) then added = added + 1 end end
+		return added, 0
+	end
+	for part in (text .. ","):gmatch("([^,]*),") do
+		part = part:gsub("^%s+", ""):gsub("%s+$", "")
+		local gp = part:match("^group:(.+)$")
+		if gp then
+			gp = gp:gsub("``", ",")
+			local parent = base
+			for piece in (gp .. SEP):gmatch("([^" .. SEP .. "]*)" .. SEP) do
+				local name = CleanName(piece)
+				if name then
+					local path = parent and (parent .. SEP .. name) or name
+					if not db.groups[path] then db.groups[path] = { ops = {} }; made = made + 1 end
+					parent = path
+				end
+			end
+			target = parent
+		else
+			local id = part:match("^i:(%d+)") or part:match("item:(%d+)") or part:match("^(%d+)$")
+			if id and target and self:AddItem(target, id) then added = added + 1 end
+		end
+	end
+	return added, made
 end
 
-function M:ExportItems(group)
+function M:ExportGroups(path)
 	local parts = {}
-	for _, id in ipairs(self:GroupItems(group)) do parts[#parts + 1] = "i:" .. id end
+	for _, id in ipairs(self:GroupItems(path)) do parts[#parts + 1] = "i:" .. id end
+	for _, p in ipairs(self:GroupPaths()) do
+		if p ~= path and IsUnder(p, path) then
+			local items = self:GroupItems(p)
+			if #items > 0 then
+				parts[#parts + 1] = "group:" .. p:sub(#path + 2):gsub(",", "``")
+				for _, id in ipairs(items) do parts[#parts + 1] = "i:" .. id end
+			end
+		end
+	end
 	return table.concat(parts, ",")
 end
 
-local OP_DEFAULTS = {
-	mail = { to = "", keep = 0 },
-	crafter = { profession = "", to = "", keep = 0 },
-
-	post = { keep = 0, duration = 2, undercut = 100, minPrice = 0, normalPrice = 0 },
-}
+function M:ImportItems(path, text)
+	local n = self:ImportGroups(path, text)
+	return n or 0
+end
+function M:ExportItems(path) return self:ExportGroups(path) end
 
 function M:OpNames(kind)
 	local list = {}
@@ -324,11 +552,11 @@ function M:RenameOp(old, new)
 	return true, new
 end
 
-function M:AssignOp(group, kind, opName)
+function M:AssignOp(path, kind, opName)
 	local db = self:DB()
-	local g = db.groups[group]
+	local g = db.groups[path]
 	if not g or not KIND_LABEL[kind] then return false end
-	if opName ~= nil then
+	if opName then
 		local op = db.ops[opName]
 		if not op or op.kind ~= kind then return false end
 	end
@@ -336,10 +564,32 @@ function M:AssignOp(group, kind, opName)
 	return true
 end
 
+function M:EffectiveOp(path, kind)
+	local db = self:DB()
+	local p = path
+	while p do
+		local g = db.groups[p]
+		local name = g and g.ops[kind]
+		if name == false then return nil end
+		if name ~= nil then
+			local op = db.ops[name]
+			if op and op.kind == kind then return op, name, p end
+			return nil
+		end
+		p = ParentPath(p)
+	end
+end
+
 function M:GroupOp(g, kind)
-	local name = g.ops[kind]
-	local op = name and self:DB().ops[name]
-	if op and op.kind == kind then return op end
+	if type(g) == "string" then return (self:EffectiveOp(g, kind)) end
+	for path, t in pairs(self:DB().groups) do
+		if t == g then return (self:EffectiveOp(path, kind)) end
+	end
+end
+
+function M:ItemOp(itemID, kind)
+	local path = self:DB().items[itemID]
+	if path then return self:EffectiveOp(path, kind) end
 end
 
 function M:RecordProfessions()
@@ -384,17 +634,77 @@ function M:Recipient(op)
 	return best and RecipientFor(best, myRealm)
 end
 
-local function LastBag() return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4 end
+function M:CharKeyFor(recipient)
+	if type(recipient) ~= "string" then return nil end
+	local _, _, myRealm = self:Me()
+	local want = recipient:lower()
+	for key, c in pairs(self:DB().chars) do
+		if type(c.name) == "string" then
+			local full = (c.name .. "-" .. tostring(c.realm):gsub("%s", "")):lower()
+			if full == want or (c.realm == myRealm and c.name:lower() == want) then return key end
+		end
+	end
+end
+
+function M:CharCount(key, itemID)
+	local inv = key and self:DB().inv[key]
+	if not inv then return 0 end
+	local n = 0
+	for _, where in ipairs({ "bags", "bank", "mail" }) do
+		local t = inv[where]
+		if type(t) == "table" and type(t[itemID]) == "number" then n = n + t[itemID] end
+	end
+	return n
+end
+
+function M:AddInTransit(recipient, itemID, count)
+	local key = self:CharKeyFor(recipient)
+	if not key then return end
+	local inv = self:DB().inv
+	inv[key] = inv[key] or {}
+	inv[key].mail = inv[key].mail or {}
+	inv[key].mail[itemID] = (inv[key].mail[itemID] or 0) + count
+end
+
+local function BagList()
+	local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+	local list = {}
+	for bag = 0, last do list[#list + 1] = bag end
+	return list
+end
+
+local function BankList()
+	local list = {}
+	local idx = Enum and Enum.BagIndex
+	if idx and idx.CharacterBankTab_1 then
+		for i = 1, 6 do
+			local b = idx["CharacterBankTab_" .. i]
+			if b then list[#list + 1] = b end
+		end
+	else
+		list[1] = BANK_CONTAINER or -1
+		local first = (NUM_BAG_SLOTS or 4) + 1
+		for bag = first, first + (NUM_BANKBAGSLOTS or 7) - 1 do list[#list + 1] = bag end
+	end
+	return list
+end
+
+local function SlotInfo(bag, slot)
+	local info = C_Container.GetContainerItemInfo(bag, slot)
+	if not info then return nil end
+	local id, count = Plain(info.itemID), Plain(info.stackCount)
+	if type(id) ~= "number" or type(count) ~= "number" then return nil end
+	return id, count, Plain(info.isBound) and true or false, Plain(info.isLocked) and true or false
+end
+M.SlotInfo = SlotInfo
 
 function M:ScanBags()
 	local out = {}
 	if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo) then return out end
-	for bag = 0, LastBag() do
+	for _, bag in ipairs(BagList()) do
 		for slot = 1, (Plain(C_Container.GetContainerNumSlots(bag)) or 0) do
-			local info = C_Container.GetContainerItemInfo(bag, slot)
-			local id = info and Plain(info.itemID)
-			local count = info and Plain(info.stackCount)
-			if type(id) == "number" and type(count) == "number" and not Plain(info.isBound) and not Plain(info.isLocked) then
+			local id, count, bound, locked = SlotInfo(bag, slot)
+			if id and not bound and not locked then
 				local e = out[id]
 				if not e then e = { count = 0, slots = {} }; out[id] = e end
 				e.count = e.count + count
@@ -405,387 +715,76 @@ function M:ScanBags()
 	return out
 end
 
-local function SameName(a, b) return type(a) == "string" and type(b) == "string" and a:lower() == b:lower() end
-
-function M:BuildMailPlan()
-	local _, myName, myRealm = self:Me()
-	local bags = self:ScanBags()
-	local taken = {}
-	local per, order = {}, {}
-	for _, gname in ipairs(self:GroupNames()) do
-		local g = self:DB().groups[gname]
-		for _, kind in ipairs({ "crafter", "mail" }) do
-			local op = self:GroupOp(g, kind)
-			local to = op and self:Recipient(op)
-			local isMe = not to or SameName(to, myName) or (myName and SameName(to, myName .. "-" .. tostring(myRealm):gsub("%s", "")))
-			if not isMe then
-				for _, id in ipairs(self:GroupItems(gname)) do
-					local e = bags[id]
-					if e then
-						local left = 0
-						for _, s in ipairs(e.slots) do if not taken[s] then left = left + s.count end end
-						local send = left - (tonumber(op.keep) or 0)
-						for _, s in ipairs(e.slots) do
-							if not taken[s] and s.count <= send then
-								taken[s] = true
-								send = send - s.count
-								if not per[to] then per[to] = {}; order[#order + 1] = to end
-								table.insert(per[to], { bag = s.bag, slot = s.slot, itemID = id, count = s.count })
-							end
-						end
-					end
-				end
+function M:EmptySlots()
+	local list = {}
+	for _, bag in ipairs(BagList()) do
+		local family = 0
+		if C_Container.GetContainerNumFreeSlots then
+			local _, f = C_Container.GetContainerNumFreeSlots(bag)
+			family = Plain(f) or 0
+		end
+		if family == 0 and bag <= (NUM_BAG_SLOTS or 4) then
+			for slot = 1, (Plain(C_Container.GetContainerNumSlots(bag)) or 0) do
+				if not C_Container.GetContainerItemInfo(bag, slot) then list[#list + 1] = { bag = bag, slot = slot } end
 			end
 		end
 	end
-	local batches = {}
-	local max = ATTACHMENTS_MAX_SEND or 12
-	for _, to in ipairs(order) do
-		local list = per[to]
-		for i = 1, #list, max do
-			local b = { to = to, slots = {} }
-			for j = i, math.min(i + max - 1, #list) do b.slots[#b.slots + 1] = list[j] end
-			batches[#batches + 1] = b
+	return list
+end
+
+local function CountContainers(bags)
+	local t = {}
+	for _, bag in ipairs(bags) do
+		for slot = 1, (Plain(C_Container.GetContainerNumSlots(bag)) or 0) do
+			local id, count = SlotInfo(bag, slot)
+			if id then t[id] = (t[id] or 0) + count end
 		end
 	end
-	return batches
+	return t
 end
 
-local mailRun
-
-local function MailButtonText()
-	if not mailRun then return "K-Market: Send groups" end
-	if mailRun.waiting then return "Sending " .. mailRun.i .. " of " .. #mailRun.batches .. "..." end
-	return "Send next mail (" .. (#mailRun.batches - mailRun.i) .. " left)"
-end
-
-function M:RefreshMailButton()
-	if self.mailButton then self.mailButton:SetText(MailButtonText()) end
-end
-
-local function FinishMail(why)
-	if mailRun then
-		Say(string.format("%s %d mail(s), %d stack(s).", why or "Sent", mailRun.mails, mailRun.items))
-	end
-	mailRun = nil
-	M:RefreshMailButton()
-end
-
-function M:SendNextMail()
-	if not mailRun then return end
-	if InCombatLockdown() then Say("not in combat."); return end
-	mailRun.i = mailRun.i + 1
-	local b = mailRun.batches[mailRun.i]
-	if not b then FinishMail(); return end
-	local attached = 0
-	for _, s in ipairs(b.slots) do
-		local info = C_Container.GetContainerItemInfo(s.bag, s.slot)
-		if info and Plain(info.itemID) == s.itemID and not Plain(info.isLocked) then
-			attached = attached + 1
-			C_Container.PickupContainerItem(s.bag, s.slot)
-			ClickSendMailItemButton(attached)
-		end
-	end
-	ClearCursor()
-	if attached == 0 then self:SendNextMail(); return end
-	local subject = (KUI.GetMailAutoSubject and KUI:GetMailAutoSubject()) or "K-Market"
-	mailRun.waiting, mailRun.sentAt, mailRun.pending = true, GetTime(), attached
-	SendMail(b.to, subject, "")
-	self:RefreshMailButton()
-	C_Timer.After(SEND_TIMEOUT, function()
-		if mailRun and mailRun.waiting and GetTime() - mailRun.sentAt >= SEND_TIMEOUT - 0.01 then
-			mailRun.waiting = false
-			mailRun.i = mailRun.i - 1
-			M:RefreshMailButton()
-		end
-	end)
-end
-
-function M:StartMailing()
-	if mailRun then
-		if not mailRun.waiting then self:SendNextMail() end
-		return
-	end
-	if InCombatLockdown() then Say("not in combat."); return end
-	for i = 1, ATTACHMENTS_MAX_SEND or 12 do
-		if HasSendMailItem(i) then Say("take the attachments off the mail first."); return end
-	end
-	local batches = self:BuildMailPlan()
-	if #batches == 0 then Say("nothing to send: no group with a Mail or Crafter operation has items in your bags."); return end
-	mailRun = { batches = batches, i = 0, mails = 0, items = 0 }
-	self:SendNextMail()
-end
-
-local function OnMailEvent(event)
-	if not mailRun then return end
-	if event == "MAIL_SEND_SUCCESS" and mailRun.waiting then
-		mailRun.waiting = false
-		mailRun.mails = mailRun.mails + 1
-		mailRun.items = mailRun.items + (mailRun.pending or 0)
-		C_Timer.After(0.3, function() if mailRun and not mailRun.waiting then M:SendNextMail() end end)
-	elseif event == "MAIL_FAILED" then
-		FinishMail("Stopped (the mail was refused). Sent")
-	elseif event == "MAIL_CLOSED" then
-		FinishMail("Mailbox closed. Sent")
-	end
-end
-
-function M:BuildMailButton()
-	if self.mailButton or not SendMailFrame then return end
-	local b = CreateFrame("Button", "KainUIForeverMarketMailButton", SendMailFrame, "UIPanelButtonTemplate")
-	b:SetSize(170, 24)
-	b:SetPoint("TOPLEFT", MailFrame or SendMailFrame, "TOPRIGHT", 6, -30)
-	b:SetScript("OnClick", function() M:StartMailing() end)
-	self.mailButton = b
-	self:RefreshMailButton()
-end
-
-function M:PickPrice(op, lowest, ours)
-	local min, normal = tonumber(op.minPrice) or 0, tonumber(op.normalPrice) or 0
-	local price
-	if not lowest then
-		if normal <= 0 then return nil, "no auctions up and no normal price set" end
-		price = normal
-	elseif ours then
-		price = lowest
-	else
-		price = lowest - (tonumber(op.undercut) or 0)
-	end
-	if price < min then return nil, "the going price is below your minimum" end
-	price = math.floor(price / 100) * 100
-	if price < 100 then return nil, "the price is under 1 silver" end
-	return price
-end
-
-function M:BuildPostPlan()
-	local bags = self:ScanBags()
-	local queue, seen = {}, {}
-	for _, gname in ipairs(self:GroupNames()) do
-		local op = self:GroupOp(self:DB().groups[gname], "post")
-		if op then
-			for _, id in ipairs(self:GroupItems(gname)) do
-				local e = bags[id]
-				local quantity = e and (e.count - (tonumber(op.keep) or 0)) or 0
-				if quantity > 0 and not seen[id] then
-					seen[id] = true
-					queue[#queue + 1] = { itemID = id, op = op, quantity = quantity, slots = e.slots }
-				end
-			end
-		end
-	end
-	return queue
-end
-
-local postRun
-
-local function ItemName(id)
-	local name = C_Item and C_Item.GetItemInfo and Plain((C_Item.GetItemInfo(id)))
-	return type(name) == "string" and name or ("item " .. id)
-end
-
-local function Entry() return postRun and postRun.queue[postRun.i] end
-
-local function PostButtonText()
-	local e = Entry()
-	if postRun and postRun.phase == "confirm" then return "Confirm post" end
-	if not e then return "K-Market: Post groups" end
-	if postRun.phase == "waiting" then return "Scanning " .. ItemName(e.itemID) .. "..." end
-	if postRun.phase == "post" then
-		local n = postRun.commodity and e.quantity or e.slots[postRun.slot].count
-		return "Post " .. ItemName(e.itemID) .. " x" .. n .. " at " .. M.FormatMoney(postRun.price)
-	end
-	return "Scan " .. ItemName(e.itemID) .. " (" .. postRun.i .. " of " .. #postRun.queue .. ")"
-end
-
-function M:RefreshPostButton()
-	if self.postButton then self.postButton:SetText(PostButtonText()) end
-end
-
-local function NextItem()
-	postRun.i = postRun.i + 1
-	postRun.phase, postRun.price, postRun.slot = "scan", nil, 1
-	postRun.left = Entry() and Entry().quantity
-	if not Entry() then
-		Say(string.format("Posted %d auction(s).", postRun.posted))
-		postRun.done = true
-	end
-	M:RefreshPostButton()
-end
-
-local function SlotLocation(s)
-	return ItemLocation and ItemLocation.CreateFromBagAndSlot and ItemLocation:CreateFromBagAndSlot(s.bag, s.slot)
-end
-
-local function FittingSlot(e, from)
-	for j = from, #e.slots do
-		if e.slots[j].count <= postRun.left then return j end
-	end
-end
-
-function M:OnScanResult(lowest, ours)
-	if not postRun or postRun.phase ~= "waiting" then return end
-	local e = Entry()
-	local price, why = self:PickPrice(e.op, lowest, ours)
-	if not price then
-		Say(ItemName(e.itemID) .. " skipped: " .. why .. ".")
-		NextItem()
-		return
-	end
-	if not postRun.commodity then
-		postRun.slot = FittingSlot(e, 1)
-		if not postRun.slot then
-			Say(ItemName(e.itemID) .. " skipped: every stack is bigger than what's above your keep amount.")
-			NextItem()
-			return
-		end
-	end
-	postRun.price, postRun.phase = price, "post"
-	self:RefreshPostButton()
-end
-
-local function Scan()
-	local e = Entry()
-	local loc = SlotLocation(e.slots[1])
-	local status = loc and C_AuctionHouse.GetItemCommodityStatus and C_AuctionHouse.GetItemCommodityStatus(loc)
-	postRun.commodity = Enum and Enum.ItemCommodityStatus and status == Enum.ItemCommodityStatus.Commodity
-	postRun.key = (not postRun.commodity and loc and C_AuctionHouse.GetItemKeyFromItem and C_AuctionHouse.GetItemKeyFromItem(loc))
-		or C_AuctionHouse.MakeItemKey(e.itemID)
-	postRun.phase = "waiting"
-	local sorts = { { sortOrder = (Enum and Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price) or 0, reverseSort = false } }
-	C_AuctionHouse.SendSearchQuery(postRun.key, sorts, true)
-	local asked = postRun
-	C_Timer.After(5, function()
-		if postRun == asked and postRun.phase == "waiting" and Entry() == e then M:OnScanResult(nil, false) end
-	end)
-end
-
-local function Post()
-	local e = Entry()
-	local s = e.slots[postRun.slot]
-	local loc = SlotLocation(s)
-	local duration = tonumber(e.op.duration) or 2
-	local ok, args
-	if postRun.commodity then
-		args = { loc, duration, e.quantity, postRun.price }
-		ok = C_AuctionHouse.PostCommodity(unpack(args))
-	else
-		args = { loc, duration, s.count, nil, postRun.price * s.count }
-		ok = C_AuctionHouse.PostItem(loc, duration, s.count, nil, postRun.price * s.count)
-	end
-	if not ok then
-		Say(ItemName(e.itemID) .. " couldn't be posted.")
-		NextItem()
-		return
-	end
-	postRun.posted = postRun.posted + 1
-	postRun.pending = { commodity = postRun.commodity, args = args }
-
-	local nextSlot
-	if not postRun.commodity then
-		postRun.left = postRun.left - s.count
-		nextSlot = FittingSlot(e, postRun.slot + 1)
-	end
-	if nextSlot then
-		postRun.slot = nextSlot
-		M:RefreshPostButton()
-	else
-		NextItem()
-	end
-end
-
-function M:PostClick()
-	if InCombatLockdown() then Say("not in combat."); return end
-	if not (C_AuctionHouse and C_AuctionHouse.SendSearchQuery) then Say("the auction house can't be read."); return end
-	if not postRun or (postRun.done and postRun.phase ~= "confirm") then
-		local queue = self:BuildPostPlan()
-		if #queue == 0 then Say("nothing to post: no group with a Post operation has items in your bags."); return end
-		postRun = { queue = queue, i = 1, phase = "scan", slot = 1, posted = 0, left = queue[1].quantity }
-	end
-	if postRun.phase == "confirm" and postRun.pending then
-		local p = postRun.pending
-		if p.commodity then C_AuctionHouse.ConfirmPostCommodity(unpack(p.args)) else C_AuctionHouse.ConfirmPostItem(unpack(p.args, 1, 5)) end
-		postRun.pending = nil
-		postRun.phase = postRun.resumePhase or "scan"
-		if postRun.done then postRun = nil end
-	elseif postRun.phase == "scan" then
-		Scan()
-	elseif postRun.phase == "post" then
-		Post()
-	end
-	self:RefreshPostButton()
-end
-
-local function FirstResult()
-	local e = Entry()
-	if not e or not postRun.key then return end
-	if postRun.commodity then
-		local r = C_AuctionHouse.GetCommoditySearchResultInfo and C_AuctionHouse.GetCommoditySearchResultInfo(e.itemID, 1)
-		if r then return Plain(r.unitPrice), Plain(r.containsOwnerItem) end
-	else
-		local r = C_AuctionHouse.GetItemSearchResultInfo and C_AuctionHouse.GetItemSearchResultInfo(postRun.key, 1)
-		if r then return Plain(r.buyoutAmount), Plain(r.containsOwnerItem) end
-	end
-end
-
-local function OnAuctionEvent(event, arg)
-	if event == "AUCTION_HOUSE_CLOSED" then
-		postRun = nil
-		return
-	end
-	if not postRun then return end
-	if event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED" then
-		local e = Entry()
-		if postRun.phase == "waiting" and e and (event == "COMMODITY_SEARCH_RESULTS_UPDATED") == (postRun.commodity and true or false) then
-			if event == "COMMODITY_SEARCH_RESULTS_UPDATED" and arg ~= nil and arg ~= e.itemID then return end
-			local price, ours = FirstResult()
-			M:OnScanResult(type(price) == "number" and price or nil, ours and true or false)
-		end
-	elseif event == "AUCTION_HOUSE_POST_WARNING" and postRun.pending then
-		postRun.resumePhase = postRun.phase
-		postRun.phase = "confirm"
-		M:RefreshPostButton()
-	end
-end
-
-function M:BuildPostButton()
-	if self.postButton or not AuctionHouseFrame then return end
-	local b = CreateFrame("Button", "KainUIForeverMarketPostButton", AuctionHouseFrame, "UIPanelButtonTemplate")
-	b:SetSize(230, 24)
-	b:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 6, -30)
-	b:SetScript("OnClick", function() M:PostClick() end)
-	self.postButton = b
-	self:RefreshPostButton()
+function M:RecordInventory(withBank)
+	local key = self:Me()
+	if not key or not C_Container or not C_Container.GetContainerNumSlots then return end
+	local inv = self:DB().inv
+	inv[key] = inv[key] or {}
+	inv[key].bags = CountContainers(BagList())
+	if withBank then inv[key].bank = CountContainers(BankList()) end
+	inv[key].t = Now()
 end
 
 local events = CreateFrame("Frame")
-for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_MONEY", "PLAYER_LOGOUT", "SKILL_LINES_CHANGED", "MAIL_SHOW", "MAIL_SEND_SUCCESS",
-	"MAIL_FAILED", "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED",
-	"ITEM_SEARCH_RESULTS_UPDATED", "AUCTION_HOUSE_POST_WARNING" }) do
+for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_MONEY", "PLAYER_LOGOUT", "SKILL_LINES_CHANGED", "BAG_UPDATE_DELAYED",
+	"BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_INBOX_UPDATE" }) do
 	KUI:SafeRegisterEvent(events, e)
 end
-events:SetScript("OnEvent", function(_, event, arg)
+local bankOpen, invPending = false, false
+events:SetScript("OnEvent", function(_, event)
 	if event == "PLAYER_LOGIN" then
 		local db = M:DB()
 		local now = Now()
 		for _, c in pairs(db.gold) do c.points = M:Thin(c.points, now) end
+		local key = M:Me()
+
+		if key and db.inv[key] then db.inv[key].mail = nil end
 		M:RecordProfessions()
-		C_Timer.After(2, function() M:RecordMoney() end)
+		C_Timer.After(2, function() M:RecordMoney(); M:RecordInventory(false) end)
 	elseif event == "PLAYER_MONEY" or event == "PLAYER_LOGOUT" then
 		M:RecordMoney()
+		if event == "PLAYER_LOGOUT" then M:RecordInventory(bankOpen) end
 	elseif event == "SKILL_LINES_CHANGED" then
 		M:RecordProfessions()
-	elseif event == "MAIL_SHOW" then
-
-		M:BuildMailButton()
-		C_Timer.After(0.1, function() M:BuildMailButton() end)
-	elseif event == "AUCTION_HOUSE_SHOW" then
-		M:BuildPostButton()
-		M:RefreshPostButton()
-		C_Timer.After(0.1, function() M:BuildPostButton(); M:RefreshPostButton() end)
-	elseif event:find("^MAIL_") then
-		OnMailEvent(event)
-	else
-		OnAuctionEvent(event, arg)
+	elseif event == "BANKFRAME_OPENED" then
+		bankOpen = true
+		M:RecordInventory(true)
+	elseif event == "BANKFRAME_CLOSED" then
+		M:RecordInventory(true)
+		bankOpen = false
+	elseif event == "BAG_UPDATE_DELAYED" and not invPending then
+		invPending = true
+		C_Timer.After(1, function() invPending = false; M:RecordInventory(bankOpen) end)
+	elseif event == "MAIL_INBOX_UPDATE" and M.OnInboxUpdate then
+		M:OnInboxUpdate()
 	end
 end)
 
