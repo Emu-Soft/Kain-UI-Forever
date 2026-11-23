@@ -120,15 +120,17 @@ local function Sanitize(m)
 		end
 	end
 	m.ledger = good
-	m.checked = true
+	m.checked = nil
 end
+
+local sanitized
 
 function M:DB()
 	local acct = _G.KainUIForeverAccountDB
 	if type(acct) ~= "table" then acct = {}; _G.KainUIForeverAccountDB = acct end
 	local m = acct.market
 	if type(m) ~= "table" then m = {}; acct.market = m end
-	if not m.checked then Sanitize(m) end
+	if m ~= sanitized or type(m.inv) ~= "table" then Sanitize(m); sanitized = m end
 	return m
 end
 
