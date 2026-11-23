@@ -9,10 +9,22 @@ local function Enum2(t, k, default) return (Enum and Enum[t] and Enum[t][k]) or 
 
 local RESET = { minPrice = "minPrice", normalPrice = "normalPrice", maxPrice = "maxPrice" }
 
-function M:PostPrice(op, lowest, ours)
-	local min = tonumber(op.minPrice) or 0
-	local normal = tonumber(op.normalPrice) or 0
-	local max = tonumber(op.maxPrice) or 0
+function M:PostPrice(op, lowest, ours, itemID)
+	local function Price(key)
+		local v = op[key]
+		if type(v) == "string" then
+			local copper = M.Prices and M.Prices:Resolve(v, itemID)
+			if not copper then return nil, "no " .. v .. " price for it (K-Market Prices app)" end
+			return copper
+		end
+		return tonumber(v) or 0
+	end
+	local min, why = Price("minPrice")
+	if not min then return nil, why end
+	local normal, why2 = Price("normalPrice")
+	if not normal then return nil, why2 end
+	local max, why3 = Price("maxPrice")
+	if not max then return nil, why3 end
 	local undercut = tonumber(op.undercut) or 0
 	local prices = { minPrice = min, normalPrice = normal, maxPrice = max > 0 and max or normal }
 	local price, how
@@ -181,7 +193,7 @@ function M:BuildPostQueue()
 end
 
 function M:DecidePost(e, results)
-	local price, how = self:PostPrice(e.op, results.lowest, results.ours)
+	local price, how = self:PostPrice(e.op, results.lowest, results.ours, e.itemID)
 	if not price then e.state, e.reason = "skip", how; return end
 	local cap = tonumber(e.op.postCap) or 0
 	local up = (results.ours and results.lowest and price == results.lowest) and results.owned or 0

@@ -42,6 +42,8 @@ M.OP_DEFAULTS = OP_DEFAULTS
 local BELOW_MIN = { none = true, minPrice = true, normalPrice = true, maxPrice = true }
 local ABOVE_MAX = { none = true, minPrice = true, normalPrice = true, maxPrice = true }
 
+local PRICE_FIELD = { minPrice = true, normalPrice = true, maxPrice = true }
+
 local function Migrate(m)
 
 	for name, g in pairs(m.groups) do
@@ -55,7 +57,9 @@ local function Migrate(m)
 	for _, op in pairs(m.ops) do
 		if type(op) == "table" and OP_DEFAULTS[op.kind] then
 			for k, v in pairs(OP_DEFAULTS[op.kind]) do
-				if type(op[k]) ~= type(v) then op[k] = v end
+
+				local priceText = PRICE_FIELD[k] and type(op[k]) == "string" and op[k] ~= ""
+				if type(op[k]) ~= type(v) and not priceText then op[k] = v end
 			end
 			if op.kind == "post" then
 				if not BELOW_MIN[op.belowMin] then op.belowMin = "none" end
@@ -805,4 +809,7 @@ end)
 
 SLASH_KAINUIMARKET1 = "/kmarket"
 SLASH_KAINUIMARKET2 = "/km"
-SlashCmdList["KAINUIMARKET"] = function() if M.ToggleWindow then M:ToggleWindow() end end
+SlashCmdList["KAINUIMARKET"] = function(msg)
+	if M.Prices and M.Prices.Command(msg or "") then return end
+	if M.ToggleWindow then M:ToggleWindow() end
+end

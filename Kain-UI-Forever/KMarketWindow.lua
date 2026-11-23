@@ -1142,9 +1142,9 @@ M.OP_FIELDS = {
 		{ "postCap", "Post cap", "number", "How many auctions to have up at once (for stackable goods: how many items)." },
 		{ "keep", "Keep in bags", "number", "How many of each item not to post." },
 		{ "undercut", "Undercut", "money", "How far under the lowest auction to post. Your own lowest auction is matched, not undercut." },
-		{ "minPrice", "Minimum price", "money", "Never post under this (per item)." },
-		{ "normalPrice", "Normal price", "money", "Used when nobody else is selling (per item)." },
-		{ "maxPrice", "Maximum price", "money", "The most to post at (0 = no maximum)." },
+		{ "minPrice", "Minimum price", "price", "Never post under this (per item). An amount, or a price like 80% market." },
+		{ "normalPrice", "Normal price", "price", "Used when nobody else is selling (per item). An amount, or market." },
+		{ "maxPrice", "Maximum price", "price", "The most to post at (0 = no maximum). An amount, or 200% market." },
 		{ "belowMin", "Below minimum", "choice", "When the lowest auction is under your minimum.", PRICE_CHOICES },
 		{ "aboveMax", "Above maximum", "choice", "When the lowest auction is over your maximum.", PRICE_CHOICES },
 		{ "cancelUndercut", "Cancel undercut", "toggle", "A cancel scan offers to cancel your auctions that someone has undercut." },
@@ -1157,6 +1157,8 @@ function M.ReadField(f, text)
 		return n and n >= 0 and math.floor(n) or nil
 	elseif f[3] == "money" then
 		return M.ParseMoney(text)
+	elseif f[3] == "price" then
+		return M.Prices.ParseInput(text)
 	end
 	return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -1164,6 +1166,7 @@ end
 local function ShowField(op, f)
 	local v = op[f[1]]
 	if f[3] == "money" then return v and v > 0 and M.FormatMoney(v) or "0" end
+	if f[3] == "price" then return M.Prices.Show(v) end
 	return tostring(v or "")
 end
 
