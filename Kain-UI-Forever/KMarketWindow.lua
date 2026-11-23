@@ -1059,6 +1059,8 @@ local function BuildGroups(page)
 	groupBox:SetScript("OnMouseUp", Drop)
 	page.Drop = Drop
 
+	if M.BuildGroupAuto then M:BuildGroupAuto(page, left, right) end
+
 	function page:RefreshItems()
 		local bags = M:ScanBags()
 		local filter = (self.bagSearch:GetText() or ""):lower()
@@ -1108,6 +1110,7 @@ local function BuildGroups(page)
 			end
 			self.groupBox.title:SetText("Group Items (" .. #M:GroupItems(state.group) .. ")")
 		end
+		if M.RefreshGroupAuto then M:RefreshGroupAuto(self, state.group) end
 		self:RefreshItems()
 	end
 end

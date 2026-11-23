@@ -2,10 +2,11 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.363",
+		version = "1.0.364",
 		sections = {
 			{ title = "New", items = {
 				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, posting and cancelling auctions, and its own mailbox window.",
+				"K-Market sorts your items into ready-made groups (crafting reagents by profession, cloth, bind-on-equip gear, potions) and shows what is profitable to craft beside the profession window.",
 				"K-Market has a short tutorial: press Tutorial at the top of its window.",
 				"The Auction House and Guild windows can be dragged with Global Dragging.",
 			} },

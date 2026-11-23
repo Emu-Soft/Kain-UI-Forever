@@ -132,6 +132,7 @@ local function Queue(job)
 	searcher.queue[#searcher.queue + 1] = job
 	NextSearch()
 end
+M.QueueSearch = Queue
 
 local function SameKey(a, b)
 	if type(a) ~= "table" or type(b) ~= "table" then return false end
