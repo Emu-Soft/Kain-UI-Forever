@@ -2,6 +2,17 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.359",
+		sections = {
+			{ title = "New", items = {
+				"Kill on Sight: the guild Blacklist, for players on your own side to keep out of groups. Right-click a player to add them, or say yes when the addon offers after someone leaves your dungeon group. You're warned when one is in your group, invites you or talks in chat. Shared with the guild, no sounds.",
+			} },
+			{ title = "Changed", items = {
+				"Kill on Sight: players are shown by their full name and realm everywhere.",
+			} },
+		},
+	},
+	{
 		version = "1.0.358",
 		sections = {
 			{ title = "New", items = {
