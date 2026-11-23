@@ -82,14 +82,14 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - **Vendor**: auto-sell greys and auto-repair, optionally with guild funds.
 
 ### K-Market (trading)
-A TradeSkillMaster-style trade helper, in TSM's look. Open it with the **K-Market** button in the settings (under Windows) or `/kmarket`. Groups, operations and the gold history are shared by all your characters.
+A TradeSkillMaster-style trade helper, in TSM's look. Open it with the **K-Market** button in the settings (under Windows) or `/kmarket` (`/km` for short). Groups, operations and the gold history are shared by all your characters. The window's top bar shows your total gold on every character, and its **Tutorial** button walks you through what K-Market is and how to set it up.
 - **Dashboard**: your gold over time, like TSM's: pick 1D, 1W, 1M, 3M, 6M, 1Y, 2Y or ALL, or drag across the graph to zoom in. Green when your gold went up, red when it went down; hover for the amount at any moment. Pick which characters count. Below it: your 52-week high and low, daily change, top sale and purchase, and what you earned, spent and made for the range shown. Gold Activity on the left shows each day's sales and purchases.
 - **Groups**: item groups, with subgroups. An item is in one group. Pick items from your bags, drop an item on the group, or import a TSM group list like `` i:2589,group:Cloth`Linen,i:2592 `` (item links work too). Export gives the same kind of list back.
 - **Operations**, set on a group (a subgroup uses its parent's unless it sets its own, or none):
   - **Mailing**: send the group's items to a character (your bank alt), keeping as many as you choose. **Send up to** caps it; **Restock** only tops them up to that, counting what they already have.
   - **Crafter**: the same, sent to whichever of your characters has the profession you pick (log in on each character once so K-Market knows their professions and bags), or to a name you type.
   - **Auctioning**: post cap, keep, duration, undercut, minimum, normal and maximum price, what to do below the minimum or above the maximum, and whether to cancel auctions that get undercut.
-- **At the mailbox**: one click on **Send Groups** sends every mail, exact amounts (stacks are split when needed), 12 items a mail. **Open All** takes everything out of your mail (not cash on delivery) and notes your Auction House sales and purchases for the dashboard.
+- **At the mailbox**: K-Market's own mail window replaces the game's (its **Blizzard UI** button switches back, and is remembered). **Inbox** lists every mail: click one to take it, or **Open All** to take everything (not cash on delivery) and note your Auction House sales and purchases for the dashboard. **Groups** shows what your operations would mail, and one click on **Send Groups** sends every mail, exact amounts (stacks are split when needed), 12 items a mail. Operations that mail to the character you're logged in as never show there. **Send** writes a plain mail to anyone or to one of your characters. The alts your operations mail to are added to your friends list, so the game doesn't ask "are you sure?" before each mail.
 - **At the Auction House**: **Post Scan** prices everything in your bags that's in an Auctioning group, with no clicking. Then each click of **Post** puts one auction up (the game needs a click for every post). It undercuts the lowest price, matches your own lowest auction, uses your normal price when nobody else is selling, and never goes under your minimum. **Cancel Scan** finds your auctions someone has undercut; each click of **Cancel Auction** cancels one.
 - Bound items are never mailed or posted, and nothing happens in combat. K-Market's fonts are Montserrat (SIL Open Font License) and Roboto (Apache License 2.0), included in `Media/Fonts` with their licences.
 
@@ -141,7 +141,7 @@ A TradeSkillMaster-style trade helper, in TSM's look. Open it with the **K-Marke
 | `/kos off` / `on` | Turn K-UI's kill list off or on (after a reload). |
 | `/kkey` | K-Key options. |
 | `/kt` | K-Targeter options. |
-| `/kmarket` | Open K-Market: gold graph, item groups, mailing, and auction posting and cancelling. |
+| `/kmarket` or `/km` | Open K-Market: gold graph, item groups, mailing, and auction posting and cancelling. |
 | `/rl` | Reload your interface. |
 | `/flip` (or `/coin`) | Flip a coin as an emote. Target someone first to flip for them. |
 

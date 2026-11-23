@@ -1,9 +1,9 @@
 local _, KUI = ...
 local M = KUI.Market
-local UI = M.UI
 local Plain, Say = M.Plain, M.Say
 
 local SEND_TIMEOUT = 10
+local CONFIRM_TIMEOUT = 60
 local MAX_ATTACH = ATTACHMENTS_MAX_SEND or 12
 
 local function SameName(a, b) return type(a) == "string" and type(b) == "string" and a:lower() == b:lower() end
@@ -11,7 +11,44 @@ local function SameName(a, b) return type(a) == "string" and type(b) == "string"
 local function IsMe(to)
 	local _, name, realm = M:Me()
 	if not to or not name then return true end
-	return SameName(to, name) or SameName(to, name .. "-" .. tostring(realm):gsub("%s", ""))
+	return SameName(to, name) or SameName(to, name .. "-" .. (tostring(realm):gsub("%s", "")))
+end
+M.IsMe = IsMe
+
+function M:MailTargets()
+	local seen, list = {}, {}
+	for name, op in pairs(self:DB().ops) do
+		if (op.kind == "mail" or op.kind == "crafter") and #self:OpGroups(name) > 0 then
+			local to = self:Recipient(op)
+			if to and not IsMe(to) and not seen[to:lower()] then
+				seen[to:lower()] = true
+				list[#list + 1] = to
+			end
+		end
+	end
+	table.sort(list)
+	return list
+end
+
+local befriended = {}
+function M:BefriendAlt(to)
+	if type(to) ~= "string" or IsMe(to) or befriended[to:lower()] then return end
+	if not C_FriendList or not C_FriendList.AddFriend or not C_FriendList.GetFriendInfo then return end
+	local key = self:CharKeyFor(to)
+	local c = key and self:DB().chars[key]
+	if not c then return end
+	local mine = Plain((UnitFactionGroup("player")))
+	if c.faction and mine and c.faction ~= mine then return end
+	befriended[to:lower()] = true
+	if Plain(C_FriendList.GetFriendInfo(to)) then return end
+	local count = C_FriendList.GetNumFriends and Plain(C_FriendList.GetNumFriends()) or 0
+	if count >= 100 then return end
+	C_FriendList.AddFriend(to, "K-Market: my alt")
+	Say(to .. " added to your friends list, so the game stops asking before you mail your own alt.")
+end
+
+function M:BefriendAlts()
+	for _, to in ipairs(self:MailTargets()) do self:BefriendAlt(to) end
 end
 
 function M:MailNeeds(bags)
@@ -131,18 +168,24 @@ function M:SendNextMail()
 	end
 	ClearCursor()
 	if Attachments() == 0 then Finish("Stopped (nothing could be attached). Sent"); return end
-	run.waiting, run.sentAt, run.to, run.attached = true, GetTime(), to, list
+	run.waiting, run.sentAt, run.to, run.attached, run.confirming = true, GetTime(), to, list, nil
 	local subject = (KUI.GetMailAutoSubject and KUI:GetMailAutoSubject()) or "K-Market"
 	SendMail(to, subject, "")
-	self:RefreshMailPanel()
+	if self.RefreshMailPanel then self:RefreshMailPanel() end
+
 	local asked = run
-	C_Timer.After(SEND_TIMEOUT, function()
-		if run == asked and run.waiting and GetTime() - run.sentAt >= SEND_TIMEOUT - 0.01 then
+	local function Check()
+		if run ~= asked or not run.waiting then return end
+		local limit = run.confirming and CONFIRM_TIMEOUT or SEND_TIMEOUT
+		if GetTime() - run.sentAt >= limit - 0.01 then
 			run.waiting = false
 			run.stalled = true
-			M:RefreshMailPanel()
+			if M.RefreshMailPanel then M:RefreshMailPanel() end
+		else
+			C_Timer.After(1, Check)
 		end
-	end)
+	end
+	C_Timer.After(1, Check)
 end
 
 function M:StartMailing()
@@ -152,6 +195,8 @@ function M:StartMailing()
 	end
 	if InCombatLockdown() then Say("not in combat."); return end
 	if Attachments() > 0 then Say("take the attachments off the mail first."); return end
+	if SetSendMailShowing then SetSendMailShowing(true) end
+	self:BefriendAlts()
 	local needs = self:MailNeeds()
 	if #needs == 0 then
 		Say("nothing to send: no item in your bags is in a group with a Mailing or Crafter operation (above its Keep amount).")
@@ -171,7 +216,7 @@ local function OnSent()
 		M:AddInTransit(run.to, a.itemID, a.count)
 	end
 	run.attached = nil
-	M:RefreshMailPanel()
+	if M.RefreshMailPanel then M:RefreshMailPanel() end
 	C_Timer.After(0.5, function() if run and not run.waiting then M:SendNextMail() end end)
 end
 
@@ -227,7 +272,7 @@ function M:OpenNextMail()
 			if itemCount > 0 then AutoLootMailItem(i) else TakeInboxMoney(i) end
 			local asked = opener
 			C_Timer.After(2, function()
-				if opener == asked and opener.waiting then opener.waiting = false; M:OpenNextMail() end
+				if opener == asked and opener.waiting and not opener.confirming then opener.waiting = false; M:OpenNextMail() end
 			end)
 			return
 		end
@@ -239,112 +284,28 @@ function M:OpenAllMail()
 	if opener then StopOpening("Stopped:"); return end
 	if InCombatLockdown() then Say("not in combat."); return end
 	opener = { taken = 0, money = 0, tries = {} }
-	self:RefreshMailPanel()
+	if self.RefreshMailPanel then self:RefreshMailPanel() end
 	self:OpenNextMail()
 end
 
 function M:OnInboxUpdate()
 	if opener and opener.waiting then
-		opener.waiting = false
+		opener.waiting, opener.confirming = false, nil
 		C_Timer.After(0.15, function() if opener and not opener.waiting then M:OpenNextMail() end end)
 	end
 end
 
-local panel
-
-function M:RefreshMailPanel()
-	if not panel or not panel:IsShown() then return end
-	if run then
-		local left = 0
-		for _, n in ipairs(run.needs) do left = left + math.max(n.count, 0) end
-		UI.ButtonText(panel.send, run.waiting and "Sending..." or run.stalled and "No answer: send next" or "Sending...")
-		panel.status:SetText(string.format("%d mail(s) sent, %d item(s) to go.", run.mails, left))
-	else
-		UI.ButtonText(panel.send, "Send Groups")
-		panel.status:SetText("")
-	end
-	UI.ButtonText(panel.open, opener and "Stop Opening" or "Open All")
-
-	local needs = run and run.needs or self:MailNeeds()
-	local byTo, order = {}, {}
-	for _, n in ipairs(needs) do
-		if n.count > 0 then
-			if not byTo[n.to] then byTo[n.to] = {}; order[#order + 1] = n.to end
-			table.insert(byTo[n.to], n)
-		end
-	end
-	local lines = {}
-	for _, to in ipairs(order) do
-		lines[#lines + 1] = { header = to }
-		for _, n in ipairs(byTo[to]) do lines[#lines + 1] = n end
-	end
-	panel.list:SetItems(lines)
-	panel.empty:SetShown(#lines == 0)
-end
-
-function M:BuildMailPanel()
-	if panel or not MailFrame then return end
-	panel = UI.Panel(MailFrame, "surface", 6)
-	panel:SetSize(250, 420)
-	panel:SetPoint("TOPLEFT", MailFrame, "TOPRIGHT", 4, 0)
-	panel:EnableMouse(true)
-	local title = UI.Text(panel, "body/bold/small", "accent")
-	title:SetPoint("TOPLEFT", 12, -10)
-	title:SetText("K-Market")
-	panel.send = UI.Button(panel, "Send Groups", 108, 24, "primary", "KainUIForeverMarketMailButton")
-	panel.send:SetPoint("TOPLEFT", 12, -32)
-	panel.send:SetScript("OnClick", function() M:StartMailing() end)
-	panel.send.kmTip = "Mails your groups' items to the bank alt or crafter their operations name."
-	panel.open = UI.Button(panel, "Open All", 108, 24, "secondary", "KainUIForeverMarketOpenAllButton")
-	panel.open:SetPoint("TOPRIGHT", -12, -32)
-	panel.open:SetScript("OnClick", function() M:OpenAllMail() end)
-	panel.open.kmTip = "Takes everything out of your mail (not cash on delivery), and notes Auction House sales and purchases for the K-Market dashboard."
-	panel.status = UI.Text(panel, "body/regular/x-small", "textLow")
-	panel.status:SetPoint("TOPLEFT", 12, -62)
-	local sub = UI.Text(panel, "body/medium/x-small", "textLow")
-	sub:SetPoint("TOPLEFT", 12, -80)
-	sub:SetText("TO SEND")
-	panel.empty = UI.Text(panel, "body/regular/x-small", "textLow")
-	panel.empty:SetPoint("TOPLEFT", 12, -100)
-	panel.empty:SetWidth(226)
-	panel.empty:SetWordWrap(true)
-	panel.empty:SetText("Nothing: give a group a Mailing or Crafter operation in K-Market and have its items in your bags.")
-	panel.list = UI.List(panel, 20, 15, function(row)
-		row.text = UI.Text(row, "body/regular/x-small", "text")
-		row.text:SetPoint("LEFT", 12, 0)
-		row.text:SetPoint("RIGHT", -50, 0)
-		row.count = UI.Text(row, "numeric/regular/x-small", "textLow", "RIGHT")
-		row.count:SetPoint("RIGHT", -12, 0)
-	end, function(row, item)
-		if item.header then
-			row.text:SetText(UI.Colorize(item.header, "accent"))
-			row.count:SetText("")
-		else
-			row.text:SetText("  " .. M.ItemName(item.itemID))
-			row.count:SetText("x" .. item.count)
-		end
-	end)
-	panel.list:SetPoint("TOPLEFT", 0, -96)
-	panel.list:SetPoint("TOPRIGHT", 0, -96)
-	panel.list:SetHeight(300)
-	panel:SetScript("OnShow", function() M:RefreshMailPanel() end)
-	M.mailPanel = panel
-	self:RefreshMailPanel()
-end
-
 local events = CreateFrame("Frame")
-for _, e in ipairs({ "MAIL_SHOW", "MAIL_SEND_SUCCESS", "MAIL_FAILED", "MAIL_CLOSED", "BAG_UPDATE_DELAYED" }) do
+for _, e in ipairs({ "PLAYER_LOGIN", "MAIL_SHOW", "MAIL_SEND_SUCCESS", "MAIL_FAILED", "MAIL_CLOSED",
+	"SECURE_TRANSFER_CONFIRM_SEND_MAIL", "SECURE_TRANSFER_CONFIRM_TAKE_MAIL_MONEY" }) do
 	KUI:SafeRegisterEvent(events, e)
 end
 events:SetScript("OnEvent", function(_, event)
-	if event == "MAIL_SHOW" then
-		if MailFrame then
-			M:BuildMailPanel()
-		else
-			C_Timer.After(0.1, function() M:BuildMailPanel() end)
-		end
+	if event == "PLAYER_LOGIN" then
+		C_Timer.After(8, function() M:BefriendAlts() end)
+	elseif event == "MAIL_SHOW" then
 		M:RecordInventory(false)
-		if panel then panel:Show(); M:RefreshMailPanel() end
+		M:BefriendAlts()
 	elseif event == "MAIL_SEND_SUCCESS" then
 		OnSent()
 	elseif event == "MAIL_FAILED" then
@@ -352,7 +313,13 @@ events:SetScript("OnEvent", function(_, event)
 	elseif event == "MAIL_CLOSED" then
 		if run then Finish("Mailbox closed. Sent") end
 		if opener then StopOpening("Mailbox closed:") end
-	elseif event == "BAG_UPDATE_DELAYED" then
-		if not run then M:RefreshMailPanel() end
+	elseif event == "SECURE_TRANSFER_CONFIRM_SEND_MAIL" then
+		if run and run.waiting then
+			run.confirming = true
+			if M.RefreshMailPanel then M:RefreshMailPanel() end
+		end
+	elseif event == "SECURE_TRANSFER_CONFIRM_TAKE_MAIL_MONEY" then
+
+		if opener then opener.confirming = true end
 	end
 end)

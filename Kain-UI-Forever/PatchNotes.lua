@@ -2,11 +2,15 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.362",
+		version = "1.0.363",
 		sections = {
 			{ title = "New", items = {
-				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, posting and cancelling auctions, and Open All at the mailbox.",
+				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, posting and cancelling auctions, and its own mailbox window.",
+				"K-Market has a short tutorial: press Tutorial at the top of its window.",
 				"The Auction House and Guild windows can be dragged with Global Dragging.",
+			} },
+			{ title = "Changes", items = {
+				"K-Market adds the alts you mail to your friends list, so the game stops asking before each mail.",
 			} },
 		},
 	},
@@ -956,7 +960,7 @@ local HELP_COMMANDS = {
 	{ "/kuf unlock", "Kained style: drag your portrait, target, focus, pet and party where you want them. /kuf lock when done, /kuf reset puts them all back. /kui unlock, /kui lock and /kui reset do the same." },
 	{ "/kkey", "K-Key options: talking to NPCs with the keyboard." },
 	{ "/kt", "K-Targeter options: the macro that targets what your quest needs." },
-	{ "/kmarket", "K-Market: your gold over time, item groups, mailing groups to your bank alt or crafters, and posting or cancelling them on the Auction House." },
+	{ "/kmarket or /km", "K-Market: your gold over time, item groups, mailing groups to your bank alt or crafters, and posting or cancelling them on the Auction House." },
 	{ "/rl", "Reload your interface." },
 	{ "/flip", "Flip a coin as an emote (also /coin)." },
 }

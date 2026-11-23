@@ -78,6 +78,10 @@ local function Sanitize(m)
 			for _, p in ipairs(c.points) do
 				if type(p) == "table" and type(p[1]) == "number" and type(p[2]) == "number" then good[#good + 1] = p end
 			end
+
+			for i = #good - 1, 2, -1 do
+				if good[i][2] == 0 and good[i - 1][2] > 0 and good[i + 1][2] > 0 then table.remove(good, i) end
+			end
 			c.points = good
 		end
 	end
@@ -153,11 +157,19 @@ function M:Thin(points, now)
 	return out
 end
 
-function M:RecordMoney()
+local zeroPending
+function M:RecordMoney(confirmed)
 	local key = self:Me()
 	if not key then return end
 	local copper = Plain(GetMoney())
 	if type(copper) ~= "number" then return end
+	if copper == 0 and not confirmed then
+		if not zeroPending and C_Timer and C_Timer.After then
+			zeroPending = true
+			C_Timer.After(5, function() zeroPending = nil; M:RecordMoney(true) end)
+		end
+		return
+	end
 	local now = Now()
 	local db = self:DB()
 	local c = db.gold[key]
@@ -613,6 +625,7 @@ function M:RecordProfessions()
 	local db = self:DB()
 	local c = db.chars[key] or {}
 	c.name, c.realm, c.professions = name, realm, found
+	c.faction = Plain((UnitFactionGroup("player"))) or c.faction
 	db.chars[key] = c
 end
 
@@ -791,4 +804,5 @@ events:SetScript("OnEvent", function(_, event)
 end)
 
 SLASH_KAINUIMARKET1 = "/kmarket"
+SLASH_KAINUIMARKET2 = "/km"
 SlashCmdList["KAINUIMARKET"] = function() if M.ToggleWindow then M:ToggleWindow() end end

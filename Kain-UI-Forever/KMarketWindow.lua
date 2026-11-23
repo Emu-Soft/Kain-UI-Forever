@@ -22,6 +22,7 @@ local function Settings()
 	if type(d.range) ~= "string" then d.range = "ALL" end
 	return d
 end
+M.Settings = Settings
 
 local function ItemName(id)
 	local name = C_Item and C_Item.GetItemInfo and M.Plain((C_Item.GetItemInfo(id)))
@@ -64,6 +65,8 @@ end
 
 local function Refresh()
 	if not frame or not frame:IsShown() then return end
+	frame.total:SetText(ShortMoney(M:GoldAt(nil, Now()) or 0))
+	if M.RefreshTutorialButton then M:RefreshTutorialButton() end
 	local page = pages[state.page]
 	if page and page.Refresh then page:Refresh() end
 end
@@ -71,6 +74,7 @@ function M:RefreshWindow() Refresh() end
 
 local Y_LABEL_W, X_LABEL_H, X_LABEL_W = 48, 16, 48
 local HOVER_TEXT_H, PLOT_TOP_MARGIN, EXTRA_HIT = 16, 4, 4
+local HOVER_TEXT_W = 160
 local LINE_THICKNESS, MAX_POINTS = 3, 300
 local MIN_X_SPACING = X_LABEL_W * 1.5 + 8
 local MIN_Y_SPACING = X_LABEL_H * 1.5 + 8
@@ -328,15 +332,20 @@ local function NewGraph(parent, width, height)
 			plot.hoverLine:SetPoint("TOP", plot, "TOPLEFT", cx, 0)
 			plot.hoverLine:SetPoint("BOTTOM", plot, "BOTTOMLEFT", cx, 0)
 			plot.hoverLine:Show()
-			plot.hoverText:SetText(ShortMoney(y))
-			local tw = plot.hoverText:GetStringWidth() or 60
-			plot.hoverText:SetWidth(tw + 2)
+
+			local text = ShortMoney(y)
+			plot.hoverText:SetText(text)
+			local tw = math.max(plot.hoverText:GetStringWidth() or 0, #text * 7)
+			plot.hoverText:SetWidth(HOVER_TEXT_W)
 			plot.hoverText:ClearAllPoints()
 			if cx - tw / 2 < 0 then
+				plot.hoverText:SetJustifyH("LEFT")
 				plot.hoverText:SetPoint("BOTTOMLEFT", plot, "TOPLEFT", 0, PLOT_TOP_MARGIN)
 			elseif cx + tw / 2 > g.w then
+				plot.hoverText:SetJustifyH("RIGHT")
 				plot.hoverText:SetPoint("BOTTOMRIGHT", plot, "TOPRIGHT", 0, PLOT_TOP_MARGIN)
 			else
+				plot.hoverText:SetJustifyH("CENTER")
 				plot.hoverText:SetPoint("BOTTOM", plot, "TOPLEFT", cx, PLOT_TOP_MARGIN)
 			end
 			plot.hoverText:Show()
@@ -358,7 +367,7 @@ local function NewGraph(parent, width, height)
 			g:Draw()
 			plot:SetScript("OnUpdate", nil)
 		end
-		if g.onHover then g.onHover(hovered and x or nil) end
+		if g.onHover then g.onHover(hovered and x or nil, hovered and y or nil) end
 	end
 	g.OnUpdate = OnUpdate
 
@@ -628,8 +637,12 @@ local function BuildDashboard(page)
 	page.graph = NewGraph(content, CW, graphH)
 	page.graph.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -86)
 	page.graph.valueFunc = function(t) return M:GoldAt(page.keys, t) end
-	page.graph.onHover = function(t)
-		page.dateText:SetText(t and DateTimeText(t) or DateText(Now()))
+	page.graph.onHover = function(t, copper)
+		if t then
+			page.dateText:SetText(DateTimeText(t) .. "   " .. ShortMoney(copper))
+		else
+			page.dateText:SetText(DateText(Now()))
+		end
 	end
 	page.graph.onZoom = function()
 		state.zoomed = true
@@ -1361,6 +1374,18 @@ local function Build()
 	local close = UI.Button(header, "X", 24, 24, "tertiary", "KainUIForeverMarketClose")
 	close:SetPoint("RIGHT", -10, 0)
 	close:SetScript("OnClick", function() frame:Hide() end)
+
+	local help = UI.Button(header, "Tutorial", 84, 24, "secondary", "KainUIForeverMarketTutorialButton")
+	help:SetPoint("RIGHT", close, "LEFT", -8, 0)
+	help.kmTip = "What K-Market is, how it works and how to set it up."
+	help:SetScript("OnClick", function() if M.ShowTutorial then M:ShowTutorial() end end)
+	frame.help = help
+
+	frame.total = UI.Text(header, "numeric/regular/small", "text", "RIGHT")
+	frame.total:SetPoint("RIGHT", help, "LEFT", -16, 0)
+	frame.totalLabel = UI.Text(header, "body/medium/x-small", "textLow", "RIGHT")
+	frame.totalLabel:SetPoint("RIGHT", frame.total, "LEFT", -6, 0)
+	frame.totalLabel:SetText("TOTAL GOLD")
 	frame.tabs = UI.Tabs(header, PAGE_NAMES, function(i)
 		state.page = i
 		for j, p in ipairs(pages) do p:SetShown(j == i) end

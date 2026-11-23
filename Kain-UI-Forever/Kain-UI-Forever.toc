@@ -2,7 +2,7 @@
 ## Title: K-UI: Forever
 ## Notes: Edit-Mode+ for WoW Forever - Featuring K-Key & K-Targeter. Now with Emojis! Type /kui in-game.
 ## Author: [EmuSoft]
-## Version: 1.0.362
+## Version: 1.0.363
 ## Category: K-Mods
 ## IconTexture: Interface\AddOns\Kain-UI-Forever\Media\AddonIcon
 ## SavedVariables: KTargeterDB, KainUIForeverAccountDB, KainUIForeverKoSDB
@@ -48,8 +48,10 @@ ErrorText.lua
 KMarket.lua
 KMarketStyle.lua
 KMarketMail.lua
+KMarketMailUI.lua
 KMarketAuction.lua
 KMarketWindow.lua
+KMarketTutorial.lua
 StunFix.lua
 KoS.lua
 GCDWatch\Core.lua
