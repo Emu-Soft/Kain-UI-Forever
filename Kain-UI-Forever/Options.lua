@@ -1021,6 +1021,15 @@ local function BuildPanel()
 				function(checked) KUI:SetMailAutoSubject(checked) end)
 			y4 = y4 - 26
 		end
+
+		if KUI.Market and KUI.Market.ToggleWindow then
+			local marketButton = CreateFrame("Button", "KainUIForeverMarketOpenButton", content, "UIPanelButtonTemplate")
+			marketButton:SetSize(150, 22)
+			marketButton:SetPoint("TOPLEFT", COL4_X, y4)
+			marketButton:SetText("K-Market")
+			marketButton:SetScript("OnClick", function() KUI.Market:ToggleWindow() end)
+			y4 = y4 - 30
+		end
 	end
 
 	if KUI.SetXPBarUnderPortrait then

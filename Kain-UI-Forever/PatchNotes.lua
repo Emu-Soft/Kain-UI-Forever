@@ -2,9 +2,10 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
-		version = "1.0.360",
+		version = "1.0.361",
 		sections = {
 			{ title = "New", items = {
+				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, and posting groups to the Auction House.",
 				"The Auction House and Guild windows can be dragged with Global Dragging.",
 			} },
 		},
@@ -955,6 +956,7 @@ local HELP_COMMANDS = {
 	{ "/kuf unlock", "Kained style: drag your portrait, target, focus, pet and party where you want them. /kuf lock when done, /kuf reset puts them all back. /kui unlock, /kui lock and /kui reset do the same." },
 	{ "/kkey", "K-Key options: talking to NPCs with the keyboard." },
 	{ "/kt", "K-Targeter options: the macro that targets what your quest needs." },
+	{ "/kmarket", "K-Market: your gold over time, item groups, mailing groups to your bank alt or crafters, and posting them on the Auction House." },
 	{ "/rl", "Reload your interface." },
 	{ "/flip", "Flip a coin as an emote (also /coin)." },
 }

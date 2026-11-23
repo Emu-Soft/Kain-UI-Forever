@@ -81,6 +81,16 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - Hide any **micro menu** button, or the whole menu.
 - **Vendor**: auto-sell greys and auto-repair, optionally with guild funds.
 
+### K-Market (trading)
+Open it with the **K-Market** button in the settings (under Windows) or `/kmarket`. Groups and operations are shared by all your characters.
+- **Gold graph**: your gold over the last day, week, month or all time, for one character or all of them added up. Hover the graph for the amount at any moment.
+- **Groups**: lists of items. Drop an item on a group to add it, right-click to take it out, or paste a TSM-style list like `i:2589,i:2592` (item links work too). Export gives the same kind of list back.
+- **Operations**, one of each kind per group:
+  - **Mail**: send the group's items to a character (your bank alt), keeping as many as you choose. On the mailbox's Send Mail tab, one click on **K-Market: Send groups** sends every mail, 12 stacks each.
+  - **Crafter**: the same, sent to whichever of your characters has the profession you pick (log in on each character once so K-Market knows their professions), or to a name you type.
+  - **Post**: at the Auction House, the **K-Market: Post groups** button scans each item and then posts it at the lowest price minus your undercut. It never goes below your minimum price, uses your normal price when nobody else is selling, and won't undercut your own auctions. The game needs one click per post, so each item takes two clicks: one to scan, one to post.
+- Bound items are never mailed or posted, and nothing happens in combat.
+
 ### Questing
 - **K-Key**: talk to NPCs from the keyboard. Number keys pick options and rewards; Space accepts quests and moves the text along.
 - **K-Targeter**: one macro that always targets whatever your tracked quest needs next.
@@ -129,6 +139,7 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 | `/kos off` / `on` | Turn K-UI's kill list off or on (after a reload). |
 | `/kkey` | K-Key options. |
 | `/kt` | K-Targeter options. |
+| `/kmarket` | Open K-Market: gold graph, item groups, mailing and auction posting. |
 | `/rl` | Reload your interface. |
 | `/flip` (or `/coin`) | Flip a coin as an emote. Target someone first to flip for them. |
 
