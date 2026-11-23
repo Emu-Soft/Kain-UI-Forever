@@ -75,7 +75,7 @@ Hover the small **i** icons in the settings to read what an option does. The blu
 - **Screenshot on level up**: a screenshot of every milestone, saved to your Screenshots folder.
 
 ### Windows, bags and loot
-- **Global Dragging**: move the Character, Spellbook, Talents, Map, Quest Log, bags, professions, vendor, Social and more by their title bar.
+- **Global Dragging**: move the Character, Spellbook, Talents, Map, Quest Log, bags, professions, vendor, Social, Auction House, Guild and more by their title bar.
 - **Fast loot**, and **draggable loot roll windows** that never end up off-screen.
 - Hide any **bag slot** (keyring included) and the bag bar's background art.
 - Hide any **micro menu** button, or the whole menu.

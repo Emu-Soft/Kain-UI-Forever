@@ -1012,7 +1012,7 @@ local function BuildPanel()
 			function() return KUI.db.globalDragging end,
 			function(checked) KUI:SetGlobalDragging(checked) end)
 		AddInfoButton(content, dragCheck.label, "Enable Global Dragging",
-			"Drag the Character, Macro, Spellbook/Talents, Map/Quest Log, Combined Bags, professions, quest dialogue, vendor, calendar and Social windows by their title bar. /kainui resetdrag puts them back.")
+			"Drag the Character, Macro, Spellbook/Talents, Map/Quest Log, Combined Bags, professions, quest dialogue, vendor, calendar, Social, Auction House and Guild windows by their title bar. /kainui resetdrag puts them back.")
 		y4 = y4 - 26
 
 		if KUI.SetMailAutoSubject then

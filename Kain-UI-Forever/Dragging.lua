@@ -35,6 +35,9 @@ local DRAG_TARGETS = {
 	{ key = "legacy", label = "Legacy Tree", names = { "LegacySystemFrame" } },
 
 	{ key = "social", label = "Social", names = { "SocialUIFrame" } },
+
+	{ key = "auctionhouse", label = "Auction House", names = { "AuctionHouseFrame", "AuctionFrame" } },
+	{ key = "guild", label = "Guild", names = { "CommunitiesFrame" } },
 }
 
 local states = setmetatable({}, { __mode = "k" })

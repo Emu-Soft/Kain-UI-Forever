@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.360",
+		sections = {
+			{ title = "New", items = {
+				"The Auction House and Guild windows can be dragged with Global Dragging.",
+			} },
+		},
+	},
+	{
 		version = "1.0.359",
 		sections = {
 			{ title = "New", items = {
