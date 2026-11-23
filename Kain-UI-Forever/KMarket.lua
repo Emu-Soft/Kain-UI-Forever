@@ -775,10 +775,13 @@ events:SetScript("OnEvent", function(_, event, arg)
 	elseif event == "SKILL_LINES_CHANGED" then
 		M:RecordProfessions()
 	elseif event == "MAIL_SHOW" then
+
 		M:BuildMailButton()
+		C_Timer.After(0.1, function() M:BuildMailButton() end)
 	elseif event == "AUCTION_HOUSE_SHOW" then
 		M:BuildPostButton()
 		M:RefreshPostButton()
+		C_Timer.After(0.1, function() M:BuildPostButton(); M:RefreshPostButton() end)
 	elseif event:find("^MAIL_") then
 		OnMailEvent(event)
 	else
