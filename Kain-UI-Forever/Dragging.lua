@@ -38,6 +38,8 @@ local DRAG_TARGETS = {
 
 	{ key = "auctionhouse", label = "Auction House", names = { "AuctionHouseFrame", "AuctionFrame" } },
 	{ key = "guild", label = "Guild", names = { "CommunitiesFrame" } },
+
+	{ key = "lfg", label = "Looking For Group", names = { "LFGParentFrame" } },
 }
 
 local states = setmetatable({}, { __mode = "k" })
