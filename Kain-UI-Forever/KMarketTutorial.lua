@@ -164,7 +164,7 @@ local PAGES = {
 		text = "An operation is a job you give a group. A group can have one of each kind:\n\n"
 			.. Y .. "Mailing" .. R .. "    Send to an alt. Keep some back.\n"
 			.. Y .. "Crafter" .. R .. "    Send reagents to whoever crafts with them.\n"
-			.. Y .. "Auctioning" .. R .. "    Your price: undercut, minimum, maximum.",
+			.. Y .. "Auctioning" .. R .. "    List at the going price, between your minimum and maximum.",
 		picture = function(stage)
 			Flow(stage, {
 				Chip(stage, "Cloth", 120, 32, LINEN),
@@ -178,7 +178,7 @@ local PAGES = {
 			}, 115)
 			Flow(stage, {
 				Chip(stage, "Herbs", 120, 32, PEACEBLOOM),
-				Chip(stage, "Auctioning: 1c under, min 50s", 220, 32, nil, "accentDark"),
+				Chip(stage, "Auctioning: going price, min 50s", 220, 32, nil, "accentDark"),
 				Chip(stage, "Auction House", 140, 32, COIN),
 			}, 180)
 		end,
@@ -215,7 +215,7 @@ local PAGES = {
 	{
 		title = "At the Auction House",
 		text = "The K-Market panel sits to the right of the Auction House.\n\n"
-			.. Y .. "1" .. R .. "  " .. Y .. "Load Next" .. R .. " puts your next group item in the Sell tab at your price. Or right-click any bag item.\n"
+			.. Y .. "1" .. R .. "  " .. Y .. "Load Next" .. R .. " puts your next group item in the Sell tab at the going price. Or right-click any bag item.\n"
 			.. Y .. "2" .. R .. "  " .. Y .. "Post" .. R .. " lists it. The next item loads by itself.\n"
 			.. Y .. "3" .. R .. "  Keep clicking Post: one click, one listing. If the game says you're too fast, click again.\n\n"
 			.. Y .. "Skip" .. R .. " passes an item. " .. Y .. "Next Item" .. R .. " shows when an item has no price.",
@@ -249,11 +249,11 @@ local PAGES = {
 	},
 	{
 		title = "Prices",
-		text = "Auctioning prices can be fixed (1g 50s) or follow the market (90% market).\n\n"
+		text = "Auctioning lists at the going price: the cheapest auction up. No undercutting: the game sells the cheapest first anyway, so going lower only drops the price.\n"
+			.. "Minimum, normal (nobody selling) and maximum can be fixed (1g 50s) or follow the market (90% market).\n\n"
 			.. "Market prices come from the free " .. Y .. "K-Market Prices" .. R .. " app: github.com/Emu-Soft/K-Market-Prices. "
-			.. "Item tooltips then show the K-Market Value and its age: green is fresh, red is a day old.\n\n"
-			.. Y .. "Cancel Scan" .. R .. " finds your auctions that were undercut: one cancel a click. "
-			.. Y .. "Price Scan" .. R .. " prices your recipes for the profit list beside the profession window.",
+			.. "Tooltips show the K-Market Value and its age: green is fresh, red is a day old.\n\n"
+			.. Y .. "Cancel Scan" .. R .. " finds your auctions with a cheaper one up, to list again at the going price.",
 		picture = function(stage)
 			local tip = UI.Panel(stage, "high", 6)
 			tip:SetSize(220, 96)
@@ -262,8 +262,8 @@ local PAGES = {
 			value:SetPoint("TOPLEFT", 12, -40)
 			Label(tip, Coins(4500), "numeric/regular/x-small", "text", "RIGHT"):SetPoint("TOPRIGHT", -12, -40)
 			Label(tip, G .. "Updated 12 min ago" .. R, "body/regular/x-small", "text"):SetPoint("TOPLEFT", 12, -62)
-			local rule = Chip(stage, "Post at: 90% market", 170, 32, RUNECLOTH, "accentDark")
-			local post = Chip(stage, "Post " .. M.ShortMoney(4050) .. " each", 140, 32, COIN)
+			local rule = Chip(stage, "Cheapest up: " .. M.ShortMoney(4500), 170, 32, RUNECLOTH, "accentDark")
+			local post = Chip(stage, "Post " .. M.ShortMoney(4500) .. " each", 140, 32, COIN)
 			Flow(stage, { tip, rule, post })
 		end,
 	},

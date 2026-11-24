@@ -5,7 +5,7 @@ local PATCH_NOTES = {
 		version = "1.0.368",
 		sections = {
 			{ title = "New", items = {
-				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, quick listing from the Sell tab, cancelling undercut auctions, and its own mailbox window.",
+				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, quick listing from the Sell tab at the going price (no undercutting), cancelling auctions with a cheaper one up, and its own mailbox window.",
 				"K-Market sorts your items into ready-made groups (crafting reagents by profession, cloth, bind-on-equip gear, potions) and shows what is profitable to craft beside the profession window.",
 				"K-Market has a short tutorial with pictures: press Tutorial at the top of its window.",
 				"Hovering K-Market's Total Gold lists the gold on each of your characters.",

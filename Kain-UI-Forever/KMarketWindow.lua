@@ -1166,13 +1166,12 @@ M.OP_FIELDS = {
 		{ "duration", "Duration", "choice", "How long auctions stay up.", DURATIONS },
 		{ "postCap", "Post cap", "number", "How many auctions to have up at once (for stackable goods: how many items)." },
 		{ "keep", "Keep in bags", "number", "How many of each item not to post." },
-		{ "undercut", "Undercut", "money", "How far under the lowest auction to post. Your own lowest auction is matched, not undercut." },
 		{ "minPrice", "Minimum price", "price", "Never post under this (per item). An amount, or a price like 80% market." },
 		{ "normalPrice", "Normal price", "price", "Used when nobody else is selling (per item). An amount, or market." },
 		{ "maxPrice", "Maximum price", "price", "The most to post at (0 = no maximum). An amount, or 200% market." },
 		{ "belowMin", "Below minimum", "choice", "When the lowest auction is under your minimum.", PRICE_CHOICES },
 		{ "aboveMax", "Above maximum", "choice", "When the lowest auction is over your maximum.", PRICE_CHOICES },
-		{ "cancelUndercut", "Cancel undercut", "toggle", "A cancel scan offers to cancel your auctions that someone has undercut." },
+		{ "cancelUndercut", "Cancel if cheaper", "toggle", "A cancel scan offers to cancel your auctions when a cheaper one is up, so you can list again at the going price." },
 	},
 }
 

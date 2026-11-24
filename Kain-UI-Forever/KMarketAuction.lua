@@ -25,24 +25,21 @@ function M:PostPrice(op, lowest, ours, itemID)
 	if not normal then return nil, why2 end
 	local max, why3 = Price("maxPrice")
 	if not max then return nil, why3 end
-	local undercut = tonumber(op.undercut) or 0
 	local prices = { minPrice = min, normalPrice = normal, maxPrice = max > 0 and max or normal }
 	local price, how
 	if not lowest then
 		if normal <= 0 then return nil, "nobody is selling it and no normal price is set" end
 		price, how = normal, "normal price (nobody else selling)"
-	elseif lowest - undercut < min then
+	elseif lowest < min then
 		local reset = RESET[op.belowMin]
 		if not reset then return nil, "the going price is under your minimum" end
 		price, how = prices[reset], "below your minimum: " .. reset:gsub("Price", " price")
-	elseif ours then
-		price, how = lowest, "matching your own lowest auction"
-	elseif max > 0 and lowest - undercut > max then
+	elseif max > 0 and lowest > max then
 		local reset = RESET[op.aboveMax]
 		if not reset then return nil, "the going price is over your maximum" end
 		price, how = prices[reset], "above your maximum: " .. reset:gsub("Price", " price")
 	else
-		price, how = lowest - undercut, "undercutting"
+		price, how = lowest, ours and "the going price (your own auction)" or "the going price"
 	end
 	price = math.max(price, min)
 	if price >= 100 then price = math.floor(price / 100) * 100 end
@@ -451,9 +448,8 @@ function M:OnOwnedAuctions()
 			if cancel ~= run then return end
 			for _, e in ipairs(list) do
 				local others = results.othersLowest
-				local undercut = tonumber(e.op.undercut) or 0
-				if others and others < e.price and others - undercut >= (tonumber(e.op.minPrice) or 0) then
-					e.state, e.reason = "ready", "undercut: lowest is " .. M.ShortMoney(others)
+				if others and others < e.price and others >= (tonumber(e.op.minPrice) or 0) then
+					e.state, e.reason = "ready", "cheaper one up: " .. M.ShortMoney(others)
 				else
 					e.state = "fine"
 				end
@@ -461,7 +457,7 @@ function M:OnOwnedAuctions()
 			M:RefreshAuctionPanel()
 		end })
 	end
-	if #cancel.entries == 0 then Say("none of your auctions are in a group whose Auctioning operation cancels undercut auctions.") end
+	if #cancel.entries == 0 then Say("none of your auctions are in a group whose Auctioning operation has Cancel if cheaper on.") end
 	self:RefreshAuctionPanel()
 end
 
@@ -523,7 +519,7 @@ function M:QueryOwnedSoon(delay)
 end
 
 local panel
-local STATE_TEXT = { scanning = "scanning...", ready = nil, skip = nil, done = "listed", fine = "not undercut" }
+local STATE_TEXT = { scanning = "scanning...", ready = nil, skip = nil, done = "listed", fine = "cheapest up" }
 
 function M:RefreshAuctionPanel()
 	if not panel or not panel:IsShown() then return end
@@ -537,7 +533,7 @@ function M:RefreshAuctionPanel()
 		end
 		action, enabled = "Cancel Auction", ready > 0
 		status = cancel.waitingOwned and "Reading your auctions..." or scanning > 0 and string.format("Scanning: %d to go.", scanning)
-			or string.format("%d undercut auction(s) to cancel.", ready)
+			or string.format("%d auction(s) with a cheaper one up.", ready)
 		panel.mode = "cancel"
 	else
 		panel.mode = "sell"
@@ -629,7 +625,7 @@ function M:BuildAuctionPanel()
 	panel.empty:SetPoint("TOPLEFT", 12, -142)
 	panel.empty:SetWidth(276)
 	panel.empty:SetWordWrap(true)
-	panel.empty:SetText("Right-click an item in your bags to put it in the Sell tab, then press Post. Items in a group with an Auctioning operation are listed here and go in one after another. Cancel Scan finds your auctions someone has undercut.")
+	panel.empty:SetText("Right-click an item in your bags to put it in the Sell tab, then press Post. Items in a group with an Auctioning operation are listed here and go in one after another. Cancel Scan finds your auctions with a cheaper one up.")
 	panel.list = UI.List(panel, 34, 11, function(row)
 		row.icon = row:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(24, 24)

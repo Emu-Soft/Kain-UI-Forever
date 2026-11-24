@@ -35,7 +35,7 @@ local OP_DEFAULTS = {
 	mail = { to = "", keep = 0, maxQty = 0, restock = false },
 	crafter = { profession = "", to = "", keep = 0, maxQty = 0, restock = false },
 
-	post = { keep = 0, postCap = 5, duration = 2, undercut = 100, minPrice = 0, normalPrice = 0, maxPrice = 0,
+	post = { keep = 0, postCap = 5, duration = 2, minPrice = 0, normalPrice = 0, maxPrice = 0,
 		belowMin = "none", aboveMax = "maxPrice", cancelUndercut = true },
 }
 M.OP_DEFAULTS = OP_DEFAULTS
