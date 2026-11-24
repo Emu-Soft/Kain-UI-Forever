@@ -141,8 +141,8 @@ local STEPS = {
 M.TUTORIAL_STEPS = STEPS
 
 local function NextStep()
-	for _, s in ipairs(STEPS) do
-		if s.go and not s.done() then return s end
+	for i, s in ipairs(STEPS) do
+		if s.go and not s.done() then return s, i end
 	end
 end
 
@@ -345,7 +345,7 @@ local PAGES = {
 				if s.go then
 					row.go = UI.Button(row, "Go", 72, 24, "secondary")
 					row.go:SetPoint("RIGHT", -10, 0)
-					row.go:SetScript("OnClick", function() GoTo(s.go) end)
+					row.go:SetScript("OnClick", function() GoTo(s.go, i) end)
 				end
 				stage.rows[i] = row
 			end
@@ -372,9 +372,27 @@ local at = 1
 
 local function Seen() return M.Settings and M.Settings().tutorialSeen end
 
+local function Resume()
+	local d = M.Settings and M.Settings()
+	if not d then return end
+	local page = tonumber(d.tutorialResume)
+	if page and PAGES[page] then return page, STEPS[tonumber(d.tutorialResumeStep) or 0] end
+end
+
+local function SetResume(page, step)
+	local d = M.Settings()
+	d.tutorialResume, d.tutorialResumeStep = page, step
+end
+
+local function ShouldPulse()
+	if not Seen() then return true end
+	local _, step = Resume()
+	return step ~= nil and step.done()
+end
+
 local function LastAction()
-	local s = NextStep()
-	return s and s.button or "Done", s and s.go
+	local s, i = NextStep()
+	return s and s.button or "Done", s and s.go, i
 end
 
 local function ShowAt(i)
@@ -396,9 +414,17 @@ local function ShowAt(i)
 	UI.ButtonText(panel.next, at == #PAGES and (LastAction()) or "Next")
 end
 
-GoTo = function(page)
+GoTo = function(page, step)
+	SetResume(at, step)
 	panel:Hide()
 	M:ToggleWindow(page)
+	M:RefreshTutorialButton()
+end
+
+local function Close()
+	SetResume(nil, nil)
+	panel:Hide()
+	M:RefreshTutorialButton()
 end
 
 local function Build()
@@ -437,15 +463,15 @@ local function Build()
 	panel.next:SetPoint("BOTTOMRIGHT", -24, 16)
 	panel.next:SetScript("OnClick", function()
 		if at < #PAGES then ShowAt(at + 1) return end
-		local _, go = LastAction()
-		if go then GoTo(go) else panel:Hide() end
+		local _, go, step = LastAction()
+		if go then GoTo(go, step) else Close() end
 	end)
 	panel.back = UI.Button(card, "Back", 100, 26, "secondary")
 	panel.back:SetPoint("RIGHT", panel.next, "LEFT", -8, 0)
 	panel.back:SetScript("OnClick", function() ShowAt(at - 1) end)
 	local close = UI.Button(card, "X", 24, 24, "tertiary")
 	close:SetPoint("TOPRIGHT", -10, -10)
-	close:SetScript("OnClick", function() panel:Hide() end)
+	close:SetScript("OnClick", Close)
 
 	panel:SetScript("OnHide", function() M:RefreshWindow() end)
 	M.tutorial = panel
@@ -454,7 +480,8 @@ end
 function M:ShowTutorial()
 	if not (self.frame and self.frame:IsShown()) then self:ToggleWindow(1) end
 	if not panel then Build() end
-	local start = (Seen() and #self:GroupPaths() == 0) and #PAGES or 1
+	local start = Resume() or ((Seen() and #self:GroupPaths() == 0) and #PAGES or 1)
+	SetResume(nil, nil)
 	if M.Settings then M.Settings().tutorialSeen = true end
 	self:RefreshTutorialButton()
 	ShowAt(start)
@@ -464,21 +491,29 @@ end
 function M:RefreshTutorialButton()
 	local b = self.frame and self.frame.help
 	if not b then return end
-	if Seen() then
+	local resume = Resume() ~= nil
+	UI.ButtonText(b, resume and "Back to Tutorial" or "Tutorial")
+	b:SetWidth(resume and 132 or 84)
+	b.kmTip = resume and "Back to the tutorial page you were on." or "What K-Market is, how it works and how to set it up."
+	if not ShouldPulse() then
 		b:SetScript("OnUpdate", nil)
-		b.kmBg:SetColor("high", 1)
-		UI.TextColor(b.kmText, "text")
+		b.kmPulsing = nil
+		b.kmBg:SetColor(resume and "accent" or "high", 1)
+		UI.TextColor(b.kmText, resume and "onAccent" or "text")
 		return
 	end
 	if b.kmPulsing then return end
 	b.kmPulsing = true
-	local t = 0
+	local t, check = 0, 0
 	b:SetScript("OnUpdate", function(button, elapsed)
-		t = t + elapsed
+		t, check = t + elapsed, check + elapsed
 		local a = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(t * 4))
 		button.kmBg:SetColor("accent", a)
 		UI.TextColor(button.kmText, a > 0.6 and "onAccent" or "text")
-		if Seen() then button.kmPulsing = nil; M:RefreshTutorialButton() end
+		if check > 0.5 then
+			check = 0
+			if not ShouldPulse() then button.kmPulsing = nil; M:RefreshTutorialButton() end
+		end
 	end)
 end
 
