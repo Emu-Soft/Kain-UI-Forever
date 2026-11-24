@@ -120,6 +120,25 @@ function P:Newest(itemID)
 	return best, age
 end
 
+local GREEN, YELLOW, RED = { 0.1, 1, 0.1 }, { 1, 0.85, 0 }, { 1, 0.2, 0.2 }
+local function Mix(a, b, f) return a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f end
+function P.AgeColor(age)
+	local h = math.max(0, age) / 3600
+	if h <= 1 then return GREEN[1], GREEN[2], GREEN[3] end
+	if h <= 6 then return Mix(GREEN, YELLOW, (h - 1) / 5) end
+	if h < 24 then return Mix(YELLOW, RED, (h - 6) / 18) end
+	return RED[1], RED[2], RED[3]
+end
+
+local function Coins(copper)
+	if GetCoinTextureString then
+		local ok, text = pcall(GetCoinTextureString, copper)
+		if ok and type(text) == "string" and text ~= "" then return text end
+	end
+	return M.FormatMoney(copper)
+end
+P.Coins = Coins
+
 function P.UpdatedText(age)
 	if age < 60 then return "Updated just now" end
 	return "Updated " .. AgeText(age) .. " ago"
@@ -149,8 +168,8 @@ local function AddLines(tooltip, itemID)
 	if not TooltipOn() or not tooltip or not tooltip.AddDoubleLine then return end
 	local value, age = P:Newest(itemID)
 	if not value then return end
-	tooltip:AddDoubleLine("K-Market Value", M.FormatMoney(value), 0.88, 0.73, 0, 1, 1, 1)
-	if tooltip.AddLine then tooltip:AddLine(P.UpdatedText(age), 0.72, 0.75, 0.75) end
+	tooltip:AddDoubleLine("K-Market Value", Coins(value), 0.88, 0.73, 0, 1, 1, 1)
+	if tooltip.AddLine then tooltip:AddLine(P.UpdatedText(age), P.AgeColor(age)) end
 	if tooltip.Show then tooltip:Show() end
 end
 P.AddTooltipLines = AddLines

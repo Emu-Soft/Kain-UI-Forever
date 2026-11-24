@@ -8,7 +8,7 @@ local PATCH_NOTES = {
 				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, posting and cancelling auctions, and its own mailbox window.",
 				"K-Market sorts your items into ready-made groups (crafting reagents by profession, cloth, bind-on-equip gear, potions) and shows what is profitable to craft beside the profession window.",
 				"K-Market has a short tutorial: press Tutorial at the top of its window.",
-				"K-Market reads hourly auction prices from the free K-Market Prices app (github.com/Emu-Soft/K-Market-Prices): item tooltips show its K-Market Value, the newest auction price, with how long ago it was updated, and post prices can follow the market, for example 90% market. Type /km prices to see how fresh they are.",
+				"K-Market reads hourly auction prices from the free K-Market Prices app (github.com/Emu-Soft/K-Market-Prices): item tooltips show its K-Market Value, the newest auction price, with how long ago it was updated (green when fresh, red once a day old), and post prices can follow the market, for example 90% market. Type /km prices to see how fresh they are.",
 				"The Auction House, Guild and Looking For Group windows can be dragged with Global Dragging, each keeping its own spot.",
 			} },
 			{ title = "Changes", items = {
