@@ -348,7 +348,9 @@ function M:PostClick()
 	local ok, why = true, nil
 	if f.CanPostItem then ok, why = f:CanPostItem() end
 	if not ok then
-		Say("the game won't list it yet" .. (type(why) == "string" and (": " .. why) or "") .. ".")
+
+		local throttled = C_AuctionHouse.IsThrottledMessageSystemReady and not C_AuctionHouse.IsThrottledMessageSystemReady()
+		if not throttled and type(why) == "string" and why ~= "" then Say("the game won't list it: " .. why) end
 		return
 	end
 	local count = (f.GetQuantity and f:GetQuantity()) or cur.count or 1
