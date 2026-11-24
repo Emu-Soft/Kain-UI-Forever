@@ -9,6 +9,7 @@ local PATCH_NOTES = {
 				"K-Market sorts your items into ready-made groups (crafting reagents by profession, cloth, bind-on-equip gear, potions) and shows what is profitable to craft beside the profession window.",
 				"K-Market has a short tutorial with pictures (press Tutorial at the top of its window) that ends on a set-up checklist: each step ticks itself off when done, and Go takes you there. After Show me or Go, Back to Tutorial (the same button) returns you to the page you were on. The first time you use the mailbox, the Auction House and the Dashboard, a small tip points at the button to press.",
 				"Hovering K-Market's Total Gold lists the gold on each of your characters.",
+				"K-Market's operation settings each say what they do, with an example of what to type and what 0 means. Auctioning operations have a Recommended prices button (minimum 80% of market, normal at market, maximum double), and warn you when the minimum is 0.",
 				"K-Market's Auction House panel shows the value of your auctions still up and of those sold and waiting in the mail.",
 				"K-Market reads hourly auction prices from the free K-Market Prices app (github.com/Emu-Soft/K-Market-Prices): item tooltips show its K-Market Value, the newest auction price, with how long ago it was updated (green when fresh, red once a day old), and post prices can follow the market, for example 90% market. Type /km prices to see how fresh they are.",
 				"The Auction House, Guild and Looking For Group windows can be dragged with Global Dragging, each keeping its own spot.",

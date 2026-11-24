@@ -1155,30 +1155,47 @@ for _, p in ipairs(M.PROFESSIONS) do PROFESSION_CHOICES[#PROFESSION_CHOICES + 1]
 
 M.OP_FIELDS = {
 	mail = {
-		{ "to", "Send to", "text", "Your bank alt's name, surname included (First Surname)." },
-		{ "keep", "Keep in bags", "number", "How many of each item to keep." },
-		{ "maxQty", "Send up to", "number", "At most this many of each item (0 = everything above Keep)." },
-		{ "restock", "Restock", "toggle", "Only send what tops the target up to \"Send up to\", counting what they already have." },
+		{ "to", "Send to", "text", "Your alt's full name, with the space: Bankie Vault." },
+		{ "keep", "Keep in bags", "number", "How many of each item stay in your bags. 0 = send them all." },
+		{ "maxQty", "Send up to", "number", "The most of each item to send. 0 = no limit." },
+		{ "restock", "Restock", "toggle", "Count what the alt already has, and only send enough to reach Send up to." },
 	},
 	crafter = {
-		{ "profession", "Profession", "choice", "Sends to your character with this profession.", PROFESSION_CHOICES },
-		{ "to", "Or send to", "text", "Leave blank to find your crafter by profession." },
-		{ "keep", "Keep in bags", "number", "How many of each item to keep." },
-		{ "maxQty", "Send up to", "number", "At most this many of each item (0 = everything above Keep)." },
-		{ "restock", "Restock", "toggle", "Only send what tops the crafter up to \"Send up to\", counting what they already have." },
+		{ "profession", "Profession", "choice", "K-Market sends to your character with this profession.", PROFESSION_CHOICES },
+		{ "to", "Or send to", "text", "Or type a name: Smithy Ironfist. Leave it blank to find them by profession." },
+		{ "keep", "Keep in bags", "number", "How many of each item stay in your bags. 0 = send them all." },
+		{ "maxQty", "Send up to", "number", "The most of each item to send. 0 = no limit." },
+		{ "restock", "Restock", "toggle", "Count what the crafter already has, and only send enough to reach Send up to." },
 	},
 	post = {
-		{ "duration", "Duration", "choice", "How long auctions stay up.", DURATIONS },
-		{ "postCap", "Post cap", "number", "How many auctions to have up at once (for stackable goods: how many items)." },
-		{ "keep", "Keep in bags", "number", "How many of each item not to post." },
-		{ "minPrice", "Minimum price", "price", "Never post under this (per item). An amount, or a price like 80% market." },
-		{ "normalPrice", "Normal price", "price", "Used when nobody else is selling (per item). An amount, or market." },
-		{ "maxPrice", "Maximum price", "price", "The most to post at (0 = no maximum). An amount, or 200% market." },
-		{ "belowMin", "Below minimum", "choice", "When the lowest auction is under your minimum.", PRICE_CHOICES },
-		{ "aboveMax", "Above maximum", "choice", "When the lowest auction is over your maximum.", PRICE_CHOICES },
-		{ "cancelUndercut", "Cancel if cheaper", "toggle", "A cancel scan offers to cancel your auctions when a cheaper one is up, so you can list again at the going price." },
+		{ "duration", "Duration", "choice", "How long each auction stays up.", DURATIONS },
+		{ "postCap", "Post cap", "number", "The most auctions up at once, for example 5. For stackable goods (cloth, herbs): the most items." },
+		{ "keep", "Keep in bags", "number", "How many of each item to keep back. 0 = post them all." },
+		{ "minPrice", "Minimum price", "price", "Never post under this, per item. Type 5g, 80% market, or 0 for no floor." },
+		{ "normalPrice", "Normal price", "price", "The price when nobody else is selling, per item. Type 5g, or market." },
+		{ "maxPrice", "Maximum price", "price", "Never post over this, per item. Type 10g, 200% market, or 0 for no ceiling." },
+		{ "belowMin", "Below minimum", "choice", "When the going price is under your minimum: wait (Don't post), or post at one of your prices.", PRICE_CHOICES },
+		{ "aboveMax", "Above maximum", "choice", "When the going price is over your maximum: post at one of your prices, or don't post.", PRICE_CHOICES },
+		{ "cancelUndercut", "Cancel if cheaper", "toggle", "Cancel Scan offers to cancel your auctions when someone lists cheaper, so you can list again." },
 	},
 }
+
+M.RECOMMENDED_PRICES = { minPrice = "80% market", normalPrice = "market", maxPrice = "200% market",
+	belowMin = "none", aboveMax = "maxPrice" }
+
+function M:OpWarning(op)
+	if not op or op.kind ~= "post" then return nil end
+	if op.minPrice == 0 then
+		return "Minimum price is 0: your price follows the going price as low as anyone lists. Set a minimum, or press Recommended prices."
+	end
+	local usesApp = false
+	for _, k in ipairs({ "minPrice", "normalPrice", "maxPrice" }) do
+		if type(op[k]) == "string" then usesApp = true end
+	end
+	if usesApp and not (M.Prices and M.Prices:House()) then
+		return "Market prices come from the free K-Market Prices app, and it has no prices here yet: these items won't post until it does."
+	end
+end
 
 function M.ReadField(f, text)
 	if f[3] == "number" then
@@ -1199,17 +1216,22 @@ local function ShowField(op, f)
 	return tostring(v or "")
 end
 
+local FIELD_ROW = 48
+
 local function BuildOpFields(parent, kind, onChange)
 	local box = CreateFrame("Frame", nil, parent)
 	box:SetAllPoints()
 	box.widgets = {}
 	for i, f in ipairs(M.OP_FIELDS[kind]) do
-		local y = -(i - 1) * 40
+		local y = -(i - 1) * FIELD_ROW
 		local label = UI.Text(box, "body/medium/small", "text")
 		label:SetPoint("TOPLEFT", 0, y - 4)
 		label:SetText(f[2])
 		local help = UI.Text(box, "body/regular/x-small", "textLow")
 		help:SetPoint("TOPLEFT", 0, y - 21)
+		help:SetPoint("RIGHT", box, "RIGHT", -216, 0)
+		help:SetWordWrap(true)
+		help:SetJustifyH("LEFT")
 		help:SetText(f[4])
 		local w
 		if f[3] == "toggle" then
@@ -1234,6 +1256,12 @@ local function BuildOpFields(parent, kind, onChange)
 		w.kmField = f
 		box.widgets[#box.widgets + 1] = w
 	end
+
+	box.warn = UI.Text(box, "body/medium/x-small", "error")
+	box.warn:SetPoint("TOPLEFT", 0, -#M.OP_FIELDS[kind] * FIELD_ROW - 2)
+	box.warn:SetPoint("RIGHT", box, "RIGHT", 0, 0)
+	box.warn:SetWordWrap(true)
+	box.warn:SetJustifyH("LEFT")
 	function box:ShowOp(op)
 		for _, w in ipairs(self.widgets) do
 			local f = w.kmField
@@ -1241,6 +1269,7 @@ local function BuildOpFields(parent, kind, onChange)
 			elseif f[3] == "choice" then w:SetKMValue(op[f[1]])
 			elseif not w:HasFocus() then w:SetText(ShowField(op, f)) end
 		end
+		self.warn:SetText(M:OpWarning(op) or "")
 	end
 	return box
 end
@@ -1320,6 +1349,18 @@ local function BuildOps(page)
 		if state.op then M:DeleteOp(state.op); state.op = nil; page:Refresh() end
 	end)
 	page.delete = del
+
+	local rec = UI.Button(right, "Recommended prices", 150, 24, "secondary", "KainUIForeverMarketRecommendedPrices")
+	rec:SetPoint("RIGHT", del, "LEFT", -8, 0)
+	rec.kmTip = "Minimum 80% market, normal market, maximum 200% market (from the K-Market Prices app). "
+		.. "Under the minimum: don't post. Over the maximum: post at the maximum."
+	Confirming(rec, "Recommended prices", function()
+		local op = state.opTable
+		if not (op and op.kind == "post") then return end
+		for k, v in pairs(M.RECOMMENDED_PRICES) do op[k] = v end
+		page:Refresh()
+	end)
+	page.recommended = rec
 	local rule = UI.Rule(right, "outline")
 	rule:SetPoint("TOPLEFT", 0, -52)
 	rule:SetPoint("TOPRIGHT", 0, -52)
@@ -1327,7 +1368,7 @@ local function BuildOps(page)
 	local fieldArea = CreateFrame("Frame", nil, right)
 	fieldArea:SetPoint("TOPLEFT", 0, -64)
 	fieldArea:SetPoint("TOPRIGHT", 0, -64)
-	fieldArea:SetHeight(420)
+	fieldArea:SetHeight(500)
 	for _, kind in ipairs(M.KINDS) do
 		page.fields[kind] = BuildOpFields(fieldArea, kind, function() M:RefreshWindow() end)
 		page.fields[kind]:Hide()
@@ -1363,6 +1404,7 @@ local function BuildOps(page)
 		self.right:SetShown(op ~= nil)
 		self.none:SetShown(op == nil)
 		for kind, box in pairs(self.fields) do box:SetShown(op ~= nil and op.kind == kind) end
+		self.recommended:SetShown(op ~= nil and op.kind == "post")
 		if op then
 			self.kind:SetText(M.KIND_LABEL[op.kind] .. " operation")
 			if not self.name:HasFocus() then self.name:SetText(state.op) end
@@ -1371,6 +1413,11 @@ local function BuildOps(page)
 			for i, p in ipairs(used) do used[i] = M.FormatPath(p) end
 			self.used:SetText(#used > 0 and ("Used by: " .. table.concat(used, ", ") .. " (and their subgroups that don't set their own).")
 				or "No group uses this yet: pick one on the Groups page.")
+
+			if op.kind == "post" and M.Hint and not (M.tutorial and M.tutorial:IsShown()) then
+				M:Hint({ { "opsRecommended", self.recommended,
+					"Not sure what to type? Recommended prices fills in prices that follow the market. Each setting's line says what it does." } })
+			end
 		end
 	end
 end
