@@ -485,6 +485,42 @@ function M:SkipCancel()
 	self:RefreshAuctionPanel()
 end
 
+local owned = { posted = 0, sold = 0, known = false }
+local ownedQueryAt, ownedPending, ownedTicker = 0, false, nil
+
+local function AuctionValue(info)
+	local each = Plain(info.buyoutAmount) or Plain(info.bidAmount)
+	if type(each) ~= "number" then return 0 end
+	return each * (Plain(info.quantity) or 1)
+end
+
+function M:ReadOwnedSummary()
+	if not (C_AuctionHouse and C_AuctionHouse.GetNumOwnedAuctions) then return end
+	local posted, sold = 0, 0
+	local SOLD = Enum2("AuctionStatus", "Sold", 1)
+	for i = 1, Plain(C_AuctionHouse.GetNumOwnedAuctions()) or 0 do
+		local info = C_AuctionHouse.GetOwnedAuctionInfo(i)
+		if info then
+			if Plain(info.status) == SOLD then sold = sold + AuctionValue(info) else posted = posted + AuctionValue(info) end
+		end
+	end
+	owned.posted, owned.sold, owned.known = posted, sold, true
+end
+M.ownedSummary = function() return owned end
+
+function M:QueryOwnedSoon(delay)
+	if ownedPending then return end
+	ownedPending = true
+	C_Timer.After(delay or 0, function()
+		ownedPending = false
+		if not (AuctionHouseFrame and AuctionHouseFrame:IsShown()) or not C_AuctionHouse.QueryOwnedAuctions then return end
+		local busy = C_AuctionHouse.IsThrottledMessageSystemReady and not C_AuctionHouse.IsThrottledMessageSystemReady()
+		if busy or GetTime() - ownedQueryAt < 3 then M:QueryOwnedSoon(2); return end
+		ownedQueryAt = GetTime()
+		C_AuctionHouse.QueryOwnedAuctions({ { sortOrder = Enum2("AuctionHouseSortOrder", "Name", 1), reverseSort = false } })
+	end)
+end
+
 local panel
 local STATE_TEXT = { scanning = "scanning...", ready = nil, skip = nil, done = "listed", fine = "not undercut" }
 
@@ -518,7 +554,7 @@ function M:RefreshAuctionPanel()
 			action = "Post " .. (price and price > 0 and M.ShortMoney(price) or "") .. " x" .. count
 			enabled = true
 		elseif cur and cur.reason then
-			action, enabled = "Skip", true
+			action, enabled = "Next Item", true
 		elseif cur then
 			action, enabled = "Checking prices...", false
 		elseif todo > 0 then
@@ -538,8 +574,10 @@ function M:RefreshAuctionPanel()
 	end
 	UI.ButtonText(panel.action, action)
 	panel.action:SetKMEnabled(enabled)
-	panel.skip:SetKMEnabled(panel.mode == "cancel" and enabled or (panel.mode == "sell" and sell and sell.current ~= nil))
+	panel.skip:SetKMEnabled(panel.mode == "cancel" and enabled or (panel.mode == "sell" and sell and sell.current ~= nil and not sell.current.reason))
 	panel.status:SetText(status)
+	local coins = M.Prices and M.Prices.Coins or M.ShortMoney
+	panel.summary:SetText(owned.known and ("Posted " .. coins(owned.posted) .. "    Sold " .. coins(owned.sold)) or "Reading your auctions...")
 	panel.list:SetItems(rows)
 	panel.empty:SetShown(#rows == 0)
 end
@@ -553,31 +591,45 @@ function M:BuildAuctionPanel()
 	local title = UI.Text(panel, "body/bold/small", "accent")
 	title:SetPoint("TOPLEFT", 12, -10)
 	title:SetText("K-Market")
+	panel.summary = UI.Text(panel, "numeric/regular/x-small", "text")
+	panel.summary:SetPoint("TOPLEFT", 12, -30)
+	panel.summary:SetPoint("RIGHT", -12, 0)
+	panel.summaryTip = CreateFrame("Frame", nil, panel)
+	panel.summaryTip:SetPoint("TOPLEFT", panel.summary, "TOPLEFT")
+	panel.summaryTip:SetPoint("BOTTOMRIGHT", panel.summary, "BOTTOMRIGHT")
+	panel.summaryTip:SetScript("OnEnter", function(tipOwner)
+		GameTooltip:SetOwner(tipOwner, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine("Your auctions")
+		GameTooltip:AddLine("Posted: the buyout value of your auctions still up.", 1, 1, 1, true)
+		GameTooltip:AddLine("Sold: sold and on its way to your mailbox (before the Auction House cut).", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	panel.summaryTip:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	panel.action = UI.Button(panel, "Post", 200, 28, "primary", "KainUIForeverMarketPostButton")
-	panel.action:SetPoint("TOPLEFT", 12, -32)
+	panel.action:SetPoint("TOPLEFT", 12, -50)
 	panel.action.kmTip = "Lists the item in the Sell tab (one click a listing), then loads the next item from your Auctioning groups. Right-click any bag item to sell it instead."
 	panel.action:SetScript("OnClick", function()
 		if panel.mode == "cancel" then M:CancelClick() else M:PostClick() end
 	end)
 	panel.skip = UI.Button(panel, "Skip", 68, 28, "secondary", "KainUIForeverMarketSkipButton")
-	panel.skip:SetPoint("TOPRIGHT", -12, -32)
+	panel.skip:SetPoint("TOPRIGHT", -12, -50)
 	panel.skip:SetScript("OnClick", function()
 		if panel.mode == "cancel" then M:SkipCancel() else M:SkipPost() end
 	end)
 	panel.cancelScan = UI.Button(panel, "Cancel Scan", 134, 22, "secondary", "KainUIForeverMarketCancelScanButton")
-	panel.cancelScan:SetPoint("TOPLEFT", 12, -66)
+	panel.cancelScan:SetPoint("TOPLEFT", 12, -84)
 	panel.cancelScan:SetScript("OnClick", function()
 		if cancel then cancel = nil; M:RefreshAuctionPanel() else M:StartCancelScan() end
 	end)
 	panel.status = UI.Text(panel, "body/regular/x-small", "textLow")
-	panel.status:SetPoint("TOPLEFT", 12, -98)
+	panel.status:SetPoint("TOPLEFT", 12, -116)
 	panel.status:SetPoint("RIGHT", -12, 0)
 	panel.empty = UI.Text(panel, "body/regular/x-small", "textLow")
-	panel.empty:SetPoint("TOPLEFT", 12, -124)
+	panel.empty:SetPoint("TOPLEFT", 12, -142)
 	panel.empty:SetWidth(276)
 	panel.empty:SetWordWrap(true)
 	panel.empty:SetText("Right-click an item in your bags to put it in the Sell tab, then press Post. Items in a group with an Auctioning operation are listed here and go in one after another. Cancel Scan finds your auctions someone has undercut.")
-	panel.list = UI.List(panel, 34, 12, function(row)
+	panel.list = UI.List(panel, 34, 11, function(row)
 		row.icon = row:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(24, 24)
 		row.icon:SetPoint("LEFT", 10, 0)
@@ -603,9 +655,9 @@ function M:BuildAuctionPanel()
 		UI.TextColor(row.note, e.state == "skip" and "error" or e.state == "ready" and "positive" or "textLow")
 		row:SetAlpha((e.state == "done" or e.state == "skip" or e.state == "fine") and 0.55 or 1)
 	end)
-	panel.list:SetPoint("TOPLEFT", 0, -118)
-	panel.list:SetPoint("TOPRIGHT", 0, -118)
-	panel.list:SetHeight(34 * 12)
+	panel.list:SetPoint("TOPLEFT", 0, -136)
+	panel.list:SetPoint("TOPRIGHT", 0, -136)
+	panel.list:SetHeight(34 * 11)
 	panel:SetScript("OnShow", function() M:RefreshAuctionPanel() end)
 	M.auctionPanel = panel
 
@@ -634,11 +686,16 @@ events:SetScript("OnEvent", function(_, event, arg)
 			M:BuildAuctionPanel()
 			StartSell()
 			if panel then panel:Show(); M:RefreshAuctionPanel() end
+			M:QueryOwnedSoon(0.5)
+		end
+		if not ownedTicker and C_Timer.NewTicker then
+			ownedTicker = C_Timer.NewTicker(30, function() M:QueryOwnedSoon() end)
 		end
 		if AuctionHouseFrame then Show() else C_Timer.After(0.1, Show) end
 	elseif event == "AUCTION_HOUSE_CLOSED" then
 		sell, cancel = nil, nil
 		ClearSearches()
+		if ownedTicker then ownedTicker:Cancel(); ownedTicker = nil end
 	elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED" then
 		OnResults(event, arg)
 		local cur = sell and sell.current
@@ -647,7 +704,12 @@ events:SetScript("OnEvent", function(_, event, arg)
 		C_Timer.After(0, function() M:RefreshAuctionPanel() end)
 	elseif event == "AUCTION_HOUSE_AUCTION_CREATED" then
 		M:OnAuctionCreated()
+		M:QueryOwnedSoon(2)
 	elseif event == "OWNED_AUCTIONS_UPDATED" then
+		M:ReadOwnedSummary()
 		M:OnOwnedAuctions()
+		M:RefreshAuctionPanel()
+	elseif event == "AUCTION_CANCELED" then
+		M:QueryOwnedSoon(1)
 	end
 end)
