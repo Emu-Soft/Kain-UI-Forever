@@ -429,7 +429,9 @@ function M:OnOwnedAuctions()
 			local path = self:ItemGroup(id)
 			local op = path and self:EffectiveOp(path, "post")
 			if op and op.cancelUndercut then
-				local e = { auctionID = Plain(info.auctionID), itemID = id, price = price, quantity = Plain(info.quantity) or 1, op = op, state = "scanning" }
+
+				local quantity = math.max(Plain(info.quantity) or 1, 1)
+				local e = { auctionID = Plain(info.auctionID), itemID = id, price = price / quantity, quantity = quantity, op = op, state = "scanning" }
 				cancel.entries[#cancel.entries + 1] = e
 				local list = byItem[id]
 				if not list then
@@ -489,9 +491,8 @@ local owned = { posted = 0, sold = 0, known = false }
 local ownedQueryAt, ownedPending, ownedTicker = 0, false, nil
 
 local function AuctionValue(info)
-	local each = Plain(info.buyoutAmount) or Plain(info.bidAmount)
-	if type(each) ~= "number" then return 0 end
-	return each * (Plain(info.quantity) or 1)
+	local v = Plain(info.buyoutAmount) or Plain(info.bidAmount)
+	return type(v) == "number" and v or 0
 end
 
 function M:ReadOwnedSummary()
