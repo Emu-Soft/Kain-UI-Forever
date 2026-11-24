@@ -1126,7 +1126,7 @@ for _, p in ipairs(M.PROFESSIONS) do PROFESSION_CHOICES[#PROFESSION_CHOICES + 1]
 
 M.OP_FIELDS = {
 	mail = {
-		{ "to", "Send to", "text", "Your bank alt's name, surname included (Bestbuys Bigwarehouse)." },
+		{ "to", "Send to", "text", "Your bank alt's name, surname included (First Surname)." },
 		{ "keep", "Keep in bags", "number", "How many of each item to keep." },
 		{ "maxQty", "Send up to", "number", "At most this many of each item (0 = everything above Keep)." },
 		{ "restock", "Restock", "toggle", "Only send what tops the target up to \"Send up to\", counting what they already have." },
