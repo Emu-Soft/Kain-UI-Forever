@@ -417,6 +417,7 @@ local function Build()
 		current = i
 		for j, p in ipairs(pages) do p:SetShown(j == i) end
 		Refresh()
+		if i == 2 and M.HintMailGroups then M:HintMailGroups(pages[2].send) end
 	end)
 	frame.tabs:SetPoint("LEFT", title, "RIGHT", 28, 0)
 	for i = 1, #PAGES do
@@ -450,6 +451,8 @@ local function OnMailShown()
 	HideBlizzard()
 	current = 1
 	frame:Show()
+
+	if M.HintMailbox then M:HintMailbox(frame, frame.tabs, pages[1].open) end
 end
 
 local function OnMailHidden()

@@ -615,6 +615,7 @@ function M:BuildAuctionPanel()
 	end)
 	panel.cancelScan = UI.Button(panel, "Cancel Scan", 134, 22, "secondary", "KainUIForeverMarketCancelScanButton")
 	panel.cancelScan:SetPoint("TOPLEFT", 12, -84)
+	panel.cancelScan.kmTip = "Finds your auctions with a cheaper one up, so you can list them again at the going price. Then one click cancels each."
 	panel.cancelScan:SetScript("OnClick", function()
 		if cancel then cancel = nil; M:RefreshAuctionPanel() else M:StartCancelScan() end
 	end)
@@ -683,6 +684,8 @@ events:SetScript("OnEvent", function(_, event, arg)
 			M:BuildAuctionPanel()
 			StartSell()
 			if panel then panel:Show(); M:RefreshAuctionPanel() end
+
+			if M.HintAuctionHouse then M:HintAuctionHouse(panel) end
 			M:QueryOwnedSoon(0.5)
 		end
 		if not ownedTicker and C_Timer.NewTicker then

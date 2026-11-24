@@ -12,7 +12,6 @@ local LINEN, WOOL, SILK, MAGEWEAVE, RUNECLOTH = 2589, 2592, 4306, 4338, 14047
 local PEACEBLOOM, SILVERLEAF, COPPER_BAR = 2447, 765, 2840
 local LETTER = "Interface\\Icons\\INV_Letter_15"
 local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
-local BAG = "Interface\\Icons\\INV_Misc_Bag_08"
 
 local function Coins(copper)
 	return (M.Prices and M.Prices.Coins or M.ShortMoney)(copper)
@@ -62,10 +61,9 @@ local function Chip(parent, text, w, h, icon, key)
 	return f
 end
 
-local function Box(target, pad)
+local function Outline(target, pad, holder)
 	pad = pad or 3
-	local parent = target:GetParent()
-	local f = CreateFrame("Frame", nil, parent)
+	local f = CreateFrame("Frame", nil, holder or target:GetParent())
 	f:SetPoint("TOPLEFT", target, "TOPLEFT", -pad, pad)
 	f:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", pad, -pad)
 	f:SetFrameLevel(target:GetFrameLevel() + 2)
@@ -79,6 +77,8 @@ local function Box(target, pad)
 	right:SetPoint("TOPRIGHT"); right:SetPoint("BOTTOMRIGHT")
 	return f
 end
+
+local function Box(target, pad) return Outline(target, pad) end
 
 local function Arrow(parent)
 	return Label(parent, ">", "body/bold/h6", "accent", "CENTER")
@@ -112,27 +112,64 @@ local function Tile(stage, caption, w, h)
 	return f
 end
 
+local function AnyGroupHasOp()
+	for _, g in pairs(M:DB().groups) do
+		if type(g) == "table" and type(g.ops) == "table" then
+			for _, op in pairs(g.ops) do if type(op) == "string" then return true end end
+		end
+	end
+	return false
+end
+
+local function CharacterCount()
+	local n = 0
+	for _ in pairs(M:DB().chars) do n = n + 1 end
+	return n
+end
+
+local STEPS = {
+	{ text = "Make your groups: Default Groups, or New Group", go = 2, button = "Start with Groups",
+		done = function() return #M:GroupPaths() > 0 end },
+	{ text = "Make an operation: + New beside Mailing, Crafter or Auctioning", go = 3, button = "Go to Operations",
+		done = function() return next(M:DB().ops) ~= nil end },
+	{ text = "Pick that operation for a group, on the Groups page", go = 2, button = "Go to Groups",
+		done = AnyGroupHasOp },
+	{ text = "Log in once on each alt, so K-Market knows them",
+		done = function() return CharacterCount() > 1 end,
+		status = function() local n = CharacterCount() return n .. (n == 1 and " character" or " characters") end },
+}
+M.TUTORIAL_STEPS = STEPS
+
+local function NextStep()
+	for _, s in ipairs(STEPS) do
+		if s.go and not s.done() then return s end
+	end
+end
+
+local panel
+local GoTo
+
 local PAGES = {
 	{
 		title = "What K-Market does",
-		text = Y .. "Gold" .. R .. "    Tracks the gold on every character you log in.\n"
-			.. Y .. "Groups" .. R .. "    Sorts the items you trade into lists.\n"
-			.. Y .. "Clicks" .. R .. "    Mails and lists those items for you.\n\n"
+		text = Y .. "Sort" .. R .. "    Put the items you trade into groups.\n"
+			.. Y .. "Send and post" .. R .. "    At the mailbox and Auction House, one button does the work.\n"
+			.. Y .. "Watch your gold" .. R .. "    The Dashboard graphs the gold on every character you log in.\n\n"
 			.. "It works like TradeSkillMaster, with fewer settings.",
 		picture = function(stage)
-			local gold = Tile(stage, "Dashboard")
-			Label(gold, Coins(3018220), "numeric/regular/p", "text", "CENTER"):SetPoint("CENTER", 0, 14)
 			local groups = Tile(stage, "Groups")
 			Icons(groups, { LINEN, WOOL, SILK, PEACEBLOOM }, 28):SetPoint("CENTER", 0, 14)
 			local clicks = Tile(stage, "Mailbox and Auction House")
 			Icons(clicks, { LETTER, COIN }, 32, 16):SetPoint("CENTER", 0, 14)
-			Flow(stage, { gold, groups, clicks })
+			local gold = Tile(stage, "Dashboard")
+			Label(gold, Coins(3018220), "numeric/regular/p", "text", "CENTER"):SetPoint("CENTER", 0, 14)
+			Flow(stage, { groups, clicks, gold })
 		end,
 	},
 	{
 		title = "Groups",
-		text = "A group is a list of items you handle the same way: Cloth, Herbs, Greens.\n"
-			.. "Each item is in one group. A subgroup does what its parent does, unless you change it.\n\n"
+		show = 2,
+		text = "A group is a list of items you handle the same way: Cloth, Herbs, Greens. Each item is in one group.\n\n"
 			.. Y .. "Default Groups" .. R .. " makes a starter set (reagents by profession, cloth, "
 			.. "bind-on-equip gear, consumables) and fills it from your bags.",
 		picture = function(stage)
@@ -141,7 +178,7 @@ local PAGES = {
 			list:SetPoint("LEFT", 20, 0)
 			local rows = {
 				{ "Cloth", { LINEN, WOOL, SILK, MAGEWEAVE }, 0 },
-				{ "Runecloth  (subgroup of Cloth)", { RUNECLOTH }, 24 },
+				{ "Runecloth", { RUNECLOTH }, 24 },
 				{ "Herbs", { PEACEBLOOM, SILVERLEAF }, 0 },
 				{ "Smithing", { COPPER_BAR }, 0 },
 			}
@@ -161,10 +198,12 @@ local PAGES = {
 	},
 	{
 		title = "Operations",
+		show = 3,
 		text = "An operation is a job you give a group. A group can have one of each kind:\n\n"
 			.. Y .. "Mailing" .. R .. "    Send to an alt. Keep some back.\n"
 			.. Y .. "Crafter" .. R .. "    Send reagents to whoever crafts with them.\n"
-			.. Y .. "Auctioning" .. R .. "    List at the going price, between your minimum and maximum.",
+			.. Y .. "Auctioning" .. R .. "    List at the going price, between your minimum and maximum.\n\n"
+			.. "An operation does nothing until a group uses it: pick it on the Groups page.",
 		picture = function(stage)
 			Flow(stage, {
 				Chip(stage, "Cloth", 120, 32, LINEN),
@@ -186,19 +225,17 @@ local PAGES = {
 	{
 		title = "At the mailbox",
 		text = "K-Market's mailbox window opens instead of the game's. " .. Y .. "Blizzard UI" .. R .. " switches back, and it remembers.\n\n"
-			.. Y .. "Send Groups" .. R .. "    Mails what your Mailing and Crafter operations ask for, in as few mails as it can.\n"
+			.. Y .. "Send Groups" .. R .. "    On the Groups tab. Mails what your Mailing and Crafter operations ask for, in as few mails as it can.\n"
 			.. Y .. "Open All" .. R .. "    Takes everything from your inbox and records your sales.\n\n"
-			.. "Your alts go on your friends list, so the game doesn't ask \"are you sure?\" each time.",
+			.. "K-Market adds your alts to your friends list, so the game doesn't ask \"are you sure?\" each time.",
 		picture = function(stage)
 			local win = UI.Panel(stage, "medium", 6)
 			win:SetSize(420, 196)
 			win:SetPoint("LEFT", 20, 0)
-			Label(win, "Inbox     Groups     Send", "body/medium/small", "textLow"):SetPoint("TOPLEFT", 14, -12)
+			Label(win, "Inbox     " .. Y .. "Groups" .. R .. "     Send", "body/medium/small", "textLow"):SetPoint("TOPLEFT", 14, -12)
 			local send = Mock(win, "Send Groups", 120, 26, "primary")
 			send:SetPoint("TOPLEFT", 14, -40)
 			Box(send)
-			local openAll = Mock(win, "Open All", 90, 26)
-			openAll:SetPoint("LEFT", send, "RIGHT", 10, 0)
 			local rows = {
 				{ "Bankie Vault", { LINEN, WOOL, SILK, PEACEBLOOM }, "2 mails" },
 				{ "Blacksmith", { COPPER_BAR }, "1 mail" },
@@ -214,11 +251,12 @@ local PAGES = {
 	},
 	{
 		title = "At the Auction House",
-		text = "The K-Market panel sits to the right of the Auction House.\n\n"
-			.. Y .. "1" .. R .. "  " .. Y .. "Load Next" .. R .. " puts your next group item in the Sell tab at the going price. Or right-click any bag item.\n"
-			.. Y .. "2" .. R .. "  " .. Y .. "Post" .. R .. " lists it. The next item loads by itself.\n"
+		text = "The K-Market panel sits to the right of the Auction House. One button does the selling, and its label changes as you go:\n\n"
+			.. Y .. "1" .. R .. "  " .. Y .. "Load Next" .. R .. " puts your next group item in the Sell tab at the going price.\n"
+			.. Y .. "2" .. R .. "  " .. Y .. "Post" .. R .. " lists it, and the next item loads by itself.\n"
 			.. Y .. "3" .. R .. "  Keep clicking Post: one click, one listing. If the game says you're too fast, click again.\n\n"
-			.. Y .. "Skip" .. R .. " passes an item. " .. Y .. "Next Item" .. R .. " shows when an item has no price.",
+			.. Y .. "Skip" .. R .. " passes an item. " .. Y .. "Next Item" .. R .. " shows when an item has no price. "
+			.. "Right-click any bag item to sell it instead.",
 		picture = function(stage)
 			local p = UI.Panel(stage, "surface", 6)
 			p:SetSize(280, 214)
@@ -243,17 +281,16 @@ local PAGES = {
 				Label(p, r[3], "body/regular/x-small", r[4]):SetPoint("TOPLEFT", 44, y - 13)
 			end
 			Note(stage, "your auctions: up for sale, and sold"):SetPoint("LEFT", p, "TOPRIGHT", 12, -36)
-			Note(stage, "click, click, click"):SetPoint("LEFT", p, "TOPRIGHT", 12, -63)
+			Note(stage, "Load Next, then Post, Post, Post"):SetPoint("LEFT", p, "TOPRIGHT", 12, -63)
 			Note(stage, "click a row to load that one"):SetPoint("LEFT", p, "TOPRIGHT", 12, -130)
 		end,
 	},
 	{
 		title = "Prices",
-		text = "Auctioning lists at the going price: the cheapest auction up. No undercutting: the game sells the cheapest first anyway, so going lower only drops the price.\n"
-			.. "Minimum, normal (nobody selling) and maximum can be fixed (1g 50s) or follow the market (90% market).\n\n"
-			.. "Market prices come from the free " .. Y .. "K-Market Prices" .. R .. " app: github.com/Emu-Soft/K-Market-Prices. "
-			.. "Tooltips show the K-Market Value and its age: green is fresh, red is a day old.\n\n"
-			.. Y .. "Cancel Scan" .. R .. " finds your auctions with a cheaper one up, to list again at the going price.",
+		text = "Auctioning lists at the going price: the cheapest auction up. No undercutting: the game sells the cheapest first anyway.\n"
+			.. "Minimum, normal and maximum can be fixed (1g 50s) or follow the market (90% market).\n\n"
+			.. "Market prices come from the free " .. Y .. "K-Market Prices" .. R .. " app (its address is below). "
+			.. "Item tooltips then show the K-Market Value and how old it is: green when it's fresh, red when it's a day old.",
 		picture = function(stage)
 			local tip = UI.Panel(stage, "high", 6)
 			tip:SetSize(220, 96)
@@ -264,69 +301,81 @@ local PAGES = {
 			Label(tip, G .. "Updated 12 min ago" .. R, "body/regular/x-small", "text"):SetPoint("TOPLEFT", 12, -62)
 			local rule = Chip(stage, "Cheapest up: " .. M.ShortMoney(4500), 170, 32, RUNECLOTH, "accentDark")
 			local post = Chip(stage, "Post " .. M.ShortMoney(4500) .. " each", 140, 32, COIN)
-			Flow(stage, { tip, rule, post })
-		end,
-	},
-	{
-		title = "Dashboard",
-		text = "Your gold on all characters over time. Pick a range at the top right of the graph.\n"
-			.. "Under it: what you sold, what you bought, and the profit for that range.\n\n"
-			.. "Hover " .. Y .. "Total Gold" .. R .. " (top right of the window) to see each character's gold.",
-		picture = function(stage)
-			local graph = UI.Panel(stage, "medium", 6)
-			graph:SetSize(360, 190)
-			graph:SetPoint("LEFT", 20, 0)
-			local heights = { 30, 34, 33, 40, 46, 44, 52, 60, 58, 66, 75, 72, 80, 92, 88, 100, 112, 108, 120, 134 }
-			local barW = 14
-			for i, h in ipairs(heights) do
-				local bar = graph:CreateTexture(nil, "ARTWORK")
-				UI.Fill(bar, "accent", 0.35 + 0.65 * i / #heights)
-				bar:SetSize(barW, h)
-				bar:SetPoint("BOTTOMLEFT", 16 + (i - 1) * (barW + 2), 22)
-			end
-			local axis = UI.Rule(graph, "outline")
-			axis:SetPoint("BOTTOMLEFT", 12, 20); axis:SetPoint("BOTTOMRIGHT", -12, 20)
-			local tip = UI.Panel(stage, "high", 6)
-			tip:SetSize(220, 112)
-			tip:SetPoint("TOPLEFT", graph, "TOPRIGHT", 24, 0)
-			Label(tip, "TOTAL GOLD  " .. Coins(3018220), "body/medium/x-small", "textLow"):SetPoint("TOPLEFT", 12, -10)
-			local chars = { { "Main", 2984855 }, { "Crafter", 32469 }, { "Bank alt", 896 } }
-			for i, c in ipairs(chars) do
-				local y = -34 - (i - 1) * 20
-				Label(tip, c[1], "body/regular/x-small", "text"):SetPoint("TOPLEFT", 12, y)
-				Label(tip, Coins(c[2]), "numeric/regular/x-small", "text", "RIGHT"):SetPoint("TOPRIGHT", -12, y)
-			end
-			Note(stage, "hover"):SetPoint("TOPLEFT", tip, "BOTTOMLEFT", 0, -8)
+			Flow(stage, { tip, rule, post }, 82)
+
+			local label = Label(stage, "K-Market Prices app:", "body/medium/x-small", "textLow")
+			label:SetPoint("TOPLEFT", 24, -176)
+			local box = UI.Input(stage, 330, 26)
+			box:SetPoint("LEFT", label, "RIGHT", 10, 0)
+
+			local edge = UI.Panel(stage, "outline", 5)
+			edge:SetPoint("TOPLEFT", box, "TOPLEFT", -1, 1)
+			edge:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 1, -1)
+			edge:SetFrameLevel(math.max(0, box:GetFrameLevel() - 1))
+			box:SetText(M.PRICES_APP_ADDRESS)
+			box:SetScript("OnTextChanged", function(self, typed) if typed then self:SetText(M.PRICES_APP_ADDRESS); self:HighlightText() end end)
+			box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+			box:SetScript("OnMouseUp", function(self) self:SetFocus(); self:HighlightText() end)
+			Label(stage, "click, then Ctrl+C", "body/medium/x-small", "accent"):SetPoint("LEFT", box, "RIGHT", 10, 0)
+			stage.address = box
 		end,
 	},
 	{
 		title = "Set it up",
-		text = Y .. "1" .. R .. "  " .. Y .. "Groups" .. R .. " page: Default Groups, or New Group and click items in the bag list. "
-			.. "Import takes a TradeSkillMaster list.\n"
-			.. Y .. "2" .. R .. "  " .. Y .. "Operations" .. R .. " page: + New beside Mailing, Crafter or Auctioning. Fill in who and how many.\n"
-			.. Y .. "3" .. R .. "  Back on " .. Y .. "Groups" .. R .. ": pick that operation for the group.\n"
-			.. Y .. "4" .. R .. "  Log in once on each alt, so K-Market knows them.\n\n"
-			.. "Then: at the mailbox, Send Groups. At the Auction House, Post until it's done.",
+		checklist = true,
+		text = "Four steps, ticked off as you do them. " .. Y .. "Go" .. R .. " takes you there.\n\n"
+			.. "Then: at the mailbox, " .. Y .. "Send Groups" .. R .. ". At the Auction House, " .. Y .. "Post" .. R .. " until it's done.",
 		picture = function(stage)
-			local steps = {
-				Mock(stage, "1  Default Groups", 140, 30, "secondary"),
-				Mock(stage, "2  + New", 100, 30, "secondary"),
-				Mock(stage, "3  Pick operation", 140, 30, "secondary"),
-				Chip(stage, "4  Log in alts", 120, 30, BAG),
-			}
-			Flow(stage, steps, 70)
-			local mail = Mock(stage, "Send Groups", 130, 30, "primary")
-			local post = Mock(stage, "Post", 130, 30, "primary")
-			Flow(stage, { mail, post }, 160)
+			stage.rows = {}
+			for i, s in ipairs(STEPS) do
+				local row = CreateFrame("Frame", nil, stage)
+				row:SetSize(STAGE_W - 40, 40)
+				row:SetPoint("TOPLEFT", 20, -14 - (i - 1) * 52)
+				UI.Rounded(row, "medium", 6)
+				row.mark = row:CreateTexture(nil, "ARTWORK")
+				row.mark:SetSize(16, 16)
+				row.mark:SetPoint("LEFT", 14, 0)
+				row.num = Label(row, tostring(i), "numeric/regular/x-small", "textLow", "CENTER")
+				row.num:SetPoint("CENTER", row.mark, "CENTER", 0, 0)
+				row.text = Label(row, s.text, "body/regular/small", "text")
+				row.text:SetPoint("LEFT", 42, 0)
+				row.text:SetPoint("RIGHT", -110, 0)
+				row.state = Label(row, "", "body/medium/x-small", "positive", "RIGHT")
+				row.state:SetPoint("RIGHT", -14, 0)
+				if s.go then
+					row.go = UI.Button(row, "Go", 72, 24, "secondary")
+					row.go:SetPoint("RIGHT", -10, 0)
+					row.go:SetScript("OnClick", function() GoTo(s.go) end)
+				end
+				stage.rows[i] = row
+			end
+		end,
+		refresh = function(stage)
+			for i, s in ipairs(STEPS) do
+				local row, done = stage.rows[i], s.done()
+				row.mark:SetTexture(done and UI.ROUND or UI.CIRCLE)
+				UI.Tint(row.mark, done and "positive" or "textLow")
+				row.num:SetShown(not done)
+				UI.TextColor(row.text, done and "textLow" or "text")
+				if row.go then row.go:SetShown(not done) end
+				row.state:SetText(done and "Done" or (s.status and s.status() or ""))
+				UI.TextColor(row.state, done and "positive" or "textLow")
+				row.done = done
+			end
 		end,
 	},
 }
 M.TUTORIAL_PAGES = PAGES
+M.PRICES_APP_ADDRESS = "github.com/Emu-Soft/K-Market-Prices"
 
-local panel
 local at = 1
 
 local function Seen() return M.Settings and M.Settings().tutorialSeen end
+
+local function LastAction()
+	local s = NextStep()
+	return s and s.button or "Done", s and s.go
+end
 
 local function ShowAt(i)
 	at = math.max(1, math.min(#PAGES, i))
@@ -335,7 +384,7 @@ local function ShowAt(i)
 	panel.text:SetText(page.text)
 	panel.step:SetText(at .. " / " .. #PAGES)
 	panel.back:SetKMEnabled(at > 1)
-	UI.ButtonText(panel.next, at == #PAGES and "Done" or "Next")
+	panel.show:SetShown(page.show ~= nil)
 	for j, s in pairs(panel.stages) do s:SetShown(j == at) end
 	if not panel.stages[at] and page.picture then
 		local stage = CreateFrame("Frame", nil, panel.stageBox)
@@ -343,6 +392,13 @@ local function ShowAt(i)
 		page.picture(stage)
 		panel.stages[at] = stage
 	end
+	if page.refresh then page.refresh(panel.stages[at]) end
+	UI.ButtonText(panel.next, at == #PAGES and (LastAction()) or "Next")
+end
+
+GoTo = function(page)
+	panel:Hide()
+	M:ToggleWindow(page)
 end
 
 local function Build()
@@ -373,10 +429,16 @@ local function Build()
 	panel.stages = {}
 	panel.step = UI.Text(card, "numeric/regular/x-small", "textLow")
 	panel.step:SetPoint("BOTTOMLEFT", 24, 22)
-	panel.next = UI.Button(card, "Next", 100, 26, "primary", "KainUIForeverMarketTutorialNext")
+
+	panel.show = UI.Button(card, "Show me", 100, 26, "secondary", "KainUIForeverMarketTutorialShowMe")
+	panel.show:SetPoint("BOTTOMLEFT", 72, 16)
+	panel.show:SetScript("OnClick", function() GoTo(PAGES[at].show) end)
+	panel.next = UI.Button(card, "Next", 150, 26, "primary", "KainUIForeverMarketTutorialNext")
 	panel.next:SetPoint("BOTTOMRIGHT", -24, 16)
 	panel.next:SetScript("OnClick", function()
-		if at == #PAGES then panel:Hide() else ShowAt(at + 1) end
+		if at < #PAGES then ShowAt(at + 1) return end
+		local _, go = LastAction()
+		if go then GoTo(go) else panel:Hide() end
 	end)
 	panel.back = UI.Button(card, "Back", 100, 26, "secondary")
 	panel.back:SetPoint("RIGHT", panel.next, "LEFT", -8, 0)
@@ -384,15 +446,18 @@ local function Build()
 	local close = UI.Button(card, "X", 24, 24, "tertiary")
 	close:SetPoint("TOPRIGHT", -10, -10)
 	close:SetScript("OnClick", function() panel:Hide() end)
+
+	panel:SetScript("OnHide", function() M:RefreshWindow() end)
 	M.tutorial = panel
 end
 
 function M:ShowTutorial()
 	if not (self.frame and self.frame:IsShown()) then self:ToggleWindow(1) end
 	if not panel then Build() end
+	local start = (Seen() and #self:GroupPaths() == 0) and #PAGES or 1
 	if M.Settings then M.Settings().tutorialSeen = true end
 	self:RefreshTutorialButton()
-	ShowAt(1)
+	ShowAt(start)
 	panel:Show()
 end
 
@@ -415,4 +480,118 @@ function M:RefreshTutorialButton()
 		UI.TextColor(button.kmText, a > 0.6 and "onAccent" or "text")
 		if Seen() then button.kmPulsing = nil; M:RefreshTutorialButton() end
 	end)
+end
+
+local callout, current, ShowNextHint
+local queue = {}
+
+local function HintsSeen()
+	local d = M.Settings()
+	if type(d.hints) ~= "table" then d.hints = {} end
+	return d.hints
+end
+
+local function TargetOf(h)
+	local t = h[2]
+	if type(t) == "function" then t = t() end
+	return t
+end
+
+local function BuildCallout()
+	callout = UI.Panel(UIParent, "high", 6)
+	callout:SetFrameStrata("DIALOG")
+	callout:SetSize(260, 80)
+	callout:SetClampedToScreen(true)
+	callout:EnableMouse(true)
+	callout:Hide()
+	Outline(callout, 0, callout)
+	callout.text = UI.Text(callout, "body/regular/small", "text")
+	callout.text:SetPoint("TOPLEFT", 12, -12)
+	callout.text:SetWidth(236)
+	callout.text:SetWordWrap(true)
+	callout.text:SetJustifyH("LEFT")
+	callout.ok = UI.Button(callout, "Got it", 70, 22, "primary", "KainUIForeverMarketHintOK")
+	callout.ok:SetPoint("BOTTOMRIGHT", -10, 10)
+	callout.arrow = Label(callout, "", "body/bold/h6", "accent", "CENTER")
+	callout:SetScript("OnUpdate", function()
+		local t = current and TargetOf(current)
+		if not (t and t:IsVisible()) then ShowNextHint() end
+	end)
+	M.hintCallout = callout
+end
+
+ShowNextHint = function()
+	callout:Hide()
+	current = nil
+	local seen = HintsSeen()
+	while #queue > 0 do
+		local h = table.remove(queue, 1)
+		local target = TargetOf(h)
+		if not seen[h[1]] and target and target:IsVisible() then
+			current = h
+			callout.key = h[1]
+			callout.text:SetText(h[3])
+			callout:SetHeight((callout.text:GetStringHeight() or 30) + 54)
+			callout:ClearAllPoints()
+			callout.arrow:ClearAllPoints()
+			if type(h[4]) == "table" then
+				local dx = (h[4]:GetRight() or 0) - (target:GetRight() or 0)
+				callout:SetPoint("LEFT", target, "RIGHT", dx + 18, 0)
+				callout.arrow:SetText("<")
+				callout.arrow:SetPoint("RIGHT", callout, "LEFT", -2, 0)
+			elseif h[4] then
+				callout:SetPoint("BOTTOM", target, "TOP", 0, 18)
+				callout.arrow:SetText("v")
+				callout.arrow:SetPoint("TOP", callout, "BOTTOM", 0, -1)
+			else
+				callout:SetPoint("TOP", target, "BOTTOM", 0, -18)
+				callout.arrow:SetText("^")
+				callout.arrow:SetPoint("BOTTOM", callout, "TOP", 0, -2)
+			end
+			callout.ok:SetScript("OnClick", function()
+				HintsSeen()[h[1]] = true
+				ShowNextHint()
+			end)
+			callout:Show()
+			return
+		end
+	end
+end
+
+function M:Hint(list)
+	local seen = HintsSeen()
+	for _, h in ipairs(list) do
+		local queued = current and current[1] == h[1]
+		for _, q in ipairs(queue) do if q[1] == h[1] then queued = true end end
+		if not seen[h[1]] and not queued then queue[#queue + 1] = h end
+	end
+	if not callout then BuildCallout() end
+	if not callout:IsShown() then ShowNextHint() end
+end
+
+function M:HintMailbox(window, tabs, openAll)
+	if not (window and window:IsShown()) then return end
+	self:Hint({
+		{ "mailGroups", tabs.tabs[2], "Your mail for alts is on the Groups tab: press Send Groups there and K-Market mails it all." },
+		{ "mailOpen", openAll, "Open All takes everything from your inbox and records your sales for the Dashboard.", true },
+	})
+end
+
+function M:HintMailGroups(send)
+	self:Hint({ { "mailSend", send, "One click mails everything on this list, in as few mails as it can." } })
+end
+
+function M:HintAuctionHouse(panelAH)
+	if not panelAH then return end
+	self:Hint({
+		{ "ahPost", panelAH.action, "This one button does the selling. Load Next puts your next group item in the Sell tab "
+			.. "at the going price, then Post lists it. One click a listing.", panelAH },
+		{ "ahCancel", panelAH.cancelScan, "Cancel Scan finds your auctions with a cheaper one up, so you can list them again at the going price. Then one click cancels each.", panelAH },
+		{ "ahPrice", function() return panelAH.priceScan end, "Price Scan prices your recipes for the profit list beside the profession window.", panelAH },
+	})
+end
+
+function M:HintDashboard(window)
+	if not (window and window.totalHover) then return end
+	self:Hint({ { "gold", window.totalHover, "Hover Total Gold to see each character's gold." } })
 end

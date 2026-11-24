@@ -7,7 +7,7 @@ local PATCH_NOTES = {
 			{ title = "New", items = {
 				"K-Market (button in the settings): a gold graph, item groups, mailing groups to your bank alt or crafters, quick listing from the Sell tab at the going price (no undercutting), cancelling auctions with a cheaper one up, and its own mailbox window.",
 				"K-Market sorts your items into ready-made groups (crafting reagents by profession, cloth, bind-on-equip gear, potions) and shows what is profitable to craft beside the profession window.",
-				"K-Market has a short tutorial with pictures: press Tutorial at the top of its window.",
+				"K-Market has a short tutorial with pictures (press Tutorial at the top of its window) that ends on a set-up checklist: each step ticks itself off when done, and Go takes you there. The first time you use the mailbox, the Auction House and the Dashboard, a small tip points at the button to press.",
 				"Hovering K-Market's Total Gold lists the gold on each of your characters.",
 				"K-Market's Auction House panel shows the value of your auctions still up and of those sold and waiting in the mail.",
 				"K-Market reads hourly auction prices from the free K-Market Prices app (github.com/Emu-Soft/K-Market-Prices): item tooltips show its K-Market Value, the newest auction price, with how long ago it was updated (green when fresh, red once a day old), and post prices can follow the market, for example 90% market. Type /km prices to see how fresh they are.",
