@@ -209,7 +209,7 @@ local PAGES = {
 				Label(win, r[3], "body/regular/x-small", "textLow", "RIGHT"):SetPoint("TOPRIGHT", -14, y)
 				Icons(win, r[2], 20):SetPoint("TOPLEFT", 14, y - 18)
 			end
-			Note(stage, "one click"):SetPoint("LEFT", win, "RIGHT", 12, 58)
+			Note(stage, "one click"):SetPoint("LEFT", win, "RIGHT", 12, 45)
 		end,
 	},
 	{
@@ -255,7 +255,7 @@ local PAGES = {
 			.. Y .. "Cancel Scan" .. R .. " finds your auctions that were undercut: one cancel a click. "
 			.. Y .. "Price Scan" .. R .. " prices your recipes for the profit list beside the profession window.",
 		picture = function(stage)
-			local tip = UI.Panel(stage, "lowest", 6)
+			local tip = UI.Panel(stage, "high", 6)
 			tip:SetSize(220, 96)
 			Label(tip, "Runecloth", "body/medium/small", "text"):SetPoint("TOPLEFT", 12, -12)
 			local value = Label(tip, "K-Market Value", "body/regular/x-small", "textLow")
@@ -286,7 +286,7 @@ local PAGES = {
 			end
 			local axis = UI.Rule(graph, "outline")
 			axis:SetPoint("BOTTOMLEFT", 12, 20); axis:SetPoint("BOTTOMRIGHT", -12, 20)
-			local tip = UI.Panel(stage, "lowest", 6)
+			local tip = UI.Panel(stage, "high", 6)
 			tip:SetSize(220, 112)
 			tip:SetPoint("TOPLEFT", graph, "TOPRIGHT", 24, 0)
 			Label(tip, "TOTAL GOLD  " .. Coins(3018220), "body/medium/x-small", "textLow"):SetPoint("TOPLEFT", 12, -10)
