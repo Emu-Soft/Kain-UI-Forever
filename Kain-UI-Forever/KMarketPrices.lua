@@ -10,14 +10,36 @@ P.SOURCE_LABEL = SOURCE_LABEL
 
 local cache = { house = nil, t = nil, items = {} }
 
-function P:House()
+function P.Faction()
+	local faction = UnitFactionGroup and M.Plain(UnitFactionGroup("player"))
+	return type(faction) == "string" and faction ~= "" and faction or nil
+end
+
+function P:AppHouse()
 	local data = _G.KUI_PRICE_DATA
 	if type(data) ~= "table" or data.v ~= 1 or type(data.houses) ~= "table" then return nil end
-	local faction = UnitFactionGroup and UnitFactionGroup("player")
-	if type(faction) ~= "string" then return nil end
+	local faction = self.Faction()
+	if not faction then return nil end
 	for id, h in pairs(data.houses) do
-		if type(h) == "table" and h.faction == faction and type(h.d) == "string" then return id, h end
+		if type(h) == "table" and h.faction == faction and type(h.d) == "string" and type(h.t) == "number" then return id, h end
 	end
+	return nil
+end
+
+function P:PeerHouse()
+	local db = M.DB and M:DB()
+	local faction = self.Faction()
+	local p = type(db) == "table" and type(db.peerPrices) == "table" and faction and db.peerPrices[faction]
+	if type(p) ~= "table" or type(p.d) ~= "string" or type(p.t) ~= "number" or p.house == nil then return nil end
+	if not p.faction then p.faction = faction end
+	return p.house, p
+end
+
+function P:House()
+	local id, h = self:AppHouse()
+	local pid, ph = self:PeerHouse()
+	if ph and (not h or ph.t > h.t) then return pid, ph, "guild" end
+	if h then return id, h, "app" end
 	return nil
 end
 
@@ -112,7 +134,7 @@ function P:Newest(itemID)
 	local best, age
 	local _, h = self:House()
 	local v = self:Value(itemID, "market")
-	if v and v > 0 and type(h.t) == "number" then best, age = v, math.max(0, time() - h.t) end
+	if v and v > 0 and h and type(h.t) == "number" then best, age = v, math.max(0, time() - h.t) end
 	if M.NotedPrice then
 		local noted, nage = M:NotedPrice(tonumber(itemID))
 		if noted and noted > 0 and nage and (not age or nage < age) then best, age = noted, math.max(0, nage) end
@@ -149,17 +171,27 @@ end
 
 function P:Status()
 	local data = _G.KUI_PRICE_DATA
-	if type(data) ~= "table" then
-		return "No price data. Install the K-Market Prices app (github.com/Emu-Soft/K-Market-Prices), then /reload."
+	local id, h, from = self:House()
+	local share = self.Share and self.Share.StatusText and self.Share:StatusText()
+	share = share and (" " .. share) or ""
+	if not h then
+		if type(data) ~= "table" then
+			return "No price data. Install the K-Market Prices app (github.com/Emu-Soft/K-Market-Prices), then /reload,"
+				.. " or wait for a guildmate who has it." .. share
+		end
+		if data.v ~= 1 then return "The price data is a newer format than this K-UI. Update K-UI." .. share end
+		return "Price data has no auction house for your faction." .. share
 	end
-	if data.v ~= 1 then return "The price data is a newer format than this K-UI. Update K-UI." end
-	local id, h = self:House()
-	if not h then return "Price data has no auction house for your faction." end
-	local n = 0
-	for _ in h.d:gmatch(";") do n = n + 1 end
-	if #h.d > 0 then n = n + 1 end
-	return string.format("Prices for house %s (%s): %d items, %s old. New prices load at login or /reload.",
-		tostring(id), h.faction, n, self:Age() or "?")
+	local where = from == "guild" and ("shared by " .. tostring(h.from or "a guildmate")) or "from the app"
+	return string.format("Prices for house %s (%s), %s: %d items, %s old.%s",
+		tostring(id), tostring(h.faction), where, P.Count(h.d), self:Age() or "?", share)
+end
+
+function P.Count(d)
+	if type(d) ~= "string" or d == "" then return 0 end
+	local n = 1
+	for _ in d:gmatch(";") do n = n + 1 end
+	return n
 end
 
 local function TooltipOn()
@@ -189,10 +221,16 @@ function P.Command(msg)
 	local rest = msg:match("^%s*prices%s*(.*)$")
 	if not rest then return false end
 	local onoff = rest:match("^tooltip%s+(%a+)")
+	local shareOnOff = rest:match("^share%s+(%a+)")
 	if onoff == "on" or onoff == "off" then
 		local db = M:DB()
 		if db then db.priceTooltip = (onoff == "on") end
 		print("|cffe0bb00K-Market:|r price lines in tooltips " .. onoff .. ".")
+	elseif shareOnOff == "on" or shareOnOff == "off" then
+		local db = M:DB()
+		if db then db.priceShare = (shareOnOff == "on") end
+		if P.Share and P.Share.SettingChanged then P.Share:SettingChanged() end
+		print("|cffe0bb00K-Market:|r sharing prices with your guild " .. shareOnOff .. ".")
 	else
 		print("|cffe0bb00K-Market:|r " .. P:Status())
 	end

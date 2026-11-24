@@ -2,6 +2,17 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.369",
+		sections = {
+			{ title = "New", items = {
+				"K-Market shares auction prices with your guild: when one guildmate runs the K-Market Prices app, everyone in the guild using K-UI gets the same prices a few minutes later, no app needed. It is on by default; /km prices share off turns it off, and /km prices says where your prices came from.",
+			} },
+			{ title = "Changes", items = {
+				"The K-Market Prices app now keeps its prices inside the K-UI folder, so it no longer needs its own separate addon (update the app to 0.3.0; it removes the old one).",
+			} },
+		},
+	},
+	{
 		version = "1.0.368",
 		sections = {
 			{ title = "New", items = {
