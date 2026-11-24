@@ -14,6 +14,9 @@ local PATCH_NOTES = {
 			{ title = "Changes", items = {
 				"K-Market mails your characters by their full name, surname included, and adds the alts you mail to your friends list so the game stops asking before each mail.",
 			} },
+			{ title = "Fixed", items = {
+				"Kill on Sight: the Horde Scum Nearby window is back to its old width and only grows wider when a long name needs the room.",
+			} },
 		},
 	},
 	{
