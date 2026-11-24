@@ -130,12 +130,15 @@ function P.AgeColor(age)
 	return RED[1], RED[2], RED[3]
 end
 
+local COIN_ICON = "|TInterface\\MoneyFrame\\UI-%sIcon:0:0:2:0|t"
 local function Coins(copper)
-	if GetCoinTextureString then
-		local ok, text = pcall(GetCoinTextureString, copper)
-		if ok and type(text) == "string" and text ~= "" then return text end
-	end
-	return M.FormatMoney(copper)
+	copper = math.floor(copper + 0.5)
+	local g, sv, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+	local parts = {}
+	if g > 0 then parts[#parts + 1] = g .. COIN_ICON:format("Gold") end
+	if sv > 0 then parts[#parts + 1] = sv .. COIN_ICON:format("Silver") end
+	if c > 0 or #parts == 0 then parts[#parts + 1] = c .. COIN_ICON:format("Copper") end
+	return table.concat(parts, " ")
 end
 P.Coins = Coins
 
@@ -168,7 +171,7 @@ local function AddLines(tooltip, itemID)
 	if not TooltipOn() or not tooltip or not tooltip.AddDoubleLine then return end
 	local value, age = P:Newest(itemID)
 	if not value then return end
-	tooltip:AddDoubleLine("K-Market Value", Coins(value), 0.88, 0.73, 0, 1, 1, 1)
+	tooltip:AddDoubleLine("K-Market Value", P.Coins(value), 0.88, 0.73, 0, 1, 1, 1)
 	if tooltip.AddLine then tooltip:AddLine(P.UpdatedText(age), P.AgeColor(age)) end
 	if tooltip.Show then tooltip:Show() end
 end
