@@ -69,6 +69,10 @@ local function Refresh()
 	if M.RefreshTutorialButton then M:RefreshTutorialButton() end
 	local page = pages[state.page]
 	if page and page.Refresh then page:Refresh() end
+
+	if state.page == 1 and M.HintDashboard and Settings().tutorialSeen and not (M.tutorial and M.tutorial:IsShown()) then
+		M:HintDashboard(frame)
+	end
 end
 function M:RefreshWindow() Refresh() end
 
@@ -947,6 +951,7 @@ local function BuildGroups(page)
 	newSub:SetScript("OnClick", function()
 		if state.group then Made(M:NewGroup(Unique("New Group", state.group), state.group)) end
 	end)
+	newSub.kmTip = "A subgroup does what its parent group does, unless you give it its own operation."
 	page.newSub = newSub
 
 	local right = CreateFrame("Frame", nil, page)
