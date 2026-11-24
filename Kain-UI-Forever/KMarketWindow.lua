@@ -423,6 +423,30 @@ local function CharName(key)
 	return name
 end
 
+function M:GoldByCharacter()
+	local list, t = {}, Now()
+	for _, key in ipairs(self:GoldCharacters()) do
+		local v = self:GoldAt({ key }, t)
+		if v then list[#list + 1] = { key = key, gold = v } end
+	end
+	table.sort(list, function(a, b) if a.gold ~= b.gold then return a.gold > b.gold end return a.key < b.key end)
+	return list
+end
+
+function M:ShowGoldTooltip(owner)
+	local coins = M.Prices and M.Prices.Coins or ShortMoney
+	GameTooltip:SetOwner(owner, "ANCHOR_BOTTOMLEFT")
+	GameTooltip:AddLine("Gold on each character")
+	local total = 0
+	for _, row in ipairs(self:GoldByCharacter()) do
+		total = total + row.gold
+		GameTooltip:AddDoubleLine(CharName(row.key), coins(row.gold), 1, 1, 1, 1, 1, 1)
+	end
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddDoubleLine("Total", coins(total), 1, 0.82, 0, 1, 1, 1)
+	GameTooltip:Show()
+end
+
 local function DateText(t) return date("%b %d, %Y", t) end
 local function DateTimeText(t) return date("%b %d, %Y %H:%M", t) end
 
@@ -1393,6 +1417,14 @@ local function Build()
 	frame.totalLabel = UI.Text(header, "body/medium/x-small", "textLow", "RIGHT")
 	frame.totalLabel:SetPoint("RIGHT", frame.total, "LEFT", -6, 0)
 	frame.totalLabel:SetText("TOTAL GOLD")
+
+	local totalHover = CreateFrame("Frame", nil, header)
+	totalHover:SetPoint("TOPLEFT", frame.totalLabel, "TOPLEFT", -4, 4)
+	totalHover:SetPoint("BOTTOMRIGHT", frame.total, "BOTTOMRIGHT", 4, -4)
+	totalHover:EnableMouse(true)
+	totalHover:SetScript("OnEnter", function(owner) M:ShowGoldTooltip(owner) end)
+	totalHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	frame.totalHover = totalHover
 	frame.tabs = UI.Tabs(header, PAGE_NAMES, function(i)
 		state.page = i
 		for j, p in ipairs(pages) do p:SetShown(j == i) end
