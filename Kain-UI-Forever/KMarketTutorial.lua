@@ -372,17 +372,16 @@ local at = 1
 
 local function Seen() return M.Settings and M.Settings().tutorialSeen end
 
+local resumePage, resumeStep
+
 local function Resume()
-	local d = M.Settings and M.Settings()
-	if not d then return end
-	local page = tonumber(d.tutorialResume)
-	if page and PAGES[page] then return page, STEPS[tonumber(d.tutorialResumeStep) or 0] end
+	if resumePage and PAGES[resumePage] then return resumePage, STEPS[resumeStep or 0] end
 end
 
 local function SetResume(page, step)
-	local d = M.Settings()
-	d.tutorialResume, d.tutorialResumeStep = page, step
+	resumePage, resumeStep = page, step
 end
+M.TutorialResume = Resume
 
 local function ShouldPulse()
 	if not Seen() then return true end
