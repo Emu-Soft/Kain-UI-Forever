@@ -49,8 +49,8 @@ function M:BefriendAlt(to)
 	if Plain(C_FriendList.GetFriendInfo(to)) then return end
 	local count = C_FriendList.GetNumFriends and Plain(C_FriendList.GetNumFriends()) or 0
 	if count >= 100 then return end
+
 	C_FriendList.AddFriend(to, "K-Market: my alt")
-	Say(to .. " added to your friends list, so the game stops asking before you mail your own alt.")
 end
 
 function M:BefriendAlts()

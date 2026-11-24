@@ -226,8 +226,7 @@ local PAGES = {
 		title = "At the mailbox",
 		text = "K-Market's mailbox window opens instead of the game's. " .. Y .. "Blizzard UI" .. R .. " switches back, and it remembers.\n\n"
 			.. Y .. "Send Groups" .. R .. "    On the Groups tab. Mails what your Mailing and Crafter operations ask for, in as few mails as it can.\n"
-			.. Y .. "Open All" .. R .. "    Takes everything from your inbox and records your sales.\n\n"
-			.. "K-Market adds your alts to your friends list, so the game doesn't ask \"are you sure?\" each time.",
+			.. Y .. "Open All" .. R .. "    Takes everything from your inbox and records your sales.",
 		picture = function(stage)
 			local win = UI.Panel(stage, "medium", 6)
 			win:SetSize(420, 196)
