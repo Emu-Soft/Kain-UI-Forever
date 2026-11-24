@@ -95,13 +95,34 @@ function P.Show(value)
 	return "0"
 end
 
-function P:Age()
-	local _, h = self:House()
-	if not h or type(h.t) ~= "number" then return nil end
-	local s = math.max(0, time() - h.t)
+local function AgeText(s)
+	s = math.max(0, s)
 	if s < 3600 then return math.floor(s / 60) .. " min" end
 	if s < 172800 then return math.floor(s / 3600) .. " h" end
 	return math.floor(s / 86400) .. " days"
+end
+
+function P:Age()
+	local _, h = self:House()
+	if not h or type(h.t) ~= "number" then return nil end
+	return AgeText(time() - h.t)
+end
+
+function P:Newest(itemID)
+	local best, age
+	local _, h = self:House()
+	local v = self:Value(itemID, "market")
+	if v and v > 0 and type(h.t) == "number" then best, age = v, math.max(0, time() - h.t) end
+	if M.NotedPrice then
+		local noted, nage = M:NotedPrice(tonumber(itemID))
+		if noted and noted > 0 and nage and (not age or nage < age) then best, age = noted, math.max(0, nage) end
+	end
+	return best, age
+end
+
+function P.UpdatedText(age)
+	if age < 60 then return "Updated just now" end
+	return "Updated " .. AgeText(age) .. " ago"
 end
 
 function P:Status()
@@ -126,11 +147,10 @@ end
 
 local function AddLines(tooltip, itemID)
 	if not TooltipOn() or not tooltip or not tooltip.AddDoubleLine then return end
-	local r = P:Get(itemID)
-	if not r then return end
-	local function Money(c) return c and c > 0 and M.FormatMoney(c) or "-" end
-	tooltip:AddDoubleLine("K-Market market", Money(r[2]), 0.88, 0.73, 0, 1, 1, 1)
-	tooltip:AddDoubleLine("Min buyout / 7-day", Money(r[1]) .. " / " .. Money(r[3]), 0.72, 0.75, 0.75, 1, 1, 1)
+	local value, age = P:Newest(itemID)
+	if not value then return end
+	tooltip:AddDoubleLine("K-Market Value", M.FormatMoney(value), 0.88, 0.73, 0, 1, 1, 1)
+	if tooltip.AddLine then tooltip:AddLine(P.UpdatedText(age), 0.72, 0.75, 0.75) end
 	if tooltip.Show then tooltip:Show() end
 end
 P.AddTooltipLines = AddLines
