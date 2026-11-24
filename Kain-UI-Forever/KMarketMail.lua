@@ -6,15 +6,15 @@ local SEND_TIMEOUT = 10
 local CONFIRM_TIMEOUT = 60
 local MAX_ATTACH = ATTACHMENTS_MAX_SEND or 12
 
-local function SameName(a, b) return type(a) == "string" and type(b) == "string" and a:lower() == b:lower() end
-
 local function IsMe(to)
-	local _, name, realm = M:Me()
+	local key, name, realm = M:Me()
 	if not to or not name then return true end
-	to = to:match("^%s*(.-)%s*$"):gsub("%s+", "-")
-	local surname = M:MySurname()
-	return SameName(to, name) or SameName(to, name .. "-" .. (tostring(realm):gsub("%s", "")))
-		or (surname ~= nil and SameName(to, name .. "-" .. surname))
+	local want = to:match("^%s*(.-)%s*$"):gsub("%s+", " "):lower()
+	local me = { name = name, realm = realm, surname = M:MySurname() }
+	for _, form in ipairs(M.NameForms(me)) do
+		if form == want then return true end
+	end
+	return key ~= nil and key:lower() == want
 end
 M.IsMe = IsMe
 

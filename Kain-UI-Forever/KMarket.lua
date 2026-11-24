@@ -643,32 +643,48 @@ function M:MySurname()
 	local rest = full:sub(#name + 1):match("^[%s%-]+(.-)%s*$")
 	if not rest or rest == "" then return nil end
 	if realm and rest:gsub("%s", "") == realm:gsub("%s", "") then return nil end
-	return (rest:gsub("%s+", "-"))
+	return (rest:gsub("%s+", " "))
 end
 
 function M.MailName(c, myRealm)
 	if type(c) ~= "table" or type(c.name) ~= "string" then return nil end
-	if type(c.surname) == "string" and c.surname ~= "" then return c.name .. "-" .. c.surname end
+	if type(c.surname) == "string" and c.surname ~= "" then return c.name .. " " .. (c.surname:gsub("%-", " ")) end
 	if myRealm and c.realm ~= myRealm then return c.name .. "-" .. (tostring(c.realm):gsub("%s", "")) end
 	return c.name
 end
 local function RecipientFor(c, myRealm) return M.MailName(c, myRealm) end
 
+local function NameForms(c)
+	local forms = { c.name:lower() }
+	if type(c.surname) == "string" and c.surname ~= "" then
+		local sur = c.surname:lower():gsub("%-", " ")
+		forms[#forms + 1] = c.name:lower() .. " " .. sur
+		forms[#forms + 1] = c.name:lower() .. "-" .. sur:gsub("%s+", "-")
+	end
+	forms[#forms + 1] = (c.name .. "-" .. (tostring(c.realm):gsub("%s", ""))):lower()
+	return forms
+end
+M.NameForms = NameForms
+
 function M:NormalizeName(text)
 	if type(text) ~= "string" then return nil end
-	text = text:match("^%s*(.-)%s*$"):gsub("%s*%-%s*", "-"):gsub("%s+", "-")
+	text = text:match("^%s*(.-)%s*$"):gsub("%s+", " ")
 	if text == "" then return nil end
-	if not text:find("-", 1, true) then
-		local _, _, myRealm = self:Me()
-		local found
-		for _, c in pairs(self:DB().chars) do
-			if type(c.name) == "string" and c.name:lower() == text:lower() then
-				if found then return text end
-				found = c
+	local want = text:lower()
+	local _, _, myRealm = self:Me()
+	local found, count = nil, 0
+	for _, c in pairs(self:DB().chars) do
+		if type(c.name) == "string" then
+			for i, form in ipairs(NameForms(c)) do
+				if form == want then
+					if i > 1 then return M.MailName(c, myRealm) end
+					found, count = c, count + 1
+					break
+				end
 			end
 		end
-		if found then return M.MailName(found, myRealm) end
 	end
+	if count == 1 then return M.MailName(found, myRealm) end
 	return text
 end
 
@@ -690,12 +706,12 @@ end
 function M:CharKeyFor(recipient)
 	if type(recipient) ~= "string" then return nil end
 	local _, _, myRealm = self:Me()
-	local want = (recipient:match("^%s*(.-)%s*$"):gsub("%s+", "-")):lower()
+	local want = recipient:match("^%s*(.-)%s*$"):gsub("%s+", " "):lower()
 	for key, c in pairs(self:DB().chars) do
 		if type(c.name) == "string" then
-			local byRealm = (c.name .. "-" .. (tostring(c.realm):gsub("%s", ""))):lower()
-			local mail = M.MailName(c, myRealm):lower()
-			if want == byRealm or want == mail or (c.realm == myRealm and c.name:lower() == want) then return key end
+			for i, form in ipairs(NameForms(c)) do
+				if form == want and (i > 1 or c.realm == myRealm) then return key end
+			end
 		end
 	end
 end

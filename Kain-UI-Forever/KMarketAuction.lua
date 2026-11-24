@@ -169,8 +169,33 @@ local function ClearSearches()
 	searcher.current = nil
 end
 
-local post
-M.postState = function() return post end
+local sell
+M.sellState = function() return sell end
+
+local function SellFrame()
+	local ah = AuctionHouseFrame
+	if not ah then return nil end
+	for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
+		local f = ah[key]
+		if f and f:IsShown() and f.GetItem then
+			local loc = f:GetItem()
+			if loc and (not loc.IsValid or loc:IsValid()) then return f, loc, key == "CommoditiesSellFrame" end
+		end
+	end
+	return nil
+end
+M.SellFrame = SellFrame
+
+local function LocItemID(loc)
+	if not loc then return nil end
+	if C_Item and C_Item.GetItemID then
+		local id = Plain(C_Item.GetItemID(loc))
+		if id then return id end
+	end
+	local bag, slot = loc.bagID or loc.bag, loc.slotIndex or loc.slot
+	local info = bag and C_Container.GetContainerItemInfo(bag, slot)
+	return info and Plain(info.itemID)
+end
 
 function M:BuildPostQueue()
 	local bags = self:ScanBags()
@@ -184,8 +209,7 @@ function M:BuildPostQueue()
 		if op then
 			local have = bags[id].count - (tonumber(op.keep) or 0)
 			if have > 0 then
-				local commodity, key = KeyFor(id, bags[id].slots[1])
-				entries[#entries + 1] = { itemID = id, op = op, have = have, commodity = commodity, key = key, state = "scanning" }
+				entries[#entries + 1] = { itemID = id, op = op, have = have, left = have, state = "todo" }
 			end
 		end
 	end
@@ -194,91 +218,178 @@ end
 
 function M:DecidePost(e, results)
 	local price, how = self:PostPrice(e.op, results.lowest, results.ours, e.itemID)
-	if not price then e.state, e.reason = "skip", how; return end
+	if not price then return nil, how end
 	local cap = tonumber(e.op.postCap) or 0
 	local up = (results.ours and results.lowest and price == results.lowest) and results.owned or 0
-	local count = math.min(e.have, cap - up)
-	if count <= 0 then
-		e.state, e.reason = "skip", "you already have " .. up .. " up (post cap " .. cap .. ")"
-		return
-	end
-	e.state, e.price, e.left, e.reason = "ready", price, count, how
-	e.lowest = results.lowest
+	local count = math.min(e.left or e.have, cap - up - (e.posted or 0))
+	if count <= 0 then return nil, "you already have " .. (up + (e.posted or 0)) .. " up (post cap " .. cap .. ")" end
+	return price, how, count
 end
 
-local function FirstReady()
-	if not post then return nil end
-	for _, e in ipairs(post.entries) do
-		if e.state == "ready" then return e end
-		if e.state == "scanning" then return nil end
-	end
+local function EntryFor(itemID)
+	if not sell then return nil end
+	for _, e in ipairs(sell.entries) do if e.itemID == itemID then return e end end
 end
 
-function M:StartPostScan()
-	if InCombatLockdown() then Say("not in combat."); return end
-	if not (C_AuctionHouse and C_AuctionHouse.SendSearchQuery) then Say("the auction house can't be read."); return end
-	self:StopCancelScan()
-	ClearSearches()
-	local entries = self:BuildPostQueue()
-	if #entries == 0 then
-		Say("nothing to post: no item in your bags is in a group with an Auctioning operation (above its Keep amount).")
-		post = nil
-		self:RefreshAuctionPanel()
-		return
+local function StartSell()
+	sell = { entries = M:BuildPostQueue(), posted = 0 }
+end
+
+local function Track()
+	if not sell then StartSell() end
+	local frame, loc, commodity = SellFrame()
+	if not frame then sell.current = nil; M:RefreshAuctionPanel(); return end
+	local id = LocItemID(loc)
+	if sell.current and sell.current.itemID == id and sell.current.loc == loc then return end
+	local e = EntryFor(id)
+	sell.current = { itemID = id, loc = loc, commodity = commodity, entry = e, frame = frame, asked = GetTime() }
+	if not e then
+		sell.current.ready = true
+		if commodity and frame.SetToMaxQuantity then frame:SetToMaxQuantity() end
 	end
-	post = { entries = entries, posted = 0 }
-	local run = post
-	for _, e in ipairs(entries) do
-		Queue({ itemID = e.itemID, commodity = e.commodity, key = e.key, done = function(results)
-			if post ~= run then return end
-			M:DecidePost(e, results)
-			M:RefreshAuctionPanel()
-		end })
+	M:RefreshAuctionPanel()
+	if e then
+
+		C_Timer.After(0.2, function() M:PriceCurrent(false) end)
+		local cur = sell.current
+		C_Timer.After(SCAN_TIMEOUT, function()
+			if sell and sell.current == cur and not cur.ready and not cur.reason then M:PriceCurrent(true) end
+		end)
+	end
+end
+M.TrackSellItem = Track
+
+function M:PriceCurrent(timedOut)
+	local cur = sell and sell.current
+	if not cur or not cur.entry or cur.ready then return end
+	local _, loc = SellFrame()
+	if loc ~= cur.loc then return end
+	local key
+	if not cur.commodity and C_AuctionHouse.GetItemKeyFromItem then
+		local ok, k = pcall(C_AuctionHouse.GetItemKeyFromItem, cur.loc)
+		key = ok and k or nil
+	end
+	key = key or C_AuctionHouse.MakeItemKey(cur.itemID)
+	local results = ReadResults(cur.itemID, cur.commodity, key)
+	if not results.lowest and not timedOut then return end
+	local price, how, count = self:DecidePost(cur.entry, results)
+	if not price then
+		cur.reason = how
+		cur.entry.state, cur.entry.reason = "skip", how
+	else
+		cur.ready, cur.price, cur.count, cur.how = true, price, count, how
+		cur.entry.price, cur.entry.reason = price, how
+		self:FillSellFrame()
 	end
 	self:RefreshAuctionPanel()
+end
+
+function M:FillSellFrame()
+	local cur = sell and sell.current
+	if not cur or not cur.price then return end
+	local f = cur.frame
+	if f.PriceInput and f.PriceInput.SetAmount then f.PriceInput:SetAmount(cur.price) end
+	local max = f.GetMaxQuantity and f:GetMaxQuantity() or cur.count
+	local count = math.min(cur.count, max or cur.count)
+	if f.QuantityInput and f.QuantityInput.SetQuantity then f.QuantityInput:SetQuantity(count) end
+	cur.count = count
+	local d = tonumber(cur.entry.op.duration)
+	if d and f.Duration and f.Duration.SetDuration and f.Duration.GetDuration and f.Duration:GetDuration() ~= d then f.Duration:SetDuration(d) end
+	if f.UpdatePostState then f:UpdatePostState() end
+end
+
+local function WarningShown()
+	return StaticPopup_Visible and StaticPopup_Visible("AUCTION_HOUSE_POST_WARNING")
+end
+
+function M:LoadNextSell(fromEntry)
+	if not sell then StartSell() end
+	if not AuctionHouseFrame or not AuctionHouseFrame.SetPostItem then return false end
+	local bags = self:ScanBags()
+	for _, e in ipairs(sell.entries) do
+		if (fromEntry == nil or e == fromEntry) and (e.state == "todo" or (fromEntry and e.state == "skip")) and e.left > 0 then
+			local b = bags[e.itemID]
+			local s = b and b.slots[1]
+			if s then
+				if e.state == "skip" then e.state, e.reason = "todo", nil end
+				local loc = SlotLocation(s)
+				if loc then AuctionHouseFrame:SetPostItem(loc); Track(); return true end
+			else
+				e.state, e.reason = "done", nil
+			end
+		end
+	end
+	self:RefreshAuctionPanel()
+	return false
 end
 
 function M:PostClick()
 	if InCombatLockdown() then Say("not in combat."); return end
-	if not post then return end
-	if post.pending then
-		local p = post.pending
-		post.pending = nil
-		if p.commodity then C_AuctionHouse.ConfirmPostCommodity(unpack(p.args, 1, 4)) else C_AuctionHouse.ConfirmPostItem(unpack(p.args, 1, 5)) end
+	if WarningShown() then
+		local ah = AuctionHouseFrame
+		if not (ah.CommoditiesSellFrame and ah.CommoditiesSellFrame:ConfirmPost()) and ah.ItemSellFrame then ah.ItemSellFrame:ConfirmPost() end
+		StaticPopup_Hide("AUCTION_HOUSE_POST_WARNING")
 		self:RefreshAuctionPanel()
 		return
 	end
-	local e = FirstReady()
-	if not e then return end
-	local slot = SlotWith(e.itemID)
-	if not slot then Say(M.ItemName(e.itemID) .. " isn't ready in your bags yet; try again in a moment."); return end
-	local loc = SlotLocation(slot)
-	local duration = tonumber(e.op.duration) or 2
-	local args, ok, amount
-	if e.commodity then
-		amount = e.left
-		args = { loc, duration, amount, e.price }
-		ok = C_AuctionHouse.PostCommodity(loc, duration, amount, e.price)
-	else
-		amount = 1
-		args = { loc, duration, 1, nil, e.price }
-		ok = C_AuctionHouse.PostItem(loc, duration, 1, nil, e.price)
+	if not sell then StartSell() end
+	Track()
+	local cur = sell.current
+	if not cur then
+		if not self:LoadNextSell() then Say("right-click an item in your bags to put it in the Sell tab.") end
+		return
 	end
-	if ok == false then
-		e.state, e.reason = "skip", "the game wouldn't post it"
-	else
-		post.posted = post.posted + 1
-		post.last = { commodity = e.commodity, args = args }
-		e.left = e.left - amount
-		e.posted = (e.posted or 0) + amount
-		if e.left <= 0 then e.state = "done" end
+	if not cur.ready then
+		if cur.reason then self:SkipPost() end
+		return
+	end
+	if cur.entry then self:FillSellFrame() end
+	local f = cur.frame
+	local ok, why = true, nil
+	if f.CanPostItem then ok, why = f:CanPostItem() end
+	if not ok then
+		Say("the game won't list it yet" .. (type(why) == "string" and (": " .. why) or "") .. ".")
+		return
+	end
+	local count = (f.GetQuantity and f:GetQuantity()) or cur.count or 1
+	cur.posting = true
+	f:PostItem()
+	sell.posted = sell.posted + 1
+	if cur.entry then
+		cur.entry.left = cur.entry.left - count
+		cur.entry.posted = (cur.entry.posted or 0) + count
+		if cur.entry.left <= 0 then cur.entry.state = "done" end
 	end
 	self:RefreshAuctionPanel()
 end
 
+function M:OnAuctionCreated()
+	local cur = sell and sell.current
+	if not cur or not cur.posting then return end
+	local function Next()
+		if not sell or sell.current ~= cur then return end
+
+		if AuctionHouseMultisellProgressFrame and AuctionHouseMultisellProgressFrame:IsShown() then C_Timer.After(0.3, Next); return end
+		sell.current = nil
+		local e = cur.entry
+		if e and e.state ~= "done" and e.left > 0 then
+			if M:LoadNextSell(e) then return end
+		end
+		M:LoadNextSell()
+		M:RefreshAuctionPanel()
+	end
+	C_Timer.After(0.3, Next)
+end
+
 function M:SkipPost()
-	local e = FirstReady()
-	if e then e.state, e.reason = "skip", "skipped" end
+	local cur = sell and sell.current
+	if cur and cur.entry and cur.entry.state ~= "done" then
+		cur.entry.state = "skip"
+		cur.entry.reason = cur.entry.reason or "skipped"
+	end
+	if sell then sell.current = nil end
+	if AuctionHouseFrame and AuctionHouseFrame.ClearPostItem then AuctionHouseFrame:ClearPostItem() end
+	self:LoadNextSell()
 	self:RefreshAuctionPanel()
 end
 
@@ -292,7 +403,6 @@ end
 function M:StartCancelScan()
 	if InCombatLockdown() then Say("not in combat."); return end
 	if not (C_AuctionHouse and C_AuctionHouse.QueryOwnedAuctions) then Say("the auction house can't be read."); return end
-	post = nil
 	ClearSearches()
 	cancel = { waitingOwned = true, entries = {} }
 	C_AuctionHouse.QueryOwnedAuctions({ { sortOrder = Enum2("AuctionHouseSortOrder", "Name", 1), reverseSort = false } })
@@ -374,25 +484,13 @@ function M:SkipCancel()
 end
 
 local panel
-local STATE_TEXT = { scanning = "scanning...", ready = nil, skip = nil, done = "done", fine = "not undercut" }
+local STATE_TEXT = { scanning = "scanning...", ready = nil, skip = nil, done = "listed", fine = "not undercut" }
 
 function M:RefreshAuctionPanel()
 	if not panel or not panel:IsShown() then return end
 	local rows = {}
-	local action, enabled, status = "Post", false, ""
-	if post then
-		for _, e in ipairs(post.entries) do rows[#rows + 1] = e end
-		local scanning = 0
-		for _, e in ipairs(post.entries) do if e.state == "scanning" then scanning = scanning + 1 end end
-		local e = FirstReady()
-		if post.pending then
-			action, enabled = "Confirm Post", true
-		elseif e then
-			action, enabled = string.format("Post %s x%d", M.ShortMoney(e.price), e.commodity and e.left or 1), true
-		end
-		status = scanning > 0 and string.format("Scanning: %d to go.", scanning) or string.format("%d auction(s) posted.", post.posted)
-		panel.mode = "post"
-	elseif cancel then
+	local action, enabled, status
+	if cancel then
 		for _, e in ipairs(cancel.entries) do rows[#rows + 1] = e end
 		local ready, scanning = 0, 0
 		for _, e in ipairs(cancel.entries) do
@@ -402,10 +500,43 @@ function M:RefreshAuctionPanel()
 		status = cancel.waitingOwned and "Reading your auctions..." or scanning > 0 and string.format("Scanning: %d to go.", scanning)
 			or string.format("%d undercut auction(s) to cancel.", ready)
 		panel.mode = "cancel"
+	else
+		panel.mode = "sell"
+		if not sell then StartSell() end
+		for _, e in ipairs(sell.entries) do rows[#rows + 1] = e end
+		local cur = sell.current
+		local todo = 0
+		for _, e in ipairs(sell.entries) do if e.state == "todo" and e.left > 0 then todo = todo + 1 end end
+		if WarningShown() then
+			action, enabled = "Confirm Post", true
+		elseif cur and cur.ready then
+			local f = cur.frame
+			local price = cur.price or (f.PriceInput and f.PriceInput.GetAmount and f.PriceInput:GetAmount())
+			local count = cur.count or (f.GetQuantity and f:GetQuantity()) or 1
+			action = "Post " .. (price and price > 0 and M.ShortMoney(price) or "") .. " x" .. count
+			enabled = true
+		elseif cur and cur.reason then
+			action, enabled = "Skip", true
+		elseif cur then
+			action, enabled = "Checking prices...", false
+		elseif todo > 0 then
+			action, enabled = "Load Next", true
+		else
+			action, enabled = "Right-click an item", false
+		end
+		if cur and cur.reason then
+			status = M.ItemName(cur.itemID) .. ": " .. cur.reason
+		elseif cur and cur.entry then
+			status = M.ItemName(cur.itemID) .. ": " .. (cur.how or "checking the price")
+		elseif cur then
+			status = M.ItemName(cur.itemID) .. ": the Sell tab's price (not in an Auctioning group)"
+		else
+			status = string.format("%d listed. %d item(s) from your groups to go.", sell.posted, todo)
+		end
 	end
 	UI.ButtonText(panel.action, action)
 	panel.action:SetKMEnabled(enabled)
-	panel.skip:SetKMEnabled(enabled)
+	panel.skip:SetKMEnabled(panel.mode == "cancel" and enabled or (panel.mode == "sell" and sell and sell.current ~= nil))
 	panel.status:SetText(status)
 	panel.list:SetItems(rows)
 	panel.empty:SetShown(#rows == 0)
@@ -420,29 +551,30 @@ function M:BuildAuctionPanel()
 	local title = UI.Text(panel, "body/bold/small", "accent")
 	title:SetPoint("TOPLEFT", 12, -10)
 	title:SetText("K-Market")
-	panel.postScan = UI.Button(panel, "Post Scan", 134, 24, "secondary", "KainUIForeverMarketPostScanButton")
-	panel.postScan:SetPoint("TOPLEFT", 12, -32)
-	panel.postScan:SetScript("OnClick", function() M:StartPostScan() end)
-	panel.cancelScan = UI.Button(panel, "Cancel Scan", 134, 24, "secondary", "KainUIForeverMarketCancelScanButton")
-	panel.cancelScan:SetPoint("TOPRIGHT", -12, -32)
-	panel.cancelScan:SetScript("OnClick", function() M:StartCancelScan() end)
 	panel.action = UI.Button(panel, "Post", 200, 28, "primary", "KainUIForeverMarketPostButton")
-	panel.action:SetPoint("TOPLEFT", 12, -64)
+	panel.action:SetPoint("TOPLEFT", 12, -32)
+	panel.action.kmTip = "Lists the item in the Sell tab (one click a listing), then loads the next item from your Auctioning groups. Right-click any bag item to sell it instead."
 	panel.action:SetScript("OnClick", function()
 		if panel.mode == "cancel" then M:CancelClick() else M:PostClick() end
 	end)
 	panel.skip = UI.Button(panel, "Skip", 68, 28, "secondary", "KainUIForeverMarketSkipButton")
-	panel.skip:SetPoint("TOPRIGHT", -12, -64)
+	panel.skip:SetPoint("TOPRIGHT", -12, -32)
 	panel.skip:SetScript("OnClick", function()
 		if panel.mode == "cancel" then M:SkipCancel() else M:SkipPost() end
 	end)
+	panel.cancelScan = UI.Button(panel, "Cancel Scan", 134, 22, "secondary", "KainUIForeverMarketCancelScanButton")
+	panel.cancelScan:SetPoint("TOPLEFT", 12, -66)
+	panel.cancelScan:SetScript("OnClick", function()
+		if cancel then cancel = nil; M:RefreshAuctionPanel() else M:StartCancelScan() end
+	end)
 	panel.status = UI.Text(panel, "body/regular/x-small", "textLow")
-	panel.status:SetPoint("TOPLEFT", 12, -100)
+	panel.status:SetPoint("TOPLEFT", 12, -98)
+	panel.status:SetPoint("RIGHT", -12, 0)
 	panel.empty = UI.Text(panel, "body/regular/x-small", "textLow")
 	panel.empty:SetPoint("TOPLEFT", 12, -124)
 	panel.empty:SetWidth(276)
 	panel.empty:SetWordWrap(true)
-	panel.empty:SetText("Post Scan prices everything in your bags that's in a group with an Auctioning operation. Cancel Scan finds your auctions someone has undercut.")
+	panel.empty:SetText("Right-click an item in your bags to put it in the Sell tab, then press Post. Items in a group with an Auctioning operation are listed here and go in one after another. Cancel Scan finds your auctions someone has undercut.")
 	panel.list = UI.List(panel, 34, 12, function(row)
 		row.icon = row:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(24, 24)
@@ -455,12 +587,17 @@ function M:BuildAuctionPanel()
 		row.note:SetPoint("RIGHT", -10, 0)
 		row.price = UI.Text(row, "numeric/regular/x-small", "accent", "RIGHT")
 		row.price:SetPoint("TOPRIGHT", -10, -4)
+		row:SetScript("OnClick", function(clicked)
+			if panel.mode == "sell" and clicked.kmItem and clicked.kmItem.op then M:LoadNextSell(clicked.kmItem) end
+		end)
 	end, function(row, e)
 		row.icon:SetTexture(M.ItemIcon(e.itemID))
 		local qty = e.left or e.have or e.quantity
 		row.name:SetText(M.ItemName(e.itemID) .. (qty and ("  x" .. qty) or ""))
 		row.price:SetText(e.price and M.ShortMoney(e.price) or "")
-		row.note:SetText(STATE_TEXT[e.state] or e.reason or "")
+		local note = STATE_TEXT[e.state] or e.reason or ""
+		if e.op and e.state == "todo" then note = (sell and sell.current and sell.current.entry == e) and "in the Sell tab" or "click to load" end
+		row.note:SetText(note)
 		UI.TextColor(row.note, e.state == "skip" and "error" or e.state == "ready" and "positive" or "textLow")
 		row:SetAlpha((e.state == "done" or e.state == "skip" or e.state == "fine") and 0.55 or 1)
 	end)
@@ -469,31 +606,45 @@ function M:BuildAuctionPanel()
 	panel.list:SetHeight(34 * 12)
 	panel:SetScript("OnShow", function() M:RefreshAuctionPanel() end)
 	M.auctionPanel = panel
+
+	if AuctionHouseFrame.SetPostItem and hooksecurefunc then
+		hooksecurefunc(AuctionHouseFrame, "SetPostItem", function()
+			cancel = nil
+			C_Timer.After(0, Track)
+		end)
+	end
+	if AuctionHouseFrame.ClearPostItem and hooksecurefunc then
+		hooksecurefunc(AuctionHouseFrame, "ClearPostItem", function()
+			C_Timer.After(0, function() if sell and sell.current and not SellFrame() then sell.current = nil; M:RefreshAuctionPanel() end end)
+		end)
+	end
 	self:RefreshAuctionPanel()
 end
 
 local events = CreateFrame("Frame")
 for _, e in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED",
-	"AUCTION_HOUSE_POST_WARNING", "OWNED_AUCTIONS_UPDATED", "AUCTION_CANCELED" }) do
+	"AUCTION_HOUSE_POST_WARNING", "OWNED_AUCTIONS_UPDATED", "AUCTION_CANCELED", "AUCTION_HOUSE_AUCTION_CREATED" }) do
 	KUI:SafeRegisterEvent(events, e)
 end
 events:SetScript("OnEvent", function(_, event, arg)
 	if event == "AUCTION_HOUSE_SHOW" then
 		local function Show()
 			M:BuildAuctionPanel()
+			StartSell()
 			if panel then panel:Show(); M:RefreshAuctionPanel() end
 		end
 		if AuctionHouseFrame then Show() else C_Timer.After(0.1, Show) end
 	elseif event == "AUCTION_HOUSE_CLOSED" then
-		post, cancel = nil, nil
+		sell, cancel = nil, nil
 		ClearSearches()
 	elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED" then
 		OnResults(event, arg)
+		local cur = sell and sell.current
+		if cur and cur.entry and not cur.ready then C_Timer.After(0, function() M:PriceCurrent(false) end) end
 	elseif event == "AUCTION_HOUSE_POST_WARNING" then
-		if post and post.last then
-			post.pending = post.last
-			M:RefreshAuctionPanel()
-		end
+		C_Timer.After(0, function() M:RefreshAuctionPanel() end)
+	elseif event == "AUCTION_HOUSE_AUCTION_CREATED" then
+		M:OnAuctionCreated()
 	elseif event == "OWNED_AUCTIONS_UPDATED" then
 		M:OnOwnedAuctions()
 	end

@@ -35,8 +35,8 @@ local PAGES = {
 		title = "Day to day",
 		text = "|cffe0bb00At a mailbox:|r Send Groups mails everything your operations ask for, "
 			.. "in as few mails as it can. Open All empties your inbox and notes your Auction House sales.\n\n"
-			.. "|cffe0bb00At the Auction House|r (on your bank alt): Post Scan checks the prices, "
-			.. "then each click of Post puts up one auction at your price. "
+			.. "|cffe0bb00At the Auction House|r (on your bank alt): press Post. Your group items go into the "
+			.. "Sell tab one after another at your price, one click a listing. Right-click any other bag item to sell it too. "
 			.. "Cancel Scan finds your auctions that were undercut.\n\n"
 			.. "|cffe0bb00In this window:|r the Dashboard shows your gold over time, "
 			.. "and what you sold and bought.",
