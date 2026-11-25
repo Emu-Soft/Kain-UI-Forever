@@ -2,6 +2,14 @@ local addonName, KUI = ...
 
 local PATCH_NOTES = {
 	{
+		version = "1.0.370",
+		sections = {
+			{ title = "New", items = {
+				"K-Lift (type /kl), a quiet DPS coach. It notes the buttons you press in each fight and, once the fight ends, your damage from each spell. Its window compares the fight with your own best and usual fights of the same kind, shows your pauses, time at full energy and opening moves, and gives up to three tips with how much DPS each is worth. /kl off stops it recording.",
+			} },
+		},
+	},
+	{
 		version = "1.0.369",
 		sections = {
 			{ title = "New", items = {
