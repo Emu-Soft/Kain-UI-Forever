@@ -50,7 +50,7 @@ local function BuildLast(p)
 	f.compare:SetPoint("TOPLEFT", f.dps, "BOTTOMLEFT", 0, -6)
 	f.compare:SetWidth(W - 40)
 	f.stats = {}
-	for i = 1, 5 do
+	for i = 1, 6 do
 		local label = Text(f, "GameFontHighlight", unpack(GREY))
 		label:SetPoint("TOPLEFT", 0, -64 - (i - 1) * 20)
 		local value = Text(f, "GameFontHighlight")
@@ -58,18 +58,18 @@ local function BuildLast(p)
 		f.stats[i] = { label = label, value = value }
 	end
 	f.opener = Text(f, "GameFontHighlight")
-	f.opener:SetPoint("TOPLEFT", 0, -174)
+	f.opener:SetPoint("TOPLEFT", 0, -190)
 	f.opener:SetWidth(W - 40)
 	f.tipsHead = Text(f, "GameFontNormal", unpack(GOLD))
-	f.tipsHead:SetPoint("TOPLEFT", 0, -206)
+	f.tipsHead:SetPoint("TOPLEFT", 0, -216)
 	f.tipsHead:SetText("Tips")
 	f.tips = {}
 	for i = 1, MAX_TIPS do
 		local gain = Text(f, "GameFontNormal", unpack(GREEN))
-		gain:SetPoint("TOPLEFT", 0, -230 - (i - 1) * 44)
+		gain:SetPoint("TOPLEFT", 0, -238 - (i - 1) * 44)
 		gain:SetWidth(90)
 		local tip = Text(f, "GameFontHighlight")
-		tip:SetPoint("TOPLEFT", 96, -230 - (i - 1) * 44)
+		tip:SetPoint("TOPLEFT", 96, -238 - (i - 1) * 44)
 		tip:SetWidth(W - 140)
 		tip:SetWordWrap(true)
 		f.tips[i] = { gain = gain, text = tip }
@@ -87,10 +87,12 @@ local function FillLast(f, pull)
 	if not pull.dps then
 		f.compare:SetText("The game didn't hand over the damage for this pull (combat started again too soon).")
 	elseif cmp then
+
+		local mine = L:RotationDPS(pull) or pull.dps
 		local best = cmp.best
-		local bestText = best.dps > pull.dps and (Commas(best.dps) .. " (" .. (best.date or "?") .. ")") or "this one"
-		f.compare:SetText(string.format("Your best pull like this: %s.  Your usual: %s.  From %d similar pulls.",
-			bestText, Commas(cmp.usual), cmp.count))
+		local bestText = cmp.bestRotation > mine and (Commas(cmp.bestRotation) .. " (" .. (best.date or "?") .. ")") or "this one"
+		f.compare:SetText(string.format("Rotation DPS (big cooldowns taken out): %s.  Best like this: %s.  Usual: %s.  From %d similar pulls.",
+			Commas(mine), bestText, Commas(cmp.usual), cmp.count))
 	else
 		f.compare:SetText("The first pull of its kind. K-Lift compares from the next one like it.")
 	end
@@ -102,6 +104,8 @@ local function FillLast(f, pull)
 		{ "Pauses with nothing pressed", string.format("%s (longest %s)", Seconds(tl.idle), Seconds(tl.longestIdle)) },
 	}
 	if pull.powerKind == 3 then rows[#rows + 1] = { "Time at full energy", Seconds(tl.capped) } end
+	local boost = pull.dps and L:Boost(pull) or 0
+	if boost >= 0.005 then rows[#rows + 1] = { "Added by big cooldowns", string.format("about %d%%", math.floor(boost * 100 + 0.5)) } end
 	for i, s in ipairs(f.stats) do
 		local r = rows[i]
 		s.label:SetText(r and r[1] or "")

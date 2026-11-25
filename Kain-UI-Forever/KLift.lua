@@ -11,6 +11,11 @@ local DEFAULT_GCD = 1.5
 local ENERGY = 3
 local COMBO = 4
 local SESSION_CURRENT, TYPE_DAMAGE = 1, 0
+local BIG_CD = 60
+local DEFAULT_WINDOW = 15
+local PRIOR_GAIN = 0.25
+local PRIOR_WEIGHT = 0.15
+local MAX_GAIN = 2
 
 local issecret = issecretvalue or function() return false end
 
@@ -73,6 +78,38 @@ end
 function L:DB() return db end
 function L:IsEnabled() return db ~= nil and db.enabled == true end
 
+local BIG_COOLDOWNS = {
+	["Recklessness"] = 15, ["Death Wish"] = 30, ["Bestial Wrath"] = 18, ["Rapid Fire"] = 15,
+	["Blade Flurry"] = 15, ["Adrenaline Rush"] = 15, ["Cold Blood"] = 3, ["Arcane Power"] = 15,
+	["Combustion"] = 10, ["Presence of Mind"] = 3, ["Power Infusion"] = 15, ["Inner Focus"] = 3,
+	["Blood Fury"] = 15, ["Berserking"] = 15, ["Rage of the Farseer"] = 25,
+}
+
+local OFFENSIVE_WORDS = { "damage", "attack speed", "haste", "critical", "energy regeneration",
+	"attack power", "spell power", "casting speed", "cast time" }
+
+local function ReadOffense(s, id)
+	if s.cd == nil or s.cd < BIG_CD or s.offense ~= nil then return end
+	local known = s.name and BIG_COOLDOWNS[s.name]
+	local text = Plain(Call(C_Spell and C_Spell.GetSpellDescription, id))
+	if type(text) ~= "string" or text == "" then
+		if known then s.offense, s.window = true, known end
+		return
+	end
+	local lower = text:lower()
+	local secs = tonumber(lower:match("for (%d+) sec")) or tonumber(lower:match("lasts (%d+) sec"))
+	if known then
+		s.offense, s.window = true, known
+	else
+		lower = lower:gsub("damage taken", ""):gsub("damage you take", ""):gsub("reduc%a* [%a ]-damage", "")
+		local hit = false
+		for _, w in ipairs(OFFENSIVE_WORDS) do if lower:find(w, 1, true) then hit = true end end
+		if lower:find("heal") or lower:find("stealth") or lower:find("dodge") then hit = false end
+		s.offense = hit
+		if hit then s.window = secs or DEFAULT_WINDOW end
+	end
+end
+
 local function LearnSpell(id)
 	if type(id) ~= "number" then return nil end
 	local s = db.spells[id]
@@ -99,8 +136,15 @@ local function LearnSpell(id)
 			end
 		end
 	end
+	ReadOffense(s, id)
 	return s
 end
+
+local function IsBigOffense(id)
+	local s = db and db.spells[id]
+	return s ~= nil and s.offense == true and (s.cd or 0) >= BIG_CD
+end
+L.IsBigOffense = IsBigOffense
 
 function L:SpellName(id)
 	local s = db and db.spells[id]
@@ -170,6 +214,7 @@ local fight
 local recent = {}
 local inCombat = false
 local pendingReads = {}
+local readyAt = {}
 
 local function NewPress(id, now)
 	return { id = id, at = now, cp = ComboPoints() }
@@ -184,11 +229,15 @@ local function OnPress(spellID)
 		recent[#recent + 1] = NewPress(id, now)
 		while recent[1] and now - recent[1].at > PRECAST_WINDOW + 1 do table.remove(recent, 1) end
 		if not inCombat then LearnSpell(id) end
+		if IsBigOffense(id) then readyAt[id] = now + db.spells[id].cd end
 		return
 	end
 	if #fight.presses < MAX_SEQUENCE then
 		fight.presses[#fight.presses + 1] = NewPress(id, now)
+	elseif IsBigOffense(id) then
+		fight.late[#fight.late + 1] = { id = id, at = now }
 	end
+	if IsBigOffense(id) then readyAt[id] = now + db.spells[id].cd end
 	fight.pressCount = fight.pressCount + 1
 	if not fight.boss and Plain(Call(IsEncounterInProgress)) == true then fight.boss = true end
 end
@@ -208,8 +257,11 @@ local function StartFight()
 		energyMax = power.kind == ENERGY and power.max or nil,
 		regen = power.kind == ENERGY and power.regen or nil,
 		powerKind = power.kind,
-		presses = {}, pressCount = 0,
+		presses = {}, pressCount = 0, late = {},
+		ready = {},
 	}
+
+	for id, at in pairs(readyAt) do fight.ready[id] = at end
 	for _, p in ipairs(recent) do
 		if now - p.at <= PRECAST_WINDOW then
 			fight.presses[#fight.presses + 1] = p
@@ -291,10 +343,26 @@ local function EndFight()
 		energy = f.energy, energyMax = f.energyMax, regen = f.regen, powerKind = f.powerKind,
 		presses = {},
 	}
+	local function T(at) return math.floor((at - origin) * 100 + 0.5) / 100 end
 	for _, p in ipairs(f.presses) do
-		pull.presses[#pull.presses + 1] = { id = p.id, t = math.floor((p.at - origin) * 100 + 0.5) / 100, cp = p.cp }
+		pull.presses[#pull.presses + 1] = { id = p.id, t = T(p.at), cp = p.cp }
 		LearnSpell(p.id)
 	end
+
+	local uses, ready = {}, {}
+	for _, p in ipairs(f.presses) do
+		if IsBigOffense(p.id) then uses[#uses + 1] = { id = p.id, t = T(p.at) } end
+	end
+	for _, p in ipairs(f.late) do uses[#uses + 1] = { id = p.id, t = T(p.at) } end
+	for id, at in pairs(f.ready) do
+		if at > origin then ready[id] = T(at) end
+	end
+	for _, u in ipairs(uses) do
+		local at = origin + u.t + db.spells[u.id].cd
+		if not readyAt[u.id] or readyAt[u.id] < at then readyAt[u.id] = at end
+	end
+	if #uses > 0 then pull.cdUses = uses end
+	if next(ready) then pull.cdReady = ready end
 	pull.sessionID = NewestSessionID()
 	if FinishRead(pull) then return end
 
@@ -352,8 +420,11 @@ function L:SpellRows(pull)
 	return rows, byID
 end
 
+local POSITIONAL = { Ambush = true, Backstab = true, Garrote = true, Shred = true, Ravage = true, Pounce = true }
+local POSITION_TIME = 2
+
 function L:Timeline(pull)
-	local out = { idle = 0, capped = 0, longestIdle = 0, longestAt = nil, active = 0, gcdPresses = 0 }
+	local out = { idle = 0, capped = 0, longestIdle = 0, longestAt = nil, active = 0, gcdPresses = 0, spans = {} }
 	local presses = pull.presses
 	local energyUser = pull.powerKind == ENERGY
 	local regen = pull.regen or 10
@@ -379,23 +450,211 @@ function L:Timeline(pull)
 			if spare > 0.3 then
 				local wait = 0
 				if energyUser and nextP then
+
 					local ns = SpellInfo(nextP.id)
 					local need = (ns.costType == ENERGY and ns.cost) or 0
+					local chain, mixed = 0, false
+					for k = i + 1, math.min(#presses, i + 4) do
+						local q = presses[k]
+						if q.t - nextP.t > 4 then break end
+						if q.id ~= nextP.id then mixed = true end
+						local qs = SpellInfo(q.id)
+						chain = chain + ((qs.costType == ENERGY and qs.cost) or 0)
+					end
+					if mixed and chain >= 60 then need = math.max(need, chain) end
+					need = math.min(need, max)
 					local afterGcd = math.min(max, energy + regen * gcd)
 					if need > afterGcd then wait = (need - afterGcd) / regen end
 
 					local toFull = (max - energy) / regen
 					if gap > toFull then out.capped = out.capped + (gap - math.max(toFull, gcd)) end
 				end
+
+				if nextP and POSITIONAL[SpellInfo(nextP.id).name or ""] then wait = wait + POSITION_TIME end
 				local idle = math.max(0, spare - wait)
 				if not nextP then idle = math.min(idle, 2) end
 				out.idle = out.idle + idle
+				if idle > 0 then
+					local from = t + gcd + wait
+					out.spans[#out.spans + 1] = { from = from, to = from + idle }
+				end
 				if idle > out.longestIdle then out.longestIdle, out.longestAt = idle, t + gcd end
 			end
 		end
 	end
 	out.capped = math.max(0, out.capped)
 	out.activeShare = pull.length > 0 and math.min(1, out.active / pull.length) or 0
+	return out
+end
+
+local function Windows(pull)
+	local out = {}
+	if type(pull.cdUses) ~= "table" then return out end
+	for _, u in ipairs(pull.cdUses) do
+		if type(u) == "table" and type(u.id) == "number" and type(u.t) == "number" and IsBigOffense(u.id) then
+			local w = db.spells[u.id].window or DEFAULT_WINDOW
+			out[#out + 1] = { id = u.id, from = math.max(0, u.t), to = math.min(pull.length, u.t + w) }
+		end
+	end
+	return out
+end
+L.Windows = Windows
+
+local function Coverage(pull)
+	local cov = {}
+	if not pull.length or pull.length <= 0 then return cov end
+	local byID = {}
+	for _, w in ipairs(Windows(pull)) do
+		byID[w.id] = byID[w.id] or {}
+		table.insert(byID[w.id], w)
+	end
+	for id, list in pairs(byID) do
+		table.sort(list, function(a, b) return a.from < b.from end)
+		local total, reach = 0, 0
+		for _, w in ipairs(list) do
+			local from = math.max(w.from, reach)
+			if w.to > from then total = total + (w.to - from) end
+			reach = math.max(reach, w.to)
+		end
+		cov[id] = math.min(1, total / pull.length)
+	end
+	return cov
+end
+
+local function Solve(A, b)
+	local n = #b
+	local M = {}
+	for i = 1, n do M[i] = {}; for j = 1, n do M[i][j] = A[i][j] end; M[i][n + 1] = b[i] end
+	for c = 1, n do
+		local piv = c
+		for r = c + 1, n do if math.abs(M[r][c]) > math.abs(M[piv][c]) then piv = r end end
+		if math.abs(M[piv][c]) < 1e-12 then return nil end
+		M[c], M[piv] = M[piv], M[c]
+		for r = 1, n do
+			if r ~= c then
+				local f = M[r][c] / M[c][c]
+				for k = c, n + 1 do M[r][k] = M[r][k] - f * M[c][k] end
+			end
+		end
+	end
+	local x = {}
+	for i = 1, n do x[i] = M[i][n + 1] / M[i][i] end
+	return x
+end
+
+local modelCache = {}
+
+function L:CooldownModel(spec)
+	local key = tostring(spec) .. "#" .. #db.pulls .. "#" .. tostring(db.pulls[1])
+	if modelCache.key == key then return modelCache.model end
+	local rows, ids, index = {}, {}, {}
+	for _, p in ipairs(db.pulls) do
+		if p.spec == spec and p.dps and p.dps > 0 and p.length and p.length > 0 then
+			local cov = Coverage(p)
+			for id in pairs(cov) do
+				if not index[id] and #ids < 8 then ids[#ids + 1] = id; index[id] = #ids end
+			end
+			rows[#rows + 1] = { pull = p, cov = cov }
+		end
+	end
+	local g = {}
+	for i = 1, #ids do g[i] = PRIOR_GAIN end
+	for _, r in ipairs(rows) do r.w = 1 end
+	local base = {}
+	local function BoostOf(r)
+		local boost = 0
+		for id, c in pairs(r.cov) do if index[id] then boost = boost + g[index[id]] * c end end
+		return boost
+	end
+	for _ = 1, 40 do
+
+		local sum, n = {}, {}
+		for _, r in ipairs(rows) do
+			local k = r.pull.kind or "world"
+			sum[k] = (sum[k] or 0) + r.w * r.pull.dps / (1 + BoostOf(r)); n[k] = (n[k] or 0) + r.w
+		end
+		for k, v in pairs(sum) do base[k] = v / n[k] end
+
+		for _, r in ipairs(rows) do
+			local resid = r.pull.dps / (base[r.pull.kind or "world"] * (1 + BoostOf(r))) - 1
+			r.w = 1 / (1 + (resid / 0.25) ^ 2)
+		end
+		if #ids == 0 then break end
+
+		local A, b = {}, {}
+		for i = 1, #ids do
+			A[i] = {}
+			for j = 1, #ids do A[i][j] = (i == j) and PRIOR_WEIGHT or 0 end
+			b[i] = PRIOR_WEIGHT * PRIOR_GAIN
+		end
+		for _, r in ipairs(rows) do
+			local y = r.pull.dps / base[r.pull.kind or "world"] - 1
+			for id, ci in pairs(r.cov) do
+				local i = index[id]
+				if i then
+					b[i] = b[i] + r.w * ci * y
+					for jd, cj in pairs(r.cov) do
+						local j = index[jd]
+						if j then A[i][j] = A[i][j] + r.w * ci * cj end
+					end
+				end
+			end
+		end
+		local x = Solve(A, b)
+		if not x then break end
+		for i = 1, #ids do g[i] = math.max(0, math.min(MAX_GAIN, x[i])) end
+	end
+	local gains = {}
+	for id, i in pairs(index) do gains[id] = g[i] end
+	local model = { gains = gains, base = base, pulls = #rows }
+	modelCache.key, modelCache.model = key, model
+	return model
+end
+
+function L:Boost(pull)
+	local model = self:CooldownModel(pull.spec)
+	local boost = 0
+	for id, c in pairs(Coverage(pull)) do
+		boost = boost + (model.gains[id] or PRIOR_GAIN) * c
+	end
+	return boost, model
+end
+
+function L:RotationDPS(pull)
+	if not pull.dps then return nil end
+	return pull.dps / (1 + self:Boost(pull))
+end
+
+function L:CooldownUse(pull)
+	local out = {}
+	if not pull.dps then return out end
+	local model = self:CooldownModel(pull.spec)
+	local rdps = self:RotationDPS(pull) or 0
+	local used = {}
+	for _, w in ipairs(Windows(pull)) do used[w.id] = (used[w.id] or 0) + 1 end
+
+	local known = {}
+	for _, p in ipairs(db.pulls) do
+		if p.spec == pull.spec then
+			for _, w in ipairs(Windows(p)) do known[w.id] = true end
+		end
+	end
+	for id in pairs(known) do
+		local s = db.spells[id]
+		local readyFrom = 0
+		if type(pull.cdReady) == "table" and type(pull.cdReady[id]) == "number" then readyFrom = pull.cdReady[id] end
+		local left = pull.length - readyFrom
+		if left > 3 then
+			local possible = math.floor(left / s.cd) + 1
+			local n = used[id] or 0
+			if possible > n then
+				local w = math.min(s.window or DEFAULT_WINDOW, left)
+				local gain = model.gains[id] or PRIOR_GAIN
+				out[#out + 1] = { id = id, ready = possible, used = n, worth = (possible - n) * gain * w * rdps }
+			end
+		end
+	end
+	table.sort(out, function(a, b) return a.worth > b.worth end)
 	return out
 end
 
@@ -413,15 +672,17 @@ end
 function L:Compare(pull)
 	local list = self:Similar(pull)
 	if #list == 0 then return nil end
+
 	local dps = {}
-	local best
+	local best, bestR
 	for _, p in ipairs(list) do
-		dps[#dps + 1] = p.dps
-		if not best or p.dps > best.dps then best = p end
+		local r = self:RotationDPS(p)
+		dps[#dps + 1] = r
+		if not best or r > bestR then best, bestR = p, r end
 	end
 	table.sort(dps)
 	local mid = #dps % 2 == 1 and dps[(#dps + 1) / 2] or (dps[#dps / 2] + dps[#dps / 2 + 1]) / 2
-	return { best = best, usual = mid, count = #list }
+	return { best = best, bestRotation = bestR, usual = mid, count = #list }
 end
 
 local function OpenerOf(pull, n)
@@ -448,12 +709,26 @@ function L:Tips(pull)
 	local abilityDamage = pull.damage - ((byID[MELEE_ID] and byID[MELEE_ID].damage) or 0)
 	local perActiveSecond = tl.active > 0 and abilityDamage / tl.active or 0
 
+	local model = self:CooldownModel(pull.spec)
+	local windows = Windows(pull)
+	local idleInCd, extra, cdName = 0, 0, nil
+	for _, sp in ipairs(tl.spans) do
+		for _, w in ipairs(windows) do
+			local o = math.min(sp.to, w.to) - math.max(sp.from, w.from)
+			if o > 0 then
+				idleInCd = idleInCd + o
+				extra = extra + o * (model.gains[w.id] or PRIOR_GAIN)
+				cdName = cdName or self:SpellName(w.id)
+			end
+		end
+	end
 	if tl.idle >= 1 and perActiveSecond > 0 then
-		local gain = tl.idle * perActiveSecond
-		tips[#tips + 1] = {
-			dps = gain / pull.length,
-			text = string.format("You pressed nothing for %.1f s while you could have (longest pause %.1f s). Filling those gaps is the easiest damage there is.", tl.idle, tl.longestIdle),
-		}
+		local gain = (tl.idle + extra) * perActiveSecond
+		local text = string.format("You pressed nothing for %.1f s while you could have (longest pause %.1f s). Filling those gaps is the easiest damage there is.", tl.idle, tl.longestIdle)
+		if idleInCd >= 0.5 then
+			text = text .. string.format(" %.1f s of it was while %s was up, when every second is worth more.", idleInCd, cdName)
+		end
+		tips[#tips + 1] = { dps = gain / pull.length, text = text }
 	end
 
 	if pull.powerKind == ENERGY and tl.capped >= 1 then
@@ -476,7 +751,7 @@ function L:Tips(pull)
 
 	for _, r in ipairs(rows) do
 		local s = SpellInfo(r.id)
-		if r.presses > 0 and r.perPress and s.cd and s.cd >= 8 and pull.length >= s.cd then
+		if r.presses > 0 and r.perPress and s.cd and s.cd >= 8 and pull.length >= s.cd and not IsBigOffense(r.id) then
 			local possible = math.floor(pull.length / s.cd) + 1
 			local missed = possible - r.presses
 			if missed >= 1 then
@@ -488,11 +763,25 @@ function L:Tips(pull)
 		end
 	end
 
+	local anyPull = pull.kind == "boss" or pull.kind == "dummy"
+	for _, c in ipairs(self:CooldownUse(pull)) do
+		local s = SpellInfo(c.id)
+		if anyPull or (s.cd <= 120 and pull.length >= 20) then
+			local text
+			if c.used == 0 then
+				text = string.format("%s was ready but you didn't press it. It's worth about %d damage each time here.", self:SpellName(c.id), math.floor(c.worth / (c.ready - c.used) + 0.5))
+			else
+				text = string.format("%s was ready %d times but you pressed it %d. Use it as soon as it's back.", self:SpellName(c.id), c.ready, c.used)
+			end
+			tips[#tips + 1] = { dps = c.worth / pull.length, text = text }
+		end
+	end
+
 	table.sort(tips, function(a, b) return a.dps > b.dps end)
 	while #tips > 3 do table.remove(tips) end
 
 	local cmp = self:Compare(pull)
-	if cmp and cmp.count >= 2 and cmp.best.dps > pull.dps * 1.1 then
+	if cmp and cmp.count >= 2 and cmp.bestRotation > (self:RotationDPS(pull) or 0) * 1.1 then
 		local mine, best = OpenerOf(pull, 3), OpenerOf(cmp.best, 3)
 		if #best == 3 and not SameList(mine, best) then
 			local names = {}
@@ -568,17 +857,18 @@ local function Stats(list)
 end
 
 function L:LabResults()
-	local byTag, order = {}, {}
+	local byTag, boostOf, order = {}, {}, {}
 	for _, p in ipairs(db and db.pulls or {}) do
 		if type(p.lab) == "string" and p.dps then
-			if not byTag[p.lab] then byTag[p.lab] = {}; order[#order + 1] = p.lab end
-			table.insert(byTag[p.lab], p.dps)
+			if not byTag[p.lab] then byTag[p.lab] = {}; boostOf[p.lab] = 0; order[#order + 1] = p.lab end
+			table.insert(byTag[p.lab], self:RotationDPS(p))
+			boostOf[p.lab] = boostOf[p.lab] + self:Boost(p)
 		end
 	end
 	local groups = {}
 	for _, tag in ipairs(order) do
 		local n, mean, var = Stats(byTag[tag])
-		groups[#groups + 1] = { tag = tag, n = n, mean = mean, var = var, sd = math.sqrt(var) }
+		groups[#groups + 1] = { tag = tag, n = n, mean = mean, var = var, sd = math.sqrt(var), boost = boostOf[tag] / n }
 	end
 	table.sort(groups, function(a, b) return a.mean > b.mean end)
 	local out = { groups = groups }
@@ -591,7 +881,12 @@ function L:LabResults()
 			local se = math.sqrt(a.var / a.n + b.var / b.n)
 			local pct = b.mean > 0 and diff / b.mean * 100 or 0
 			local z = se > 0 and diff / se or (diff > 0 and math.huge or 0)
-			if z >= 2 then
+
+			local cdGap = math.abs(a.boost - b.boost)
+			if cdGap >= 0.05 and z >= 1 then
+				local more = a.boost > b.boost and a or b
+				out.verdict = string.format("%s is ahead of %s by %.1f%% with big cooldowns taken out, but %s had them up a lot more, so this rests on K-Lift's estimate of what they add. For a clean test use the same cooldowns on both sides.", a.tag, b.tag, pct, more.tag)
+			elseif z >= 2 then
 				out.verdict = string.format("%s beats %s by %.1f%%, and that's very likely real.", a.tag, b.tag, pct)
 			else
 				local more = ""
