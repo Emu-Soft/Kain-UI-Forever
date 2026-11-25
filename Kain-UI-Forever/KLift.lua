@@ -1019,11 +1019,15 @@ function L:ExportText()
 	TalentLines(out)
 
 	local dmg, presses, total, pulls, secs = {}, {}, 0, 0, 0
+	local cpSum, cpN = {}, {}
 	for _, p in ipairs(db.pulls) do
 		if p.damage and p.spells then
 			pulls, secs, total = pulls + 1, secs + (p.length or 0), total + p.damage
 			for _, sp in ipairs(p.spells) do dmg[sp.id] = (dmg[sp.id] or 0) + sp.amount end
-			for _, pr in ipairs(p.presses) do presses[pr.id] = (presses[pr.id] or 0) + 1 end
+			for _, pr in ipairs(p.presses) do
+				presses[pr.id] = (presses[pr.id] or 0) + 1
+				if type(pr.cp) == "number" then cpSum[pr.id] = (cpSum[pr.id] or 0) + pr.cp; cpN[pr.id] = (cpN[pr.id] or 0) + 1 end
+			end
 		end
 	end
 	out[#out + 1] = string.format("measured: %d pulls, %.0f s, %.0f damage, %.0f DPS", pulls, secs, total, secs > 0 and total / secs or 0)
@@ -1034,7 +1038,8 @@ function L:ExportText()
 	for _, id in ipairs(ids) do
 		local n = presses[id] or 0
 		out[#out + 1] = string.format("spell %d %s: damage %.0f (%.1f%%), presses %d%s", id, self:SpellName(id), dmg[id] or 0,
-			total > 0 and (dmg[id] or 0) * 100 / total or 0, n, n > 0 and (dmg[id] or 0) > 0 and string.format(", per press %.0f", dmg[id] / n) or "")
+			total > 0 and (dmg[id] or 0) * 100 / total or 0, n, (n > 0 and (dmg[id] or 0) > 0 and string.format(", per press %.0f", dmg[id] / n) or "")
+			.. ((cpN[id] or 0) > 0 and (cpSum[id] or 0) > 0 and string.format(", combo points at press %.1f", cpSum[id] / cpN[id]) or ""))
 	end
 	return table.concat(out, "\n")
 end
