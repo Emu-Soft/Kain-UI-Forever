@@ -243,7 +243,56 @@ local function FillHistory(f, current)
 	end
 end
 
-local PAGES = { { key = "last", label = "Last pull" }, { key = "spells", label = "Spells" }, { key = "history", label = "History" } }
+local MAX_LAB_ROWS = 6
+local function BuildLab(p)
+	local f = CreateFrame("Frame", nil, p)
+	f:SetAllPoints()
+	f.status = Text(f, "GameFontNormal", unpack(GOLD))
+	f.status:SetPoint("TOPLEFT", 0, 0)
+	f.status:SetWidth(W - 40)
+	local cols = { { "Test", 0 }, { "Fights", 200 }, { "Average DPS", 280 }, { "Spread (+/-)", 400 } }
+	for _, c in ipairs(cols) do
+		local h = Text(f, "GameFontNormal", unpack(GREY))
+		h:SetPoint("TOPLEFT", c[2], -30)
+		h:SetText(c[1])
+	end
+	f.rows = {}
+	for i = 1, MAX_LAB_ROWS do
+		local y = -52 - (i - 1) * 22
+		local r = {}
+		r.tag = Text(f); r.tag:SetPoint("TOPLEFT", 0, y); r.tag:SetWidth(190)
+		r.n = Text(f); r.n:SetPoint("TOPLEFT", 200, y)
+		r.mean = Text(f); r.mean:SetPoint("TOPLEFT", 280, y)
+		r.sd = Text(f); r.sd:SetPoint("TOPLEFT", 400, y)
+		f.rows[i] = r
+	end
+	f.verdict = Text(f, "GameFontHighlightLarge", unpack(GREEN))
+	f.verdict:SetPoint("TOPLEFT", 0, -52 - MAX_LAB_ROWS * 22 - 12)
+	f.verdict:SetWidth(W - 40)
+	f.verdict:SetWordWrap(true)
+	f.help = Text(f, "GameFontHighlightSmall", unpack(GREY))
+	f.help:SetPoint("BOTTOMLEFT", 0, 0)
+	f.help:SetWidth(W - 40)
+	f.help:SetWordWrap(true)
+	f.help:SetText("How to test: on a target dummy, type /kl lab A and play one way for a few fights of about the same length, then /kl lab B and play the other way. Swap back and forth a few times. /kl lab stop ends tagging; /kl lab clear forgets the tests.")
+	return f
+end
+
+local function FillLab(f)
+	local tag = L:LabTag()
+	f.status:SetText(tag and ("Now testing: " .. tag .. ".  Every fight is tagged until /kl lab stop.") or "Not testing. Type /kl lab A to start.")
+	local res = L:LabResults()
+	for i, r in ipairs(f.rows) do
+		local g = res.groups[i]
+		r.tag:SetText(g and g.tag or "")
+		r.n:SetText(g and tostring(g.n) or "")
+		r.mean:SetText(g and Commas(g.mean) or "")
+		r.sd:SetText(g and g.n > 1 and Commas(g.sd) or "")
+	end
+	f.verdict:SetText(res.verdict or (#res.groups == 1 and "Now do some fights the other way under another name." or ""))
+end
+
+local PAGES = { { key = "last", label = "Last pull" }, { key = "spells", label = "Spells" }, { key = "history", label = "History" }, { key = "lab", label = "Lab" } }
 
 local function Build()
 	local f = CreateFrame("Frame", "KainUIForeverLiftFrame", UIParent, "BackdropTemplate")
@@ -297,7 +346,7 @@ local function Build()
 	local body = CreateFrame("Frame", nil, f)
 	body:SetPoint("TOPLEFT", 20, -80)
 	body:SetPoint("BOTTOMRIGHT", -20, 16)
-	f.pages = { last = BuildLast(body), spells = BuildSpells(body), history = BuildHistory(body) }
+	f.pages = { last = BuildLast(body), spells = BuildSpells(body), history = BuildHistory(body), lab = BuildLab(body) }
 	f.empty = Text(body, "GameFontHighlight", unpack(GREY))
 	f.empty:SetPoint("TOPLEFT", 0, 0)
 	f.empty:SetWidth(W - 40)
@@ -318,8 +367,9 @@ function KUI.LiftWindowRefresh()
 	local off = db and not db.enabled
 	win.sub:SetText(off and "Recording is off (/kl on)" or (pull and (pull.date or "") or ""))
 	for key, pg in pairs(win.pages) do
-		if key == page and pull then pg:Show() else pg:Hide() end
+		if key == page and (pull or key == "lab") then pg:Show() else pg:Hide() end
 	end
+	if page == "lab" then win.empty:Hide(); FillLab(win.pages.lab) return end
 	if not pull then win.empty:Show() return end
 	win.empty:Hide()
 	if page == "last" then FillLast(win.pages.last, pull)
@@ -353,6 +403,23 @@ SlashCmdList["KAINUILIFT"] = function(msg)
 	elseif cmd == "on" then
 		L:SetEnabled(true)
 		print("|cff33ff99K-Lift|r is recording your fights.")
+	elseif cmd == "lab" then
+		local arg = (msg or ""):match("^%s*%S+%s+(.-)%s*$") or ""
+		local low = arg:lower()
+		if low == "stop" then
+			L:SetLabTag(nil)
+			print("|cff33ff99K-Lift lab|r: stopped tagging fights.")
+		elseif low == "clear" then
+			L:ClearLab()
+			print("|cff33ff99K-Lift lab|r: forgot every test.")
+		elseif arg ~= "" then
+			L:SetLabTag(arg)
+			print("|cff33ff99K-Lift lab|r: fights are now tagged '" .. L:LabTag() .. "'. Switch with /kl lab <name>, end with /kl lab stop.")
+		end
+		if not win then win = Build() end
+		page = "lab"
+		win:Show()
+		KUI.LiftWindowRefresh()
 	elseif cmd == "reset" then
 		L:Reset()
 		print("|cff33ff99K-Lift|r forgot every recorded pull.")

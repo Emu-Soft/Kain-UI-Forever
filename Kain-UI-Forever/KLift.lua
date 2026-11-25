@@ -65,6 +65,7 @@ local function SaneDB(d)
 	for id, s in pairs(d.spells) do
 		if type(id) ~= "number" or type(s) ~= "table" then d.spells[id] = nil end
 	end
+	if d.labTag ~= nil and (type(d.labTag) ~= "string" or d.labTag == "") then d.labTag = nil end
 	d.v = 1
 	return d
 end
@@ -260,6 +261,7 @@ end
 local function KeepPull(pull)
 
 	if pull.pressCount == 0 and (pull.damage or 0) == 0 then return false end
+	if db.labTag and pull.lab == nil then pull.lab = db.labTag end
 	table.insert(db.pulls, 1, pull)
 	while #db.pulls > MAX_PULLS do table.remove(db.pulls) end
 	if L.OnNewPull then pcall(L.OnNewPull, pull) end
@@ -545,6 +547,78 @@ function L:SetEnabled(on)
 	if not db then return end
 	db.enabled = on and true or false
 	if not db.enabled then fight = nil end
+end
+
+function L:SetLabTag(tag)
+	if not db then return end
+	if type(tag) == "string" then tag = tag:sub(1, 16) end
+	db.labTag = (tag ~= nil and tag ~= "") and tag or nil
+end
+
+function L:LabTag() return db and db.labTag end
+
+local function Stats(list)
+	local n, sum = #list, 0
+	for _, v in ipairs(list) do sum = sum + v end
+	local mean = n > 0 and sum / n or 0
+	local sq = 0
+	for _, v in ipairs(list) do sq = sq + (v - mean) ^ 2 end
+	local var = n > 1 and sq / (n - 1) or 0
+	return n, mean, var
+end
+
+function L:LabResults()
+	local byTag, order = {}, {}
+	for _, p in ipairs(db and db.pulls or {}) do
+		if type(p.lab) == "string" and p.dps then
+			if not byTag[p.lab] then byTag[p.lab] = {}; order[#order + 1] = p.lab end
+			table.insert(byTag[p.lab], p.dps)
+		end
+	end
+	local groups = {}
+	for _, tag in ipairs(order) do
+		local n, mean, var = Stats(byTag[tag])
+		groups[#groups + 1] = { tag = tag, n = n, mean = mean, var = var, sd = math.sqrt(var) }
+	end
+	table.sort(groups, function(a, b) return a.mean > b.mean end)
+	local out = { groups = groups }
+	local a, b = groups[1], groups[2]
+	if a and b then
+		if a.n < 2 or b.n < 2 then
+			out.verdict = "Do at least 2 fights of each to compare."
+		else
+			local diff = a.mean - b.mean
+			local se = math.sqrt(a.var / a.n + b.var / b.n)
+			local pct = b.mean > 0 and diff / b.mean * 100 or 0
+			local z = se > 0 and diff / se or (diff > 0 and math.huge or 0)
+			if z >= 2 then
+				out.verdict = string.format("%s beats %s by %.1f%%, and that's very likely real.", a.tag, b.tag, pct)
+			else
+				local more = ""
+				if diff > 0 then
+					local k = (2 * se / diff) ^ 2
+					local need = math.ceil(math.max(a.n, b.n) * k) - math.max(a.n, b.n)
+					if need > 0 and need < 200 then
+						more = string.format(" About %d more fights of each should settle it.", need)
+					elseif need >= 200 then
+						more = " Telling them apart would take hundreds of fights, so for practical purposes they're equal."
+					end
+				end
+				if z >= 1 then
+					out.verdict = string.format("%s is ahead of %s by %.1f%%, but it could still be luck.%s", a.tag, b.tag, pct, more)
+				else
+					out.verdict = string.format("Too close to call: %s and %s are %.1f%% apart.%s", a.tag, b.tag, pct, more)
+				end
+			end
+		end
+	end
+	return out
+end
+
+function L:ClearLab()
+	if not db then return end
+	for _, p in ipairs(db.pulls) do p.lab = nil end
+	db.labTag = nil
 end
 
 function L:Reset()
