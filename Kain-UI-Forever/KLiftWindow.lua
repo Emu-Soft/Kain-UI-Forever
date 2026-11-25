@@ -397,6 +397,58 @@ L.OnNewPull = function()
 	end
 end
 
+local exportBox
+local function ShowExport()
+	local text, why = L:ExportText()
+	if not text then print("|cff33ff99K-Lift|r " .. why) return end
+	if not exportBox then
+		local f = CreateFrame("Frame", "KainUIForeverLiftExport", UIParent, "BackdropTemplate")
+		f:SetSize(560, 400)
+		f:SetPoint("CENTER")
+		f:SetFrameStrata("FULLSCREEN_DIALOG")
+		f:EnableMouse(true)
+		f:SetMovable(true)
+		f:RegisterForDrag("LeftButton")
+		f:SetScript("OnDragStart", f.StartMoving)
+		f:SetScript("OnDragStop", f.StopMovingOrSizing)
+		if f.SetBackdrop then
+			f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+			f:SetBackdropColor(0.05, 0.05, 0.06, 0.97)
+			f:SetBackdropBorderColor(unpack(BORDER_GREY))
+		end
+		table.insert(UISpecialFrames, "KainUIForeverLiftExport")
+		local title = Text(f, "GameFontNormal", unpack(GOLD))
+		title:SetPoint("TOPLEFT", 14, -12)
+		title:SetText("K-Lift export: press Ctrl+C to copy, then paste it to Claude")
+		local close = CreateFrame("Button", nil, f)
+		close:SetSize(20, 20)
+		close:SetPoint("TOPRIGHT", -8, -8)
+		local x = Text(close, "GameFontHighlight")
+		x:SetPoint("CENTER")
+		x:SetText("x")
+		close:SetScript("OnClick", function() f:Hide() end)
+		local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+		scroll:SetPoint("TOPLEFT", 14, -36)
+		scroll:SetPoint("BOTTOMRIGHT", -32, 14)
+		local edit = CreateFrame("EditBox", nil, scroll)
+		edit:SetMultiLine(true)
+		edit:SetAutoFocus(false)
+		edit:SetFontObject(ChatFontNormal)
+		edit:SetWidth(500)
+		edit:SetScript("OnEscapePressed", function() f:Hide() end)
+		edit:SetScript("OnTextChanged", function(self, user) if user then self:SetText(f.text or ""); self:HighlightText() end end)
+		scroll:SetScrollChild(edit)
+		f.edit = edit
+		exportBox = f
+	end
+	exportBox.text = text
+	exportBox.edit:SetText(text)
+	exportBox:Show()
+	exportBox.edit:SetFocus()
+	exportBox.edit:HighlightText()
+end
+KUI.LiftShowExport = ShowExport
+
 SLASH_KAINUILIFT1 = "/kl"
 SLASH_KAINUILIFT2 = "/klift"
 SlashCmdList["KAINUILIFT"] = function(msg)
@@ -424,6 +476,8 @@ SlashCmdList["KAINUILIFT"] = function(msg)
 		page = "lab"
 		win:Show()
 		KUI.LiftWindowRefresh()
+	elseif cmd == "export" then
+		ShowExport()
 	elseif cmd == "reset" then
 		L:Reset()
 		print("|cff33ff99K-Lift|r forgot every recorded pull.")

@@ -38,11 +38,14 @@ local function Field(t, k)
 	return Plain(v)
 end
 
+local function Returns(ok, ...)
+	if not ok then return nil end
+	return ...
+end
+
 local function Call(fn, ...)
 	if type(fn) ~= "function" then return nil end
-	local ok, a, b, c, d, e = pcall(fn, ...)
-	if not ok then return nil end
-	return a, b, c, d, e
+	return Returns(pcall(fn, ...))
 end
 
 local function Len(list)
@@ -908,6 +911,132 @@ function L:LabResults()
 		end
 	end
 	return out
+end
+
+local SLOTS = { "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist",
+	"Hands", "Finger1", "Finger2", "Trinket1", "Trinket2", "Back", "MainHand", "OffHand", "Ranged" }
+
+local function Num(v, fmt)
+	v = PlainNumber(v)
+	if v == nil then return "?" end
+	return fmt and string.format(fmt, v) or tostring(v)
+end
+
+local function TalentLines(out)
+
+	local ct, tr = C_ClassTalents, C_Traits
+	local config = ct and PlainNumber(Call(ct.GetActiveConfigID))
+	if config and tr then
+		local info = Call(tr.GetConfigInfo, config)
+		local trees = Field(info, "treeIDs")
+		local picked = {}
+		for i = 1, Len(trees) do
+			local tree = PlainNumber(Field(trees, i))
+			local nodes = tree and Call(tr.GetTreeNodes, tree)
+			for j = 1, Len(nodes) do
+				local node = PlainNumber(Field(nodes, j))
+				local ni = node and Call(tr.GetNodeInfo, config, node)
+				local rank = PlainNumber(Field(ni, "activeRank")) or PlainNumber(Field(ni, "ranksPurchased"))
+				local entry = PlainNumber(Field(Field(ni, "activeEntry"), "entryID"))
+				if rank and rank > 0 and entry then
+					local ei = Call(tr.GetEntryInfo, config, entry)
+					local def = PlainNumber(Field(ei, "definitionID"))
+					local di = def and Call(tr.GetDefinitionInfo, def)
+					local spell = PlainNumber(Field(di, "spellID"))
+					if spell then
+						local nm = Plain(Call(C_Spell and C_Spell.GetSpellName, spell))
+						picked[#picked + 1] = string.format("%s %d (%d)", type(nm) == "string" and nm or "?", rank, spell)
+					end
+				end
+			end
+		end
+		if #picked > 0 then
+			out[#out + 1] = "talents: " .. table.concat(picked, "; ")
+			return
+		end
+	end
+
+	local tabs = PlainNumber(Call(GetNumTalentTabs)) or 0
+	for t = 1, math.min(tabs, 4) do
+		local picked = {}
+		for i = 1, PlainNumber(Call(GetNumTalents, t)) or 0 do
+			local name, _, _, _, rank = Call(GetTalentInfo, t, i)
+			name, rank = Plain(name), PlainNumber(rank)
+			if type(name) == "string" and rank and rank > 0 then picked[#picked + 1] = name .. " " .. rank end
+		end
+		local tabName = Plain(Call(GetTalentTabInfo, t))
+		if #picked > 0 then out[#out + 1] = "talents " .. tostring(tabName) .. ": " .. table.concat(picked, "; ") end
+	end
+end
+
+function L:ExportText()
+	if Plain(Call(InCombatLockdown)) == true or inCombat then
+		return nil, "Leave combat first: your stats are hidden from addons during a fight."
+	end
+	local out = { "K-Lift export v1 " .. tostring(Plain(Call(date, "%Y-%m-%d %H:%M"))) }
+	local _, class = Call(UnitClass, "player")
+	local _, race = Call(UnitRace, "player")
+	out[#out + 1] = string.format("char: %s %s level %s spec %s build %s", tostring(Plain(race)), tostring(Plain(class)),
+		Num((Call(UnitLevel, "player"))), SpecKey(), tostring(Plain((Call(GetBuildInfo)))))
+	local st = {}
+	for i, n in ipairs({ "str", "agi", "sta", "int", "spi" }) do
+		local _, eff = Call(UnitStat, "player", i)
+		st[#st + 1] = n .. " " .. Num(eff)
+	end
+	out[#out + 1] = "stats: " .. table.concat(st, ", ")
+	local base, pos, neg = Call(UnitAttackPower, "player")
+	base, pos, neg = PlainNumber(base), PlainNumber(pos), PlainNumber(neg)
+	out[#out + 1] = string.format("attack power: %s", base and tostring(base + (pos or 0) + (neg or 0)) or "?")
+	local mhMin, mhMax, ohMin, ohMax = Call(UnitDamage, "player")
+	local mhSpeed, ohSpeed = Call(UnitAttackSpeed, "player")
+	out[#out + 1] = string.format("main hand: %s-%s every %s s; off hand: %s-%s every %s s", Num(mhMin, "%.0f"), Num(mhMax, "%.0f"),
+		Num(mhSpeed, "%.2f"), Num(ohMin, "%.0f"), Num(ohMax, "%.0f"), Num(ohSpeed, "%.2f"))
+	out[#out + 1] = string.format("crit: melee %s%%, ranged %s%%, spell %s%%", Num((Call(GetCritChance)), "%.2f"),
+		Num((Call(GetRangedCritChance)), "%.2f"), Num((Call(GetSpellCritChance, 2)), "%.2f"))
+	out[#out + 1] = string.format("hit: %s%%, spell hit %s%%, expertise %s, armor pen %s, haste %s%%",
+		Num((Call(GetHitModifier)), "%.2f"), Num((Call(GetSpellHitModifier)), "%.2f"), Num((Call(GetExpertise))),
+		Num((Call(GetArmorPenetration)), "%.2f"), Num((Call(GetHaste)), "%.2f"))
+	out[#out + 1] = string.format("defence: armor %s, dodge %s%%, parry %s%%", Num((select(2, Call(UnitArmor, "player")))),
+		Num((Call(GetDodgeChance)), "%.2f"), Num((Call(GetParryChance)), "%.2f"))
+	out[#out + 1] = string.format("power: kind %s max %s regen %s/s; spell power %s; mana regen %s",
+		Num((Call(UnitPowerType, "player"))), Num((Call(UnitPowerMax, "player"))), Num(power.regen, "%.1f"),
+		Num((Call(GetSpellBonusDamage, 2))), Num((Call(GetManaRegen)), "%.1f"))
+
+	for i, slot in ipairs(SLOTS) do
+		local link = Plain(Call(GetInventoryItemLink, "player", i))
+		if type(link) == "string" then
+			local item = link:match("item:([%-%d:]+)") or "?"
+			local name = link:match("%[(.-)%]") or "?"
+			local extra = ""
+			if slot == "MainHand" or slot == "OffHand" or slot == "Ranged" then
+				local _, _, _, _, _, _, subType = Call(GetItemInfo, link)
+				subType = Plain(subType)
+				if type(subType) == "string" then extra = " (" .. subType .. ")" end
+			end
+			out[#out + 1] = string.format("gear %s: %s%s item:%s", slot, name, extra, item)
+		end
+	end
+	TalentLines(out)
+
+	local dmg, presses, total, pulls, secs = {}, {}, 0, 0, 0
+	for _, p in ipairs(db.pulls) do
+		if p.damage and p.spells then
+			pulls, secs, total = pulls + 1, secs + (p.length or 0), total + p.damage
+			for _, sp in ipairs(p.spells) do dmg[sp.id] = (dmg[sp.id] or 0) + sp.amount end
+			for _, pr in ipairs(p.presses) do presses[pr.id] = (presses[pr.id] or 0) + 1 end
+		end
+	end
+	out[#out + 1] = string.format("measured: %d pulls, %.0f s, %.0f damage, %.0f DPS", pulls, secs, total, secs > 0 and total / secs or 0)
+	local ids = {}
+	for id in pairs(dmg) do ids[#ids + 1] = id end
+	for id in pairs(presses) do if not dmg[id] then ids[#ids + 1] = id end end
+	table.sort(ids, function(a, b) return (dmg[a] or 0) > (dmg[b] or 0) end)
+	for _, id in ipairs(ids) do
+		local n = presses[id] or 0
+		out[#out + 1] = string.format("spell %d %s: damage %.0f (%.1f%%), presses %d%s", id, self:SpellName(id), dmg[id] or 0,
+			total > 0 and (dmg[id] or 0) * 100 / total or 0, n, n > 0 and (dmg[id] or 0) > 0 and string.format(", per press %.0f", dmg[id] / n) or "")
+	end
+	return table.concat(out, "\n")
 end
 
 function L:ClearLab()
