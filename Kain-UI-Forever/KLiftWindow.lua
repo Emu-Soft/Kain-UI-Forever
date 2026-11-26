@@ -398,9 +398,7 @@ L.OnNewPull = function()
 end
 
 local exportBox
-local function ShowExport()
-	local text, why = L:ExportText()
-	if not text then print("|cff33ff99K-Lift|r " .. why) return end
+local function ShowBox(titleText, text)
 	if not exportBox then
 		local f = CreateFrame("Frame", "KainUIForeverLiftExport", UIParent, "BackdropTemplate")
 		f:SetSize(560, 400)
@@ -419,7 +417,7 @@ local function ShowExport()
 		table.insert(UISpecialFrames, "KainUIForeverLiftExport")
 		local title = Text(f, "GameFontNormal", unpack(GOLD))
 		title:SetPoint("TOPLEFT", 14, -12)
-		title:SetText("K-Lift export: press Ctrl+C to copy it")
+		f.title = title
 		local close = CreateFrame("Button", nil, f)
 		close:SetSize(20, 20)
 		close:SetPoint("TOPRIGHT", -8, -8)
@@ -441,13 +439,33 @@ local function ShowExport()
 		f.edit = edit
 		exportBox = f
 	end
+	exportBox.title:SetText(titleText)
 	exportBox.text = text
 	exportBox.edit:SetText(text)
 	exportBox:Show()
 	exportBox.edit:SetFocus()
 	exportBox.edit:HighlightText()
 end
+
+local function ShowExport()
+	local text, why = L:ExportText()
+	if not text then print("|cff33ff99K-Lift|r " .. why) return end
+	ShowBox("K-Lift export: press Ctrl+C to copy it", text)
+end
 KUI.LiftShowExport = ShowExport
+
+local function RunSim(arg)
+	if not L.RunSim then print("|cff33ff99K-Lift|r the simulator isn't loaded.") return end
+	local key = (arg or ""):lower()
+	if key ~= "trash" then key = "boss" end
+	local _, msg = L:RunSim(key, function(text, why)
+		if not text then print("|cff33ff99K-Lift sim|r " .. tostring(why)) return end
+		print("|cff33ff99K-Lift sim|r done.")
+		ShowBox("K-Lift sim: rotation DPS (Ctrl+C copies it)", text)
+	end)
+	print("|cff33ff99K-Lift sim|r " .. tostring(msg))
+end
+KUI.LiftRunSim = RunSim
 
 SLASH_KAINUILIFT1 = "/kl"
 SLASH_KAINUILIFT2 = "/klift"
@@ -478,6 +496,8 @@ SlashCmdList["KAINUILIFT"] = function(msg)
 		KUI.LiftWindowRefresh()
 	elseif cmd == "export" then
 		ShowExport()
+	elseif cmd == "sim" then
+		RunSim((msg or ""):match("^%s*%S+%s+(%S+)"))
 	elseif cmd == "reset" then
 		L:Reset()
 		print("|cff33ff99K-Lift|r forgot every recorded pull.")

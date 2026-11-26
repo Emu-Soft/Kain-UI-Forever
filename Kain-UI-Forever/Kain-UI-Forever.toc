@@ -46,6 +46,9 @@ NamePlates.lua
 MailFix.lua
 ErrorText.lua
 KLift.lua
+KLiftSim.lua
+KLiftSimRogue.lua
+KLiftSimPlayer.lua
 KLiftWindow.lua
 KMarket.lua
 KMarketStyle.lua

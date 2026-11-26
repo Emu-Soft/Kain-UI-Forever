@@ -922,14 +922,13 @@ local function Num(v, fmt)
 	return fmt and string.format(fmt, v) or tostring(v)
 end
 
-local function TalentLines(out)
-
+function L:Talents()
+	local map, list = {}, {}
 	local ct, tr = C_ClassTalents, C_Traits
 	local config = ct and PlainNumber(Call(ct.GetActiveConfigID))
 	if config and tr then
 		local info = Call(tr.GetConfigInfo, config)
 		local trees = Field(info, "treeIDs")
-		local picked = {}
 		for i = 1, Len(trees) do
 			local tree = PlainNumber(Field(trees, i))
 			local nodes = tree and Call(tr.GetTreeNodes, tree)
@@ -945,29 +944,36 @@ local function TalentLines(out)
 					local spell = PlainNumber(Field(di, "spellID"))
 					if spell then
 						local nm = Plain(Call(C_Spell and C_Spell.GetSpellName, spell))
-						picked[#picked + 1] = string.format("%s %d (%d)", type(nm) == "string" and nm or "?", rank, spell)
+						if type(nm) == "string" then map[nm] = rank end
+						list[#list + 1] = string.format("%s %d (%d)", type(nm) == "string" and nm or "?", rank, spell)
 					end
 				end
 			end
 		end
-		if #picked > 0 then
-			out[#out + 1] = "talents: " .. table.concat(picked, "; ")
-			return
-		end
+		if #list > 0 then return map, list end
 	end
-
 	local tabs = PlainNumber(Call(GetNumTalentTabs)) or 0
 	for t = 1, math.min(tabs, 4) do
-		local picked = {}
 		for i = 1, PlainNumber(Call(GetNumTalents, t)) or 0 do
 			local name, _, _, _, rank = Call(GetTalentInfo, t, i)
 			name, rank = Plain(name), PlainNumber(rank)
-			if type(name) == "string" and rank and rank > 0 then picked[#picked + 1] = name .. " " .. rank end
+			if type(name) == "string" and rank and rank > 0 then
+				map[name] = rank
+				list[#list + 1] = name .. " " .. rank
+			end
 		end
-		local tabName = Plain(Call(GetTalentTabInfo, t))
-		if #picked > 0 then out[#out + 1] = "talents " .. tostring(tabName) .. ": " .. table.concat(picked, "; ") end
 	end
+	return map, list
 end
+
+local function TalentLines(out)
+	local _, list = L:Talents()
+	if #list > 0 then out[#out + 1] = "talents: " .. table.concat(list, "; ") end
+end
+
+L.Plain, L.PlainNumber, L.Call, L.Field = Plain, PlainNumber, Call, Field
+function L:InCombat() return Plain(Call(InCombatLockdown)) == true or inCombat end
+function L:EnergyRegen() return power.regen end
 
 function L:ExportText()
 	if Plain(Call(InCombatLockdown)) == true or inCombat then
